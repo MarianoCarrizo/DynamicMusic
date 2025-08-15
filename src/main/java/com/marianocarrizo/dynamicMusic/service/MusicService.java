@@ -112,30 +112,4 @@ public class MusicService {
         return players.containsKey(type);
     }
 
-    /**
-     * Obtiene el tiempo actual de la pista.
-     */
-    public Duration getCurrentTime() {
-        if (currentTrack != null && players.containsKey(currentTrack)) {
-            return players.get(currentTrack).getCurrentTime();
-        }
-        return Duration.ZERO;
-    }
-
-    /**
-     * Cambia la posición manualmente.
-     */
-    public void seek(Duration position) {
-        if (currentTrack != null && players.containsKey(currentTrack)) {
-            players.get(currentTrack).seek(position);
-            currentPosition = position;
-        }
-    }
-
-    /**
-     * Devuelve el tipo de pista actual.
-     */
-    public TrackType getCurrentTrack() {
-        return currentTrack;
-    }
 }
