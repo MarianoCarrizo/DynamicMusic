@@ -9,59 +9,61 @@ import javafx.util.Duration;
 import java.io.File;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.BiConsumer;
 
 public class MusicService {
-
-
-    private final Map<TrackType, MediaPlayer> players = new HashMap<>();
+    public final Map<TrackType, MediaPlayer> players = new HashMap<>();
     private TrackType currentTrack = null;
-    private Duration currentPosition = Duration.ZERO;
-
+    private boolean loopEnabled = false;
+    private BiConsumer<Duration, Duration> progressListener;
 
     public void loadTrack(TrackType type, File file) {
-        if (file == null || !file.exists()) {
-            throw new IllegalArgumentException("Archivo no válido para " + type);
-        }
+        if (file == null || !file.exists()) return;
 
         try {
-            // Si es FLAC, convertir a WAV temporal
             if (file.getName().toLowerCase().endsWith(".flac")) {
-                file = ConversorUtils.convertFlacToWav(file); // ahora devuelve archivo temporal
+                file = ConversorUtils.convertFlacToWav(file);
             }
 
-            // Crear MediaPlayer
             Media media = new Media(file.toURI().toString());
             MediaPlayer player = new MediaPlayer(media);
 
-            // Nivelar volumen automáticamente según RMS
             double gain = ConversorUtils.calculateGainForRMS(file);
             player.setVolume(gain);
 
             player.setOnError(() -> System.err.println("Error en pista " + type + ": " + player.getError()));
 
-            // Guardar player en el mapa
-            players.put(type, player);
+            player.setOnEndOfMedia(() -> {
+                if (loopEnabled) {
+                    player.seek(Duration.ZERO);
+                    player.play();
+                }
+            });
 
-            // Si no hay pista actual, asignar esta
-            if (currentTrack == null) {
-                currentTrack = type;
-            }
+            player.currentTimeProperty().addListener((obs, oldVal, newVal) -> {
+                if (progressListener != null) {
+                    Duration total = player.getTotalDuration();
+                    if (total != null && !total.isUnknown()) progressListener.accept(newVal, total);
+                }
+            });
+            player.setOnReady(() -> {
+                if (progressListener != null) {
+                    Duration total = player.getTotalDuration();
+                    if (total != null && !total.isUnknown()) progressListener.accept(Duration.ZERO, total);
+                }
+            });
+
+            players.put(type, player);
+            if (currentTrack == null) currentTrack = type;
 
         } catch (Exception e) {
             System.err.println("No se pudo cargar la pista " + type + ": " + e.getMessage());
         }
     }
 
-
-
-
-    /**
-     * Cambia a otra versión manteniendo la posición actual.
-     */
     public void switchTrack(TrackType newTrack) {
         if (!players.containsKey(newTrack)) return;
 
-        // Guardar tiempo de la pista actual
         Duration currentTime = Duration.ZERO;
         if (currentTrack != null) {
             MediaPlayer currentPlayer = players.get(currentTrack);
@@ -71,45 +73,26 @@ public class MusicService {
 
         currentTrack = newTrack;
         MediaPlayer nextPlayer = players.get(newTrack);
-
-        // Mover al mismo tiempo que la pista anterior
         nextPlayer.seek(currentTime);
         nextPlayer.play();
     }
 
-    /**
-     * Reproduce la pista actual desde la posición guardada.
-     */
-    public void play() {
-        if (currentTrack != null && players.containsKey(currentTrack)) {
-            players.get(currentTrack).play();
-        }
-    }
+    public void play() { if (currentTrack != null) players.get(currentTrack).play(); }
+    public void pause() { if (currentTrack != null) players.get(currentTrack).pause(); }
+    public void stop() { if (currentTrack != null) players.get(currentTrack).stop(); }
 
-    /**
-     * Pausa la pista actual.
-     */
-    public void pause() {
-        if (currentTrack != null && players.containsKey(currentTrack)) {
-            players.get(currentTrack).pause();
-        }
-    }
+    public boolean isLoaded(TrackType type) { return players.containsKey(type); }
 
-    /**
-     * Detiene y reinicia la posición a 0.
-     */
-    public void stop() {
-        if (currentTrack != null && players.containsKey(currentTrack)) {
-            players.get(currentTrack).stop();
-            currentPosition = Duration.ZERO;
-        }
-    }
+    public void setLoop(boolean enabled) { this.loopEnabled = enabled; }
+    public void setProgressListener(BiConsumer<Duration, Duration> listener) { this.progressListener = listener; }
+    public TrackType getCurrentTrack() { return currentTrack; }
 
-    /**
-     * Devuelve si una pista está cargada.
-     */
-    public boolean isLoaded(TrackType type) {
-        return players.containsKey(type);
+    public void seekCurrentTrack(double fraction) {
+        if (currentTrack != null && players.containsKey(currentTrack)) {
+            MediaPlayer player = players.get(currentTrack);
+            Duration total = player.getTotalDuration();
+            if (total != null && !total.isUnknown()) player.seek(total.multiply(fraction));
+        }
     }
 
 }

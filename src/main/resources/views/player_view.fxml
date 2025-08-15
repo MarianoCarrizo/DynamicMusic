@@ -1,38 +1,61 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <?import javafx.scene.layout.VBox?>
-<?import javafx.scene.control.Button?>
-
 <?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.CheckBox?>
+<?import javafx.scene.control.Slider?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.shape.Rectangle?>
+
 <VBox xmlns="http://javafx.com/javafx"
       xmlns:fx="http://javafx.com/fxml"
       fx:controller="com.marianocarrizo.dynamicMusic.Controller.PlayerController"
-      spacing="10" alignment="CENTER" prefWidth="400" prefHeight="300">
+      spacing="15" alignment="CENTER" prefWidth="450" prefHeight="350">
 
-    <HBox spacing="5">
-        <Button text="Load Paused" onAction="#onLoadPaused"/>
-        <Button fx:id="btnPaused" text="Play Paused" onAction="#onSwitchToPaused"/>
+    <!-- Sección de carga y selección de tracks -->
+    <VBox spacing="8" alignment="CENTER">
+        <HBox spacing="10">
+            <Button text="Load Paused" onAction="#onLoadPaused"/>
+            <Button fx:id="btnPaused" text="▶ Paused" onAction="#onSwitchToPaused"/>
+        </HBox>
+        <HBox spacing="10">
+            <Button text="Load Raged" onAction="#onLoadRaged"/>
+            <Button fx:id="btnRaged" text="▶ Raged" onAction="#onSwitchToRaged"/>
+        </HBox>
+        <HBox spacing="10">
+            <Button text="Load Normal" onAction="#onLoadNormal"/>
+            <Button fx:id="btnNormal" text="▶ Normal" onAction="#onSwitchToNormal"/>
+        </HBox>
+        <HBox spacing="10">
+            <Button text="Load Advantage" onAction="#onLoadAdvantage"/>
+            <Button fx:id="btnAdvantage" text="▶ Advantage" onAction="#onSwitchToAdvantage"/>
+        </HBox>
+    </VBox>
+
+    <!-- Controles de reproducción -->
+    <HBox spacing="10" alignment="CENTER">
+        <Button text="⏵ Play" onAction="#onPlay"/>
+        <Button text="⏸ Pause" onAction="#onPause"/>
+        <Button text="⏹ Stop" onAction="#onStop"/>
+        <CheckBox fx:id="chkLoop" text="Loop"/>
     </HBox>
 
-    <HBox spacing="5">
-        <Button text="Load Raged" onAction="#onLoadRaged"/>
-        <Button fx:id="btnRaged" text="Play Raged" onAction="#onSwitchToRaged"/>
-    </HBox>
+    <!-- Barra de progreso con tiempo -->
+    <HBox spacing="10" alignment="CENTER">
+        <Label fx:id="lblCurrentTime" text="0:00"/>
 
-    <HBox spacing="5">
-        <Button text="Load Normal" onAction="#onLoadNormal"/>
-        <Button fx:id="btnNormal" text="Play Normal" onAction="#onSwitchToNormal"/>
-    </HBox>
+        <StackPane fx:id="progressContainer" prefWidth="250" prefHeight="20">
+            <!-- Rectangle atrás -->
+            <Rectangle fx:id="progressRect" height="6" width="0" arcWidth="3" arcHeight="3" fill="gray"/>
+            <!-- Slider encima, transparente pero interactivo -->
+            <Slider fx:id="progressSlider" min="0" max="100" value="0" prefWidth="250"
+                    style="-fx-background-color: transparent; -fx-control-inner-background: transparent;"/>
+        </StackPane>
 
-    <HBox spacing="5">
-        <Button text="Load Advantage" onAction="#onLoadAdvantage"/>
-        <Button fx:id="btnAdvantage" text="Play Advantage" onAction="#onSwitchToAdvantage"/>
-    </HBox>
 
-    <HBox spacing="5">
-        <Button text="Play" onAction="#onPlay"/>
-        <Button text="Pause" onAction="#onPause"/>
-        <Button text="Stop" onAction="#onStop"/>
+        <Label fx:id="lblTotalTime" text="0:00"/>
     </HBox>
 
 </VBox>
