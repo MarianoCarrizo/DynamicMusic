@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.control.Button?>
+
+<?import javafx.scene.layout.HBox?>
+<VBox xmlns="http://javafx.com/javafx"
+      xmlns:fx="http://javafx.com/fxml"
+      fx:controller="com.marianocarrizo.dynamicMusic.Controller.PlayerController"
+      spacing="10" alignment="CENTER" prefWidth="400" prefHeight="300">
+
+    <HBox spacing="5">
+        <Button text="Load Paused" onAction="#onLoadPaused"/>
+        <Button fx:id="btnPaused" text="Play Paused" onAction="#onSwitchToPaused"/>
+    </HBox>
+
+    <HBox spacing="5">
+        <Button text="Load Raged" onAction="#onLoadRaged"/>
+        <Button fx:id="btnRaged" text="Play Raged" onAction="#onSwitchToRaged"/>
+    </HBox>
+
+    <HBox spacing="5">
+        <Button text="Load Normal" onAction="#onLoadNormal"/>
+        <Button fx:id="btnNormal" text="Play Normal" onAction="#onSwitchToNormal"/>
+    </HBox>
+
+    <HBox spacing="5">
+        <Button text="Load Advantage" onAction="#onLoadAdvantage"/>
+        <Button fx:id="btnAdvantage" text="Play Advantage" onAction="#onSwitchToAdvantage"/>
+    </HBox>
+
+    <HBox spacing="5">
+        <Button text="Play" onAction="#onPlay"/>
+        <Button text="Pause" onAction="#onPause"/>
+        <Button text="Stop" onAction="#onStop"/>
+    </HBox>
+
+</VBox>
