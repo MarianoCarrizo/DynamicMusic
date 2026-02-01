@@ -1,18 +1,15 @@
 package com.marianocarrizo.dynamicMusic.Controller;
 import com.marianocarrizo.dynamicMusic.Enums.TrackType;
 import com.marianocarrizo.dynamicMusic.service.MusicService;
-import javafx.application.Platform;
 import javafx.fxml.FXML;
-import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.Slider;
-import javafx.scene.input.KeyCode;
 import javafx.stage.FileChooser;
-import javafx.util.Duration;
 
 import java.io.File;
+import java.util.HashMap;
 
 public class PlayerController {
     @FXML private Button btnPaused;
@@ -24,7 +21,7 @@ public class PlayerController {
     @FXML private Label lblCurrentTime;
     @FXML private Label lblTotalTime;
 
-    private final MusicService musicService = new MusicService();
+    private final MusicService musicService = new MusicService( new HashMap<>(),null,null);
     private boolean isDraggingSlider = false;
 
     @FXML

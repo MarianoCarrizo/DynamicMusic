@@ -5,17 +5,25 @@ import com.marianocarrizo.dynamicMusic.utils.ConversorUtils;
 import javafx.scene.media.Media;
 import javafx.scene.media.MediaPlayer;
 import javafx.util.Duration;
+import org.springframework.stereotype.Service;
 
 import java.io.File;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.function.BiConsumer;
 
+@Service
 public class MusicService {
-    public final Map<TrackType, MediaPlayer> players = new HashMap<>();
-    private TrackType currentTrack = null;
-    private boolean loopEnabled = false;
+    public final Map<TrackType, MediaPlayer> players;
+    private TrackType currentTrack;
+    private boolean loopEnabled;
     private BiConsumer<Duration, Duration> progressListener;
+
+    public MusicService(Map<TrackType, MediaPlayer> players, TrackType currentTrack, BiConsumer<Duration, Duration> progressListener) {
+        this.players = players;
+        this.currentTrack = currentTrack;
+        this.progressListener = progressListener;
+        this.loopEnabled = false;
+    }
 
     public void loadTrack(TrackType type, File file) {
         if (file == null || !file.exists()) return;
@@ -85,7 +93,6 @@ public class MusicService {
 
     public void setLoop(boolean enabled) { this.loopEnabled = enabled; }
     public void setProgressListener(BiConsumer<Duration, Duration> listener) { this.progressListener = listener; }
-    public TrackType getCurrentTrack() { return currentTrack; }
 
     public void seekCurrentTrack(double fraction) {
         if (currentTrack != null && players.containsKey(currentTrack)) {

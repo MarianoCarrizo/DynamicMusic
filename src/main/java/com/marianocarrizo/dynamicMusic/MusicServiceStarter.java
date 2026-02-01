@@ -19,7 +19,6 @@ public class MusicServiceStarter extends Application {
         Scene scene = new Scene(root);
         stage.setScene(scene);
 
-        // Captura de teclado para cambiar tracks
         PlayerController controller = loader.getController();
         scene.setOnKeyPressed(e -> {
             switch (e.getCode()) {
