@@ -1,0 +1,236 @@
+/* =========================================================================
+   ESTILOS BASE GENERALES (Mantenidos intactos)
+   ========================================================================= */
+.root {
+    -fx-background-color: #1e1e24;
+    -fx-font-family: "Segoe UI", Helvetica, Arial, sans-serif;
+}
+
+.label {
+    -fx-text-fill: #e0e0e0;
+}
+
+/* Separador vertical sutil */
+.separator:vertical .line {
+    -fx-border-color: #2d2d35;
+    -fx-border-width: 0 1 0 0;
+}
+
+/* Lista de archivos */
+.list-view {
+    -fx-background-color: #2a2a32;
+    -fx-border-color: #3a3a43;
+    -fx-background-radius: 6px;
+}
+.list-cell {
+    -fx-text-fill: #d0d0d0;
+    -fx-background-color: transparent;
+    -fx-padding: 6px 10px;
+}
+.list-cell:filled:hover {
+    -fx-background-color: #383842;
+}
+
+/* Componentes de Entrada */
+.text-field {
+    -fx-background-color: #2a2a32;
+    -fx-text-fill: #ffffff;
+    -fx-border-color: #4f4f5c;
+    -fx-border-radius: 4px;
+    -fx-background-radius: 4px;
+    -fx-padding: 7px;
+    -fx-prompt-text-fill: #808085;
+}
+.combo-box {
+    -fx-background-color: #3a3a43;
+    -fx-background-radius: 4px;
+    -fx-padding: 4px;
+}
+.combo-box .label {
+    -fx-text-fill: white;
+}
+
+/* =========================================================================
+   BOTONES Y COMPONENTES ESPECÍFICOS
+   ========================================================================= */
+
+/* Botones Auxiliares (Open Folder, Assign) */
+.btn-secondary, .btn-assign {
+    -fx-background-color: #3a3a43;
+    -fx-text-fill: #ffffff;
+    -fx-background-radius: 4px;
+    -fx-padding: 7px 14px;
+    -fx-cursor: hand;
+}
+.btn-secondary:hover, .btn-assign:hover {
+    -fx-background-color: #4f4f5c;
+}
+
+/* Botones Grandes de Climas (Grilla) */
+.btn-phase {
+    -fx-background-color: #2a2a32;
+    -fx-text-fill: #b0b0b5;
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+    -fx-background-radius: 8px;
+    -fx-border-color: #3a3a45;
+    -fx-border-radius: 8px;
+    -fx-border-width: 1px;
+    -fx-cursor: hand;
+}
+.btn-phase:hover {
+    -fx-background-color: #35353f;
+    -fx-text-fill: #ffffff;
+    -fx-border-color: #4f4f5c;
+}
+
+/* Contenedor de Información del Tema Actual */
+.track-info-container {
+    -fx-padding: 5px 0;
+}
+.lbl-session-title {
+    -fx-text-fill: #707075;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+}
+.lbl-track-active {
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #ffffff;
+}
+
+/* =========================================================================
+   NUEVA CONSOLA INFERIOR DE REPRODUCCIÓN (Estilo Spotify)
+   ========================================================================= */
+.playback-panel {
+    -fx-background-color: #121214; /* Más oscuro para que destaquen los botones */
+    -fx-background-radius: 12px;
+    -fx-padding: 16px 20px;
+    -fx-border-color: #24242b;
+    -fx-border-radius: 12px;
+    -fx-border-width: 1px;
+}
+
+/* Play y Pause principales (Círculo blanco) */
+.btn-icon-main {
+    -fx-background-color: #ffffff;
+    -fx-text-fill: #000000;
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+    -fx-alignment: CENTER;
+    -fx-background-radius: 40px;
+    -fx-min-width: 42px;
+    -fx-max-width: 42px;
+    -fx-min-height: 42px;
+    -fx-max-height: 42px;
+    -fx-cursor: hand;
+    -fx-padding: 0px 0px 0px 2px; /* Centrado óptico del triángulo */
+}
+.btn-icon-main:hover {
+    -fx-scale-x: 1.05;
+    -fx-scale-y: 1.05;
+    -fx-background-color: #f6f6f6;
+}
+.btn-icon-main[text="⏸"] {
+    -fx-padding: 0; /* Las dos barras de pausa no necesitan desfase */
+}
+
+/* Botones Planos (Stop y Loop) */
+.btn-icon-secondary {
+    -fx-background-color: transparent;
+    -fx-text-fill: #a7a7a7;
+    -fx-font-size: 16px;
+    -fx-alignment: CENTER;
+    -fx-cursor: hand;
+    -fx-padding: 6px;
+    -fx-background-radius: 0;
+}
+.btn-icon-secondary:hover {
+    -fx-text-fill: #ffffff;
+}
+
+/* Botón de Loop activo base (cuando no hay mood seleccionado o por defecto) */
+.btn-icon-secondary:selected {
+    -fx-text-fill: #1db954; /* Color por defecto si no hay ID dinámico */
+    -fx-effect: none !important; /* Chau mirror effect feo */
+}
+
+/* Formato fino de la barra de progreso */
+.spotify-slider {
+    -fx-cursor: hand;
+}
+.spotify-slider .track {
+    -fx-background-color: #4f4f56;
+    -fx-background-radius: 4px;
+    -fx-pref-height: 5px;
+}
+.spotify-slider .thumb {
+    -fx-background-color: #ffffff;
+    -fx-background-radius: 50%;
+    -fx-pref-width: 12px;
+    -fx-pref-height: 12px;
+    -fx-opacity: 0; /* Se oculta por defecto */
+}
+.spotify-slider:hover .thumb {
+    -fx-opacity: 1; /* Aparece al pasar el mouse por la barra */
+}
+
+.lbl-time {
+    -fx-font-family: 'Courier New', monospace;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #a7a7a7;
+}
+
+//* =========================================================================
+    ESTADOS DE AMBIENTACIÓN DINÁMICA (Overrides por Cascada)
+    ========================================================================= */
+
+ /* --- 1. PAUSED (Gris / Platino) --- */
+ #window-paused { -fx-background-color: #151517; }
+ #window-paused .slider .track { -fx-background-color: #3e3e40; }
+ #window-paused .slider .thumb { -fx-background-color: #7f8c8d; }
+ #window-paused .slider .range-bar { -fx-background-color: #95a5a6; }
+ #window-paused .list-cell:filled:selected { -fx-background-color: #4a4a4a; }
+ #window-paused .text-field:focused, #window-paused .combo-box:focused { -fx-border-color: #7f8c8d; }
+ /* Loop en modo Paused */
+ #window-paused .btn-icon-secondary:selected { -fx-text-fill: #95a5a6; }
+
+ /* --- 2. RAGED (Rojo Combate) --- */
+ #window-raged { -fx-background-color: #160e0e; }
+ #window-raged .slider .track { -fx-background-color: #451b1b; }
+ #window-raged .slider .thumb { -fx-background-color: #e74c3c; }
+ #window-raged .slider .range-bar { -fx-background-color: #c0392b; }
+ #window-raged .list-cell:filled:selected { -fx-background-color: #8a1f1f; }
+ #window-raged .text-field:focused, #window-raged .combo-box:focused { -fx-border-color: #e74c3c; }
+ /* Loop en modo Raged */
+ #window-raged .btn-icon-secondary:selected { -fx-text-fill: #e74c3c; }
+
+ /* --- 3. NORMAL (Verde Naturaleza / Exploración) --- */
+ #window-normal { -fx-background-color: #0e1410; }
+ #window-normal .slider .track { -fx-background-color: #14331d; }
+ #window-normal .slider .thumb { -fx-background-color: #2ecc71; }
+ #window-normal .slider .range-bar { -fx-background-color: #27ae60; }
+ #window-normal .list-cell:filled:selected { -fx-background-color: #1e4a2b; }
+ #window-normal .text-field:focused, #window-normal .combo-box:focused { -fx-border-color: #2ecc71; }
+ /* Loop en modo Normal */
+ #window-normal .btn-icon-secondary:selected { -fx-text-fill: #2ecc71; }
+
+ /* --- 4. ADVANTAGE (Azul) --- */
+ #window-advantage { -fx-background-color: #0f1318; }
+ #window-advantage .slider .track { -fx-background-color: #112233; }
+ #window-advantage .slider .thumb { -fx-background-color: #3498db; }
+ #window-advantage .slider .range-bar { -fx-background-color: #2980b9; }
+ #window-advantage .list-cell:filled:selected { -fx-background-color: #1e354a; }
+ #window-advantage .text-field:focused, #window-advantage .combo-box:focused { -fx-border-color: #3498db; }
+ /* Loop en modo Advantage */
+ #window-advantage .btn-icon-secondary:selected { -fx-text-fill: #3498db; }
+
+ /* Bloqueo estricto para deshabilitados */
+ .btn-phase:disabled {
+     -fx-opacity: 0.15 !important;
+     -fx-background-color: #2a2a32 !important;
+     -fx-text-fill: #b0b0b5 !important;
+     -fx-border-color: #3a3a45 !important;
+     -fx-cursor: default;
+ }

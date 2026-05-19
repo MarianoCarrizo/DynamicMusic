@@ -14,22 +14,45 @@ public class ConversorUtils {
 
     public static File convertFlacToWav(File flacFile) throws Exception {
         File wavFile = File.createTempFile("track_", ".wav");
-        wavFile.deleteOnExit(); // se borra automáticamente al cerrar la JVM
+        wavFile.deleteOnExit();
 
         AudioInputStream flacStream = AudioSystem.getAudioInputStream(flacFile);
         AudioFormat baseFormat = flacStream.getFormat();
-        AudioFormat targetFormat = new AudioFormat(
+
+        // CLAVE: Si el archivo origen es de 24 bits, forzamos primero la lectura a PCM_SIGNED
+        // manteniendo los bits originales para que el SPI de jFLAC no falle por el tamaño del frame.
+        AudioFormat decodedFormat = new AudioFormat(
                 AudioFormat.Encoding.PCM_SIGNED,
                 baseFormat.getSampleRate(),
-                16,
+                baseFormat.getSampleSizeInBits() == -1 ? 16 : baseFormat.getSampleSizeInBits(), // Mantiene 24 o fuerza 16
                 baseFormat.getChannels(),
-                baseFormat.getChannels() * 2,
+                baseFormat.getChannels() * (baseFormat.getSampleSizeInBits() == -1 ? 2 : baseFormat.getSampleSizeInBits() / 8),
                 baseFormat.getSampleRate(),
-                false
+                false // Little-endian
         );
 
-        AudioInputStream pcmStream = AudioSystem.getAudioInputStream(targetFormat, flacStream);
+        AudioInputStream pcmStream = AudioSystem.getAudioInputStream(decodedFormat, flacStream);
+
+        // Si el formato decodificado sigue siendo de 24 bits, lo bajamos a 16 bits de forma segura
+        // para que JavaFX Media (que es bastante quisquilloso) lo reproduzca sin problemas.
+        if (decodedFormat.getSampleSizeInBits() == 24) {
+            AudioFormat targetFormat16Bit = new AudioFormat(
+                    AudioFormat.Encoding.PCM_SIGNED,
+                    baseFormat.getSampleRate(),
+                    16,
+                    baseFormat.getChannels(),
+                    baseFormat.getChannels() * 2,
+                    baseFormat.getSampleRate(),
+                    false
+            );
+            pcmStream = AudioSystem.getAudioInputStream(targetFormat16Bit, pcmStream);
+        }
+
+        // Guardamos el flujo final convertido en el archivo temporal .wav
         AudioSystem.write(pcmStream, AudioFileFormat.Type.WAVE, wavFile);
+
+        pcmStream.close();
+        flacStream.close();
 
         return wavFile;
     }
