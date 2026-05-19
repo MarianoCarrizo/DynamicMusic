@@ -3,26 +3,43 @@ package com.marianocarrizo.dynamicMusic.Controller;
 import com.marianocarrizo.dynamicMusic.Enums.TrackType;
 import com.marianocarrizo.dynamicMusic.service.MusicService;
 import javafx.application.Platform;
+import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
-import javafx.scene.Parent;
+import javafx.scene.Node;
+import javafx.scene.layout.VBox;
 import javafx.scene.control.*;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
+import javafx.stage.Stage;
 
 import java.io.File;
 
 public class PlayerController {
-    @FXML private Button btnPaused;
-    @FXML private Button btnRaged;
-    @FXML private Button btnNormal;
-    @FXML private Button btnAdvantage;
-    @FXML private ToggleButton btnLoopIcon;
-    @FXML private TextField txtSearch;
-    @FXML private Slider progressSlider;
-    @FXML private Label lblCurrentTime;
-    @FXML private Label lblTotalTime;
-    @FXML private ListView<File> lstTracks;
-    @FXML private ComboBox<TrackType> cmbTrackType;
+
+    @FXML
+    private VBox mainRoot;
+    @FXML
+    private Button btnPaused;
+    @FXML
+    private Button btnRaged;
+    @FXML
+    private Button btnNormal;
+    @FXML
+    private Button btnAdvantage;
+    @FXML
+    private ToggleButton btnLoopIcon;
+    @FXML
+    private TextField txtSearch;
+    @FXML
+    private Slider progressSlider;
+    @FXML
+    private Label lblCurrentTime;
+    @FXML
+    private Label lblTotalTime;
+    @FXML
+    private ListView<File> lstTracks;
+    @FXML
+    private ComboBox<TrackType> cmbTrackType;
 
     private final MusicService musicService = new MusicService();
     private boolean isDraggingSlider = false;
@@ -71,7 +88,7 @@ public class PlayerController {
                     double frac = current.toMillis() / total.toMillis();
                     progressSlider.setValue(frac * 100);
                     lblCurrentTime.setText(formatDuration(current));
-                    lblTotalTime.setText(formatDuration(total)); // Mantiene el tiempo total actualizado al final del slider
+                    lblTotalTime.setText(formatDuration(total));
                 }
                 updateButtons();
             });
@@ -85,18 +102,33 @@ public class PlayerController {
             });
         }
 
-        Platform.runLater(() -> updateSliderColor(TrackType.NORMAL));
+        // Forzamos el mood inicial usando runLater para que se ejecute post-renderizado
+        Platform.runLater(() -> updateWindowMood(TrackType.NORMAL));
     }
 
-    @FXML private void onLoadPaused() { loadTrack(TrackType.PAUSED); }
-    @FXML private void onLoadRaged() { loadTrack(TrackType.RAGED); }
-    @FXML private void onLoadNormal() { loadTrack(TrackType.NORMAL); }
-    @FXML private void onLoadAdvantage() { loadTrack(TrackType.ADVANTAGE); }
+    @FXML
+    private void onLoadPaused() { loadTrack(TrackType.PAUSED); }
 
-    @FXML private void onSwitchToPaused() { switchTrack(TrackType.PAUSED); }
-    @FXML private void onSwitchToRaged() { switchTrack(TrackType.RAGED); }
-    @FXML private void onSwitchToNormal() { switchTrack(TrackType.NORMAL); }
-    @FXML private void onSwitchToAdvantage() { switchTrack(TrackType.ADVANTAGE); }
+    @FXML
+    private void onLoadRaged() { loadTrack(TrackType.RAGED); }
+
+    @FXML
+    private void onLoadNormal() { loadTrack(TrackType.NORMAL); }
+
+    @FXML
+    private void onLoadAdvantage() { loadTrack(TrackType.ADVANTAGE); }
+
+    @FXML
+    private void onSwitchToPaused() { switchTrack(TrackType.PAUSED); }
+
+    @FXML
+    private void onSwitchToRaged() { switchTrack(TrackType.RAGED); }
+
+    @FXML
+    private void onSwitchToNormal() { switchTrack(TrackType.NORMAL); }
+
+    @FXML
+    private void onSwitchToAdvantage() { switchTrack(TrackType.ADVANTAGE); }
 
     public void switchTrack(TrackType type) {
         if (type == null || !musicService.isLoaded(type)) {
@@ -105,13 +137,18 @@ public class PlayerController {
 
         musicService.switchTrack(type);
         this.currentActiveType = type;
-        updateSliderColor(type);
+        updateWindowMood(type); // 🔥 Actualiza el id del root dinámicamente
         updateButtons();
     }
 
-    @FXML private void onPlay() { musicService.play(); }
-    @FXML private void onPause() { musicService.pause(); }
-    @FXML private void onStop() { musicService.stop(); }
+    @FXML
+    private void onPlay() { musicService.play(); }
+
+    @FXML
+    private void onPause() { musicService.pause(); }
+
+    @FXML
+    private void onStop() { musicService.stop(); }
 
     private void loadTrack(TrackType type) {
         FileChooser fileChooser = new FileChooser();
@@ -126,40 +163,51 @@ public class PlayerController {
         boolean hasNormal = musicService.isLoaded(TrackType.NORMAL);
         boolean hasAdvantage = musicService.isLoaded(TrackType.ADVANTAGE);
 
-        // 1. Deshabilitar nativamente
         if (btnPaused != null) btnPaused.setDisable(!hasPaused);
         if (btnRaged != null) btnRaged.setDisable(!hasRaged);
         if (btnNormal != null) btnNormal.setDisable(!hasNormal);
         if (btnAdvantage != null) btnAdvantage.setDisable(!hasAdvantage);
 
-        // 2. Limpiar estilos inline
         if (btnPaused != null) btnPaused.setStyle("");
         if (btnRaged != null) btnRaged.setStyle("");
         if (btnNormal != null) btnNormal.setStyle("");
         if (btnAdvantage != null) btnAdvantage.setStyle("");
 
-        // 3. Pintar con estilo inline SOLO si la fase actual está cargada y activa
         if (currentActiveType != null) {
             switch (currentActiveType) {
-                case PAUSED -> { if (btnPaused != null && hasPaused) btnPaused.setStyle("-fx-background-color: #7f8c8d; -fx-text-fill: black; -fx-border-color: #95a5a6;"); }
-                case RAGED -> { if (btnRaged != null && hasRaged) btnRaged.setStyle("-fx-background-color: #c0392b; -fx-text-fill: white; -fx-border-color: #e74c3c;"); }
-                case NORMAL -> { if (btnNormal != null && hasNormal) btnNormal.setStyle("-fx-background-color: #27ae60; -fx-text-fill: white; -fx-border-color: #2ecc71;"); }
-                case ADVANTAGE -> { if (btnAdvantage != null && hasAdvantage) btnAdvantage.setStyle("-fx-background-color: #2980b9; -fx-text-fill: white; -fx-border-color: #3498db;"); }
+                case PAUSED -> {
+                    if (btnPaused != null && hasPaused)
+                        btnPaused.setStyle("-fx-background-color: #7f8c8d; -fx-text-fill: black; -fx-border-color: #95a5a6;");
+                }
+                case RAGED -> {
+                    if (btnRaged != null && hasRaged)
+                        btnRaged.setStyle("-fx-background-color: #c0392b; -fx-text-fill: white; -fx-border-color: #e74c3c;");
+                }
+                case NORMAL -> {
+                    if (btnNormal != null && hasNormal)
+                        btnNormal.setStyle("-fx-background-color: #27ae60; -fx-text-fill: white; -fx-border-color: #2ecc71;");
+                }
+                case ADVANTAGE -> {
+                    if (btnAdvantage != null && hasAdvantage)
+                        btnAdvantage.setStyle("-fx-background-color: #2980b9; -fx-text-fill: white; -fx-border-color: #3498db;");
+                }
             }
         }
     }
 
-    private void updateSliderColor(TrackType type) {
-        if (type == null || progressSlider == null || progressSlider.getScene() == null) return;
-        Parent rootWindow = progressSlider.getScene().getRoot();
-        if (rootWindow == null) return;
+    /**
+     * Cambia el ID de CSS del contenedor principal.
+     * Esto dispara la cascada de estilos en la barra superior, slider y fondos de la app.
+     */
+    private void updateWindowMood(TrackType type) {
+        if (type == null || mainRoot == null) return;
 
         switch (type) {
-            case PAUSED -> rootWindow.setId("window-paused");
-            case RAGED -> rootWindow.setId("window-raged");
-            case NORMAL -> rootWindow.setId("window-normal");
-            case ADVANTAGE -> rootWindow.setId("window-advantage");
-            default -> rootWindow.setId("");
+            case PAUSED -> mainRoot.setId("window-paused");
+            case RAGED -> mainRoot.setId("window-raged");
+            case NORMAL -> mainRoot.setId("window-normal");
+            case ADVANTAGE -> mainRoot.setId("window-advantage");
+            default -> mainRoot.setId("");
         }
     }
 
@@ -194,5 +242,17 @@ public class PlayerController {
         if (btnLoopIcon != null) {
             musicService.setLoop(btnLoopIcon.isSelected());
         }
+    }
+
+    @FXML
+    private void onCloseWindow(ActionEvent event) {
+        Platform.exit();
+        System.exit(0);
+    }
+
+    @FXML
+    private void onMinimizeWindow(ActionEvent event) {
+        Stage stage = (Stage) ((Node) event.getSource()).getScene().getWindow();
+        stage.setIconified(true);
     }
 }

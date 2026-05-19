@@ -1,9 +1,25 @@
 /* =========================================================================
-   ESTILOS BASE GENERALES (Mantenidos intactos)
+   ESTILOS BASE GENERALES (Esquinas Rectas Anti-Bugs de Windows 11)
    ========================================================================= */
-.root {
+.root, .window-root-transparent {
+    -fx-background-color: transparent !important;
+    -fx-background-fill: transparent !important;
+    -fx-fill: transparent !important;
+    -fx-border-color: transparent !important;
+    -fx-border-width: 0 !important;
+    -fx-padding: 0 !important; /* Calce perfecto a 0px para evitar desfases */
+}
+
+/* El contenedor interno real */
+.main-container {
     -fx-background-color: #1e1e24;
     -fx-font-family: "Segoe UI", Helvetica, Arial, sans-serif;
+
+    /* 🔥 CUADRADO TOTAL: Eliminamos cualquier rastro de redondeado */
+    -fx-background-radius: 0px !important;
+    -fx-border-radius: 0px !important;
+    -fx-border-color: #2d2d35;
+    -fx-border-width: 1px;
 }
 
 .label {
@@ -20,7 +36,7 @@
 .list-view {
     -fx-background-color: #2a2a32;
     -fx-border-color: #3a3a43;
-    -fx-background-radius: 6px;
+    -fx-background-radius: 0px !important; /* Cuadrado */
 }
 .list-cell {
     -fx-text-fill: #d0d0d0;
@@ -36,14 +52,15 @@
     -fx-background-color: #2a2a32;
     -fx-text-fill: #ffffff;
     -fx-border-color: #4f4f5c;
-    -fx-border-radius: 4px;
-    -fx-background-radius: 4px;
+    -fx-border-radius: 0px !important;
+    -fx-background-radius: 0px !important;
     -fx-padding: 7px;
     -fx-prompt-text-fill: #808085;
 }
 .combo-box {
     -fx-background-color: #3a3a43;
-    -fx-background-radius: 4px;
+    -fx-background-radius: 0px !important;
+    -fx-border-radius: 0px !important;
     -fx-padding: 4px;
 }
 .combo-box .label {
@@ -51,14 +68,52 @@
 }
 
 /* =========================================================================
+   BARRA SUPERIOR PERSONALIZADA Base
+   ========================================================================= */
+.window-header {
+    -fx-background-color: #16161a;
+    -fx-background-radius: 0px !important; /* Calce plano con el marco superior */
+}
+
+.window-title {
+    -fx-text-fill: #808085;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-padding: 0 0 0 4px;
+}
+
+/* Botones de control de ventana */
+.btn-window-control {
+    -fx-background-color: transparent !important;
+    -fx-text-fill: #a0a0a5;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-min-width: 26px;
+    -fx-max-width: 26px;
+    -fx-min-height: 20px;
+    -fx-max-height: 20px;
+    -fx-background-radius: 0px !important;
+    -fx-cursor: hand;
+    -fx-padding: 0;
+}
+
+.btn-window-control:hover {
+    -fx-background-color: #2a2a32 !important;
+    -fx-text-fill: #ffffff;
+}
+
+.btn-window-close:hover {
+    -fx-background-color: #e81123 !important;
+    -fx-text-fill: #ffffff;
+}
+
+/* =========================================================================
    BOTONES Y COMPONENTES ESPECÍFICOS
    ========================================================================= */
-
-/* Botones Auxiliares (Open Folder, Assign) */
 .btn-secondary, .btn-assign {
     -fx-background-color: #3a3a43;
     -fx-text-fill: #ffffff;
-    -fx-background-radius: 4px;
+    -fx-background-radius: 0px !important;
     -fx-padding: 7px 14px;
     -fx-cursor: hand;
 }
@@ -66,15 +121,14 @@
     -fx-background-color: #4f4f5c;
 }
 
-/* Botones Grandes de Climas (Grilla) */
 .btn-phase {
     -fx-background-color: #2a2a32;
     -fx-text-fill: #b0b0b5;
     -fx-font-size: 14px;
     -fx-font-weight: bold;
-    -fx-background-radius: 8px;
+    -fx-background-radius: 0px !important;
     -fx-border-color: #3a3a45;
-    -fx-border-radius: 8px;
+    -fx-border-radius: 0px !important;
     -fx-border-width: 1px;
     -fx-cursor: hand;
 }
@@ -84,7 +138,6 @@
     -fx-border-color: #4f4f5c;
 }
 
-/* Contenedor de Información del Tema Actual */
 .track-info-container {
     -fx-padding: 5px 0;
 }
@@ -100,137 +153,127 @@
 }
 
 /* =========================================================================
-   NUEVA CONSOLA INFERIOR DE REPRODUCCIÓN (Estilo Spotify)
+   NUEVA CONSOLA INFERIOR DE REPRODUCCIÓN
    ========================================================================= */
 .playback-panel {
-    -fx-background-color: #121214; /* Más oscuro para que destaquen los botones */
-    -fx-background-radius: 12px;
-    -fx-padding: 16px 20px;
+    -fx-background-color: #121214;
+    -fx-background-radius: 0px !important;
+    -fx-padding: 14px 20px;
     -fx-border-color: #24242b;
-    -fx-border-radius: 12px;
+    -fx-border-radius: 0px !important;
     -fx-border-width: 1px;
+    -fx-max-width: 500px;
 }
 
-/* Play y Pause principales (Círculo blanco) */
-.btn-icon-main {
-    -fx-background-color: #ffffff;
-    -fx-text-fill: #000000;
-    -fx-font-size: 14px;
-    -fx-font-weight: bold;
-    -fx-alignment: CENTER;
-    -fx-background-radius: 40px;
-    -fx-min-width: 42px;
-    -fx-max-width: 42px;
-    -fx-min-height: 42px;
-    -fx-max-height: 42px;
-    -fx-cursor: hand;
-    -fx-padding: 0px 0px 0px 2px; /* Centrado óptico del triángulo */
-}
-.btn-icon-main:hover {
-    -fx-scale-x: 1.05;
-    -fx-scale-y: 1.05;
-    -fx-background-color: #f6f6f6;
-}
-.btn-icon-main[text="⏸"] {
-    -fx-padding: 0; /* Las dos barras de pausa no necesitan desfase */
-}
-
-/* Botones Planos (Stop y Loop) */
-.btn-icon-secondary {
-    -fx-background-color: transparent;
-    -fx-text-fill: #a7a7a7;
-    -fx-font-size: 16px;
-    -fx-alignment: CENTER;
+/* Reset total para botones planos (Loop y Stop) */
+.btn-spotify-flat {
+    -fx-background-color: transparent !important;
+    -fx-background-insets: 0 !important;
+    -fx-background-radius: 0 !important;
+    -fx-border-color: transparent !important;
+    -fx-border-width: 0 !important;
+    -fx-text-fill: #b3b3b3;
+    -fx-font-size: 15px;
     -fx-cursor: hand;
     -fx-padding: 6px;
-    -fx-background-radius: 0;
+    -fx-alignment: CENTER;
 }
-.btn-icon-secondary:hover {
-    -fx-text-fill: #ffffff;
-}
+.btn-spotify-flat:hover { -fx-text-fill: #ffffff; }
+.btn-spotify-flat:selected { -fx-text-fill: #1db954; -fx-effect: none !important; }
 
-/* Botón de Loop activo base (cuando no hay mood seleccionado o por defecto) */
-.btn-icon-secondary:selected {
-    -fx-text-fill: #1db954; /* Color por defecto si no hay ID dinámico */
-    -fx-effect: none !important; /* Chau mirror effect feo */
-}
-
-/* Formato fino de la barra de progreso */
-.spotify-slider {
+/* Los botones redondos internos quedan bien circulares para contraste */
+.btn-spotify-circle {
+    -fx-background-color: #ffffff !important;
+    -fx-text-fill: #000000 !important;
+    -fx-background-radius: 40px !important;
+    -fx-border-radius: 40px !important;
+    -fx-min-width: 38px;
+    -fx-max-width: 38px;
+    -fx-min-height: 38px;
+    -fx-max-height: 38px;
     -fx-cursor: hand;
+    -fx-alignment: CENTER;
+    -fx-padding: 0;
+    -fx-background-insets: 0 !important;
+    -fx-border-width: 0 !important;
+    -fx-border-color: transparent !important;
 }
-.spotify-slider .track {
-    -fx-background-color: #4f4f56;
-    -fx-background-radius: 4px;
-    -fx-pref-height: 5px;
+.btn-spotify-circle:hover {
+    -fx-scale-x: 1.06;
+    -fx-scale-y: 1.06;
+    -fx-background-color: #f6f6f6 !important;
 }
+.btn-play { -fx-padding: 0px 0px 0px 2px; }
+
+/* Barra de progreso */
+.progress-container { -fx-padding: 2px 0 0 0; }
+.spotify-slider { -fx-cursor: hand; }
+.spotify-slider .track { -fx-background-color: #2c2c30; -fx-background-radius: 0px; -fx-pref-height: 4px; }
+.spotify-slider .range-bar { -fx-background-radius: 0px; }
 .spotify-slider .thumb {
     -fx-background-color: #ffffff;
-    -fx-background-radius: 50%;
-    -fx-pref-width: 12px;
-    -fx-pref-height: 12px;
-    -fx-opacity: 0; /* Se oculta por defecto */
+    -fx-background-radius: 0px;
+    -fx-pref-width: 10px;
+    -fx-pref-height: 10px;
+    -fx-opacity: 0;
+    -fx-background-insets: 0;
 }
-.spotify-slider:hover .thumb {
-    -fx-opacity: 1; /* Aparece al pasar el mouse por la barra */
+.spotify-slider:hover .thumb { -fx-opacity: 1; }
+.lbl-time { -fx-font-family: "Segoe UI", Arial, sans-serif; -fx-font-size: 11px; -fx-text-fill: #a7a7a7; -fx-min-width: 30px; }
+
+/* =========================================================================
+   ESTADOS DE AMBIENTACIÓN DINÁMICA (Plano absoluto sin herencias raras)
+   ========================================================================= */
+
+/* --- 1. PAUSED (Gris / Platino) --- */
+#window-paused.main-container { -fx-background-color: #151517; -fx-background-radius: 0px !important; -fx-border-radius: 0px !important; }
+#window-paused .window-header { -fx-background-color: #222226; }
+#window-paused .window-title { -fx-text-fill: #95a5a6; }
+#window-paused .slider .track { -fx-background-color: #3e3e40; }
+#window-paused .slider .thumb { -fx-background-color: #7f8c8d; }
+#window-paused .slider .range-bar { -fx-background-color: #95a5a6; }
+#window-paused .list-cell:filled:selected { -fx-background-color: #4a4a4a; }
+#window-paused .text-field:focused, #window-paused .combo-box:focused { -fx-border-color: #7f8c8d; }
+#window-paused .btn-spotify-flat:selected { -fx-text-fill: #95a5a6; }
+
+/* --- 2. RAGED (Rojo Combate) --- */
+#window-raged.main-container { -fx-background-color: #160e0e; -fx-background-radius: 0px !important; -fx-border-radius: 0px !important; }
+#window-raged .window-header { -fx-background-color: #2c1616; }
+#window-raged .window-title { -fx-text-fill: #e74c3c; }
+#window-raged .slider .track { -fx-background-color: #451b1b; }
+#window-raged .slider .thumb { -fx-background-color: #e74c3c; }
+#window-raged .slider .range-bar { -fx-background-color: #c0392b; }
+#window-raged .list-cell:filled:selected { -fx-background-color: #8a1f1f; }
+#window-raged .text-field:focused, #window-raged .combo-box:focused { -fx-border-color: #e74c3c; }
+#window-raged .btn-spotify-flat:selected { -fx-text-fill: #e74c3c; }
+
+/* --- 3. NORMAL (Verde Exploración) --- */
+#window-normal.main-container { -fx-background-color: #0e1410; -fx-background-radius: 0px !important; -fx-border-radius: 0px !important; }
+#window-normal .window-header { -fx-background-color: #16241b; }
+#window-normal .window-title { -fx-text-fill: #2ecc71; }
+#window-normal .slider .track { -fx-background-color: #14331d; }
+#window-normal .slider .thumb { -fx-background-color: #2ecc71; }
+#window-normal .slider .range-bar { -fx-background-color: #27ae60; }
+#window-normal .list-cell:filled:selected { -fx-background-color: #1e4a2b; }
+#window-normal .text-field:focused, #window-normal .combo-box:focused { -fx-border-color: #2ecc71; }
+#window-normal .btn-spotify-flat:selected { -fx-text-fill: #2ecc71; }
+
+/* --- 4. ADVANTAGE (Azul) --- */
+#window-advantage.main-container { -fx-background-color: #0f1318; -fx-background-radius: 0px !important; -fx-border-radius: 0px !important; }
+#window-advantage .window-header { -fx-background-color: #16222f; }
+#window-advantage .window-title { -fx-text-fill: #3498db; }
+#window-advantage .slider .track { -fx-background-color: #112233; }
+#window-advantage .slider .thumb { -fx-background-color: #3498db; }
+#window-advantage .slider .range-bar { -fx-background-color: #2980b9; }
+#window-advantage .list-cell:filled:selected { -fx-background-color: #1e354a; }
+#window-advantage .text-field:focused, #window-advantage .combo-box:focused { -fx-border-color: #3498db; }
+#window-advantage .btn-spotify-flat:selected { -fx-text-fill: #3498db; }
+
+/* Bloqueo estricto para deshabilitados */
+.btn-phase:disabled {
+    -fx-opacity: 0.15 !important;
+    -fx-background-color: #2a2a32 !important;
+    -fx-text-fill: #b0b0b5 !important;
+    -fx-border-color: #3a3a45 !important;
+    -fx-cursor: default;
 }
-
-.lbl-time {
-    -fx-font-family: 'Courier New', monospace;
-    -fx-font-size: 12px;
-    -fx-font-weight: bold;
-    -fx-text-fill: #a7a7a7;
-}
-
-//* =========================================================================
-    ESTADOS DE AMBIENTACIÓN DINÁMICA (Overrides por Cascada)
-    ========================================================================= */
-
- /* --- 1. PAUSED (Gris / Platino) --- */
- #window-paused { -fx-background-color: #151517; }
- #window-paused .slider .track { -fx-background-color: #3e3e40; }
- #window-paused .slider .thumb { -fx-background-color: #7f8c8d; }
- #window-paused .slider .range-bar { -fx-background-color: #95a5a6; }
- #window-paused .list-cell:filled:selected { -fx-background-color: #4a4a4a; }
- #window-paused .text-field:focused, #window-paused .combo-box:focused { -fx-border-color: #7f8c8d; }
- /* Loop en modo Paused */
- #window-paused .btn-icon-secondary:selected { -fx-text-fill: #95a5a6; }
-
- /* --- 2. RAGED (Rojo Combate) --- */
- #window-raged { -fx-background-color: #160e0e; }
- #window-raged .slider .track { -fx-background-color: #451b1b; }
- #window-raged .slider .thumb { -fx-background-color: #e74c3c; }
- #window-raged .slider .range-bar { -fx-background-color: #c0392b; }
- #window-raged .list-cell:filled:selected { -fx-background-color: #8a1f1f; }
- #window-raged .text-field:focused, #window-raged .combo-box:focused { -fx-border-color: #e74c3c; }
- /* Loop en modo Raged */
- #window-raged .btn-icon-secondary:selected { -fx-text-fill: #e74c3c; }
-
- /* --- 3. NORMAL (Verde Naturaleza / Exploración) --- */
- #window-normal { -fx-background-color: #0e1410; }
- #window-normal .slider .track { -fx-background-color: #14331d; }
- #window-normal .slider .thumb { -fx-background-color: #2ecc71; }
- #window-normal .slider .range-bar { -fx-background-color: #27ae60; }
- #window-normal .list-cell:filled:selected { -fx-background-color: #1e4a2b; }
- #window-normal .text-field:focused, #window-normal .combo-box:focused { -fx-border-color: #2ecc71; }
- /* Loop en modo Normal */
- #window-normal .btn-icon-secondary:selected { -fx-text-fill: #2ecc71; }
-
- /* --- 4. ADVANTAGE (Azul) --- */
- #window-advantage { -fx-background-color: #0f1318; }
- #window-advantage .slider .track { -fx-background-color: #112233; }
- #window-advantage .slider .thumb { -fx-background-color: #3498db; }
- #window-advantage .slider .range-bar { -fx-background-color: #2980b9; }
- #window-advantage .list-cell:filled:selected { -fx-background-color: #1e354a; }
- #window-advantage .text-field:focused, #window-advantage .combo-box:focused { -fx-border-color: #3498db; }
- /* Loop en modo Advantage */
- #window-advantage .btn-icon-secondary:selected { -fx-text-fill: #3498db; }
-
- /* Bloqueo estricto para deshabilitados */
- .btn-phase:disabled {
-     -fx-opacity: 0.15 !important;
-     -fx-background-color: #2a2a32 !important;
-     -fx-text-fill: #b0b0b5 !important;
-     -fx-border-color: #3a3a45 !important;
-     -fx-cursor: default;
- }
