@@ -122,20 +122,20 @@
 }
 
 .btn-phase {
-    -fx-background-color: #2a2a32;
-    -fx-text-fill: #b0b0b5;
-    -fx-font-size: 14px;
+    -fx-background-color: #313139;
+    -fx-text-fill: #d0d0d8;
+    -fx-font-size: 13px;
     -fx-font-weight: bold;
     -fx-background-radius: 0px !important;
-    -fx-border-color: #3a3a45;
+    -fx-border-color: #5a5a6e;
     -fx-border-radius: 0px !important;
-    -fx-border-width: 1px;
+    -fx-border-width: 2px;
     -fx-cursor: hand;
 }
 .btn-phase:hover {
-    -fx-background-color: #35353f;
+    -fx-background-color: #3e3e4a;
     -fx-text-fill: #ffffff;
-    -fx-border-color: #4f4f5c;
+    -fx-border-color: #7a7a8e;
 }
 
 .track-info-container {
@@ -203,7 +203,28 @@
     -fx-scale-y: 1.06;
     -fx-background-color: #f6f6f6 !important;
 }
-.btn-play { -fx-padding: 0px 0px 0px 2px; }
+/* Sin offset — tanto ▶ como ⏸ quedan centrados en el círculo */
+
+/* Título de cada panel de reproducción */
+.lbl-panel-title {
+    -fx-text-fill: #606068;
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+    -fx-letter-spacing: 1px;
+}
+
+/* Label de track en preescucha */
+.lbl-preview-track {
+    -fx-text-fill: #909098;
+    -fx-font-size: 12px;
+    -fx-font-style: italic;
+}
+
+/* Panel de preescucha: borde superior para separación visual */
+.preview-panel {
+    -fx-border-color: #2a2a35 transparent transparent transparent;
+    -fx-border-width: 1px;
+}
 
 /* Barra de progreso */
 .progress-container { -fx-padding: 2px 0 0 0; }
@@ -268,6 +289,41 @@
 #window-advantage .list-cell:filled:selected { -fx-background-color: #1e354a; }
 #window-advantage .text-field:focused, #window-advantage .combo-box:focused { -fx-border-color: #3498db; }
 #window-advantage .btn-spotify-flat:selected { -fx-text-fill: #3498db; }
+
+/* =========================================================================
+   BOTÓN FASE ACTIVO (G6 — reemplaza setStyle() inline en updateButtons)
+   ========================================================================= */
+
+/* Base: borde visible y texto blanco para todos los moods */
+.btn-phase-active {
+    -fx-border-width: 2px;
+    -fx-text-fill: #ffffff;
+}
+
+/* PAUSED: gris/platino con texto oscuro para contraste */
+#window-paused .btn-phase-active {
+    -fx-background-color: #7f8c8d;
+    -fx-border-color: #95a5a6;
+    -fx-text-fill: #000000;
+}
+
+/* RAGED: rojo combate */
+#window-raged .btn-phase-active {
+    -fx-background-color: #c0392b;
+    -fx-border-color: #e74c3c;
+}
+
+/* NORMAL: verde exploración */
+#window-normal .btn-phase-active {
+    -fx-background-color: #27ae60;
+    -fx-border-color: #2ecc71;
+}
+
+/* ADVANTAGE: azul */
+#window-advantage .btn-phase-active {
+    -fx-background-color: #2980b9;
+    -fx-border-color: #3498db;
+}
 
 /* Bloqueo estricto para deshabilitados */
 .btn-phase:disabled {

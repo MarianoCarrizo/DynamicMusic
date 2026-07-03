@@ -2,13 +2,19 @@ package com.marianocarrizo.dynamicMusic;
 
 import com.marianocarrizo.dynamicMusic.Controller.PlayerController;
 import com.marianocarrizo.dynamicMusic.Enums.TrackType;
+import com.marianocarrizo.dynamicMusic.config.SessionConfig;
+import com.marianocarrizo.dynamicMusic.config.SessionConfigManager;
 import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
+import javafx.scene.image.Image;
+import javafx.scene.input.KeyCode;
 import javafx.stage.Stage;
 import javafx.stage.StageStyle;
+import java.util.HashSet;
+import java.util.Set;
 
 public class MusicServiceStarter extends Application {
 
@@ -22,7 +28,14 @@ public class MusicServiceStarter extends Application {
 
         stage.setTitle("Dynamic Music Player");
 
-        // 1. Estilo sin bordes nativos
+        // Ícono de la aplicación
+        try {
+            stage.getIcons().add(new Image(getClass().getResourceAsStream("/icon.ico")));
+        } catch (Exception e) {
+            System.out.println("No se encontró icon.ico, se usará el ícono por defecto.");
+        }
+
+        // Estilo sin bordes nativos
         stage.initStyle(StageStyle.UNDECORATED);
 
         Scene scene = new Scene(root);
@@ -38,14 +51,14 @@ public class MusicServiceStarter extends Application {
 
         stage.setScene(scene);
 
-        // 🔥 SOLUCIÓN AL ARRASTRE: Forzamos la aplicación de estilos antes de buscar el nodo
+        // Forzamos la aplicación de estilos antes de buscar el nodo de arrastre
         root.applyCss();
         root.layout();
 
         Node header = root.lookup(".window-header");
 
         if (header != null) {
-            // Si encuentra la barra superior (que es lo ideal), solo arrastra desde ahí
+            // Arrastre desde la barra superior (comportamiento esperado)
             header.setOnMousePressed(event -> {
                 xOffset = event.getSceneX();
                 yOffset = event.getSceneY();
@@ -55,8 +68,8 @@ public class MusicServiceStarter extends Application {
                 stage.setY(event.getScreenY() - yOffset);
             });
         } else {
-            // 🔥 PLAN B SEGURO: Si no encuentra el header, arrastramos desde el contenedor interno real (.main-container)
-            // NUNCA desde el 'root' de la Scene para no romper la transparencia nativa de Windows.
+            // Plan B: arrastre desde el contenedor principal si no hay header
+            // NUNCA desde el 'root' de la Scene para no romper la transparencia nativa
             Node mainContainer = root.lookup(".main-container");
             if (mainContainer != null) {
                 mainContainer.setOnMousePressed(event -> {
@@ -72,7 +85,19 @@ public class MusicServiceStarter extends Application {
 
         // Captura de teclado numérico - 1, 2, 3, 4
         PlayerController controller = loader.getController();
+
+        // Auto-carga de sesión guardada (G3): se aplica ANTES de stage.show()
+        // para que la UI refleje el estado anterior desde el primer render
+        SessionConfigManager sessionManager = new SessionConfigManager();
+        SessionConfig savedSession = sessionManager.load();
+        controller.applySession(savedSession);
+
+        // Set de teclas actualmente presionadas para ignorar key-repeat del SO
+        Set<KeyCode> heldKeys = new HashSet<>();
+
         scene.setOnKeyPressed(e -> {
+            if (heldKeys.contains(e.getCode())) return; // ignorar repetición
+            heldKeys.add(e.getCode());
             switch (e.getCode()) {
                 case DIGIT1 -> controller.switchTrack(TrackType.PAUSED);
                 case DIGIT2 -> controller.switchTrack(TrackType.NORMAL);
@@ -80,6 +105,8 @@ public class MusicServiceStarter extends Application {
                 case DIGIT4 -> controller.switchTrack(TrackType.ADVANTAGE);
             }
         });
+
+        scene.setOnKeyReleased(e -> heldKeys.remove(e.getCode()));
 
         stage.show();
     }
