@@ -30,73 +30,159 @@
             </padding>
 
             <!-- Panel izquierdo: lista de pistas -->
-            <VBox spacing="10" prefWidth="280" minWidth="250">
-                <Button text="📂 Open Folder" onAction="#onOpenFolder" maxWidth="Infinity" styleClass="btn-secondary"/>
+            <VBox fx:id="leftPanel" spacing="10" prefWidth="280" minWidth="250">
+                <HBox spacing="6">
+                    <Button text="📂 Open Folder" onAction="#onOpenFolder" HBox.hgrow="ALWAYS" maxWidth="Infinity" styleClass="btn-secondary"/>
+                    <Button fx:id="btnExpandPanel" text="⛶" onAction="#onToggleExpandPanel" styleClass="btn-secondary" minWidth="32" maxWidth="32"/>
+                </HBox>
                 <TextField fx:id="txtSearch" promptText="Buscar pista por nombre..."/>
-                <ListView fx:id="lstTracks" VBox.vgrow="ALWAYS"/>
+                <TreeView fx:id="treeFiles" VBox.vgrow="ALWAYS" showRoot="false"/>
                 <HBox spacing="8" alignment="CENTER_LEFT">
                     <ComboBox fx:id="cmbTrackType" HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
                     <Button text="Assign" onAction="#onAssignTrack" minWidth="70" styleClass="btn-assign"/>
                 </HBox>
             </VBox>
 
-            <Separator orientation="VERTICAL"/>
+            <Separator fx:id="panelSeparator" orientation="VERTICAL"/>
 
-            <!-- Panel derecho: moods + reproductores -->
-            <VBox spacing="14" HBox.hgrow="ALWAYS" alignment="CENTER">
+            <!-- Panel derecho: TabPane de modos + preescucha siempre visible -->
+            <VBox fx:id="rightPanel" spacing="14" HBox.hgrow="ALWAYS" alignment="CENTER">
 
-                <!-- Título e info del mood activo -->
-                <VBox spacing="4" alignment="CENTER" styleClass="track-info-container">
-                    <Label text="AMBIENTACIÓN ACTIVA" styleClass="lbl-session-title"/>
-                    <Label fx:id="lblNowPlaying" text="—" styleClass="lbl-track-active"/>
-                </VBox>
+                <!-- T-10: TabPane que agrupa los modos Moods y Playlists -->
+                <TabPane fx:id="modeTabPane" VBox.vgrow="ALWAYS" tabClosingPolicy="UNAVAILABLE">
 
-                <!-- Grid de botones de mood -->
-                <GridPane hgap="10" vgap="10" alignment="CENTER" VBox.vgrow="ALWAYS">
-                    <columnConstraints>
-                        <ColumnConstraints hgrow="ALWAYS" minWidth="100"/>
-                        <ColumnConstraints hgrow="ALWAYS" minWidth="100"/>
-                    </columnConstraints>
-                    <rowConstraints>
-                        <RowConstraints vgrow="ALWAYS" minHeight="60"/>
-                        <RowConstraints vgrow="ALWAYS" minHeight="60"/>
-                    </rowConstraints>
-                    <children>
-                        <Button fx:id="btnPaused" text="[1] PAUSED" onAction="#onSwitchToPaused"
-                                maxWidth="Infinity" maxHeight="Infinity" styleClass="btn-phase"
-                                GridPane.columnIndex="0" GridPane.rowIndex="0"/>
-                        <Button fx:id="btnNormal" text="[2] NORMAL" onAction="#onSwitchToNormal"
-                                maxWidth="Infinity" maxHeight="Infinity" styleClass="btn-phase"
-                                GridPane.columnIndex="1" GridPane.rowIndex="0"/>
-                        <Button fx:id="btnRaged" text="[3] RAGED" onAction="#onSwitchToRaged"
-                                maxWidth="Infinity" maxHeight="Infinity" styleClass="btn-phase"
-                                GridPane.columnIndex="0" GridPane.rowIndex="1"/>
-                        <Button fx:id="btnAdvantage" text="[4] ADVANTAGE" onAction="#onSwitchToAdvantage"
-                                maxWidth="Infinity" maxHeight="Infinity" styleClass="btn-phase"
-                                GridPane.columnIndex="1" GridPane.rowIndex="1"/>
-                    </children>
-                </GridPane>
+                    <!-- Tab Moods: contenido existente del panel derecho -->
+                    <Tab fx:id="moodsTab" text="Moods">
+                        <content>
+                            <VBox spacing="14" alignment="CENTER">
+                                <padding>
+                                    <Insets top="10" right="4" bottom="4" left="4"/>
+                                </padding>
 
-                <!-- Reproductor de mood -->
-                <VBox spacing="8" alignment="CENTER" styleClass="playback-panel">
-                    <Label text="MOOD" styleClass="lbl-panel-title"/>
-                    <HBox spacing="20" alignment="CENTER">
-                        <ToggleButton fx:id="btnLoopIcon" text="🔁" onAction="#onToggleLoop" styleClass="btn-spotify-flat, btn-loop"/>
-                        <Button text="■" onAction="#onStop" styleClass="btn-spotify-flat, btn-stop"/>
-                        <Button fx:id="btnPlayPause" text="▶" onAction="#onTogglePlayPause" styleClass="btn-spotify-circle"/>
-                    </HBox>
-                    <HBox spacing="10" alignment="CENTER" styleClass="progress-container">
-                        <Label fx:id="lblCurrentTime" text="0:00" styleClass="lbl-time"/>
-                        <Slider fx:id="progressSlider" HBox.hgrow="ALWAYS" styleClass="spotify-slider"/>
-                        <Label fx:id="lblTotalTime" text="0:00" styleClass="lbl-time"/>
-                    </HBox>
-                </VBox>
+                                <!-- Título e info del mood activo -->
+                                <VBox spacing="4" alignment="CENTER" styleClass="track-info-container">
+                                    <Label text="AMBIENTACIÓN ACTIVA" styleClass="lbl-session-title"/>
+                                    <Label fx:id="lblNowPlaying" text="—" styleClass="lbl-track-active"/>
+                                </VBox>
 
-                <!-- Reproductor de preescucha -->
+                                <!-- Grid de botones de mood -->
+                                <GridPane hgap="10" vgap="10" alignment="CENTER" VBox.vgrow="ALWAYS">
+                                    <columnConstraints>
+                                        <ColumnConstraints hgrow="ALWAYS" minWidth="100"/>
+                                        <ColumnConstraints hgrow="ALWAYS" minWidth="100"/>
+                                    </columnConstraints>
+                                    <rowConstraints>
+                                        <RowConstraints vgrow="ALWAYS" minHeight="60"/>
+                                        <RowConstraints vgrow="ALWAYS" minHeight="60"/>
+                                    </rowConstraints>
+                                    <children>
+                                        <Button fx:id="btnPaused" text="[1] PAUSED" onAction="#onSwitchToPaused"
+                                                maxWidth="Infinity" maxHeight="Infinity" styleClass="btn-phase"
+                                                GridPane.columnIndex="0" GridPane.rowIndex="0"/>
+                                        <Button fx:id="btnNormal" text="[2] NORMAL" onAction="#onSwitchToNormal"
+                                                maxWidth="Infinity" maxHeight="Infinity" styleClass="btn-phase"
+                                                GridPane.columnIndex="1" GridPane.rowIndex="0"/>
+                                        <Button fx:id="btnRaged" text="[3] RAGED" onAction="#onSwitchToRaged"
+                                                maxWidth="Infinity" maxHeight="Infinity" styleClass="btn-phase"
+                                                GridPane.columnIndex="0" GridPane.rowIndex="1"/>
+                                        <Button fx:id="btnAdvantage" text="[4] ADVANTAGE" onAction="#onSwitchToAdvantage"
+                                                maxWidth="Infinity" maxHeight="Infinity" styleClass="btn-phase"
+                                                GridPane.columnIndex="1" GridPane.rowIndex="1"/>
+                                    </children>
+                                </GridPane>
+
+                                <Button text="🖼 Set Background" onAction="#onSetBackground" maxWidth="Infinity" styleClass="btn-secondary"/>
+                                <Label fx:id="lblBackgroundFile" text="No background set" styleClass="lbl-preview-track" maxWidth="Infinity"/>
+                                <HBox spacing="6" alignment="CENTER_LEFT">
+                                    <Label text="Screen:" styleClass="lbl-session-title" minWidth="45"/>
+                                    <ComboBox fx:id="cmbScreen" HBox.hgrow="ALWAYS" maxWidth="Infinity" onAction="#onSelectScreen"/>
+                                </HBox>
+                                <HBox spacing="6" alignment="CENTER_LEFT">
+                                    <Label text="Effect:" styleClass="lbl-session-title" minWidth="45"/>
+                                    <ComboBox fx:id="cmbEffect" HBox.hgrow="ALWAYS" maxWidth="Infinity" onAction="#onSelectEffect"/>
+                                </HBox>
+                                <Button text="⚙ Sensitivity per Mood" onAction="#onOpenSensitivityConfig"
+                                        maxWidth="Infinity" styleClass="btn-secondary"/>
+
+                                <!-- Reproductor de mood -->
+                                <VBox spacing="8" alignment="CENTER" styleClass="playback-panel">
+                                    <Label text="MOOD" styleClass="lbl-panel-title"/>
+                                    <HBox spacing="20" alignment="CENTER">
+                                        <ToggleButton fx:id="btnLoopIcon" text="🔁" onAction="#onToggleLoop" styleClass="btn-spotify-flat, btn-loop"/>
+                                        <Button text="■" onAction="#onStop" styleClass="btn-spotify-flat, btn-stop"/>
+                                        <Button fx:id="btnPlayPause" text="▶" onAction="#onTogglePlayPause" styleClass="btn-spotify-circle"/>
+                                    </HBox>
+                                    <HBox spacing="10" alignment="CENTER" styleClass="progress-container">
+                                        <Label fx:id="lblCurrentTime" text="0:00" styleClass="lbl-time"/>
+                                        <Slider fx:id="progressSlider" HBox.hgrow="ALWAYS" styleClass="spotify-slider"/>
+                                        <Label fx:id="lblTotalTime" text="0:00" styleClass="lbl-time"/>
+                                    </HBox>
+                                </VBox>
+
+                            </VBox>
+                        </content>
+                    </Tab>
+
+                    <!-- T-11: Tab Playlists: panel de gestión de playlists -->
+                    <Tab fx:id="playlistsTab" text="Playlists">
+                        <content>
+                            <VBox fx:id="playlistPanel" spacing="14">
+                                <padding>
+                                    <Insets top="10" right="4" bottom="4" left="4"/>
+                                </padding>
+
+                                <!-- Fila superior: selector de playlist y CRUD -->
+                                <HBox spacing="8">
+                                    <ComboBox fx:id="cmbPlaylist" HBox.hgrow="ALWAYS" maxWidth="Infinity" promptText="Select playlist"/>
+                                    <Button fx:id="btnNewPlaylist" text="+" onAction="#onNewPlaylist" styleClass="btn-secondary"/>
+                                    <Button fx:id="btnRenamePlaylist" text="✎" onAction="#onRenamePlaylist" styleClass="btn-secondary"/>
+                                    <Button fx:id="btnDeletePlaylist" text="🗑" onAction="#onDeletePlaylist" styleClass="btn-secondary"/>
+                                </HBox>
+
+                                <!-- Lista de pistas + botones de edición -->
+                                <VBox VBox.vgrow="ALWAYS" spacing="4">
+                                    <ListView fx:id="lstPlaylistTracks" VBox.vgrow="ALWAYS" prefHeight="150"/>
+                                    <HBox spacing="4">
+                                        <Button fx:id="btnAddToPlaylist" text="Add" onAction="#onAddToPlaylist" styleClass="btn-secondary"/>
+                                        <Button fx:id="btnRemoveTrack" text="Remove" onAction="#onRemoveTrack" styleClass="btn-secondary"/>
+                                        <Button fx:id="btnMoveUp" text="↑" onAction="#onMoveUp" styleClass="btn-secondary"/>
+                                        <Button fx:id="btnMoveDown" text="↓" onAction="#onMoveDown" styleClass="btn-secondary"/>
+                                    </HBox>
+                                </VBox>
+
+                                <!-- Contador de posición -->
+                                <Label fx:id="lblTrackCounter" text="— / —" alignment="CENTER" maxWidth="Infinity" styleClass="lbl-session-title"/>
+
+                                <!-- Controles de transporte del playlist -->
+                                <VBox spacing="8" alignment="CENTER" styleClass="playback-panel">
+                                    <Label text="PLAYLIST" styleClass="lbl-panel-title"/>
+                                    <HBox alignment="CENTER" spacing="8">
+                                        <ToggleButton fx:id="btnShuffle" text="⇌" onAction="#onToggleShuffle" styleClass="btn-spotify-flat"/>
+                                        <Button fx:id="btnPrev" text="|◁" onAction="#onPrev" styleClass="btn-spotify-flat"/>
+                                        <Button fx:id="btnPlaylistPlayPause" text="▶" onAction="#onPlaylistPlayPause" styleClass="btn-spotify-circle"/>
+                                        <Button fx:id="btnNext" text="▷|" onAction="#onNext" styleClass="btn-spotify-flat"/>
+                                        <ToggleButton fx:id="btnPlaylistLoop" text="↺" onAction="#onTogglePlaylistLoop" styleClass="btn-spotify-flat"/>
+                                    </HBox>
+                                    <!-- Barra de progreso del playlist -->
+                                    <HBox spacing="6" alignment="CENTER" styleClass="progress-container">
+                                        <Label fx:id="lblPlCurrentTime" text="0:00" styleClass="lbl-time"/>
+                                        <Slider fx:id="plProgressSlider" HBox.hgrow="ALWAYS" styleClass="spotify-slider"/>
+                                        <Label fx:id="lblPlTotalTime" text="0:00" styleClass="lbl-time"/>
+                                    </HBox>
+                                </VBox>
+
+                            </VBox>
+                        </content>
+                    </Tab>
+
+                </TabPane>
+
+                <!-- Reproductor de preescucha: siempre visible, fuera del TabPane -->
                 <VBox spacing="8" alignment="CENTER" styleClass="playback-panel, preview-panel">
                     <Label text="PREESCUCHA" styleClass="lbl-panel-title"/>
                     <Label fx:id="lblPreviewTrack" text="Sin preescucha activa" styleClass="lbl-preview-track"/>
                     <HBox spacing="20" alignment="CENTER">
+                        <ToggleButton fx:id="btnPreviewLoop" text="🔁" onAction="#onTogglePreviewLoop" styleClass="btn-spotify-flat, btn-loop"/>
                         <Button text="■" onAction="#onPreviewStop" styleClass="btn-spotify-flat, btn-stop"/>
                         <Button fx:id="btnPreviewPlayPause" text="▶" onAction="#onTogglePreviewPlayPause" styleClass="btn-spotify-circle"/>
                     </HBox>

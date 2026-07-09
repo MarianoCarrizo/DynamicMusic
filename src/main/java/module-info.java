@@ -28,4 +28,7 @@ module com.marianocarrizo.dynamicMusic {
 
     // Reflective access para Gson sobre el POJO de configuración de sesión
     opens com.marianocarrizo.dynamicMusic.config to com.google.gson;
+
+    // Reflective access para Gson sobre las POJOs del modelo (Playlist, etc.)
+    opens com.marianocarrizo.dynamicMusic.model to com.google.gson;
 }

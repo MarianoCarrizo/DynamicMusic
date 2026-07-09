@@ -6,6 +6,7 @@ import com.marianocarrizo.dynamicMusic.config.SessionConfig;
 import com.marianocarrizo.dynamicMusic.config.SessionConfigManager;
 import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
+import javafx.scene.Cursor;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
@@ -108,7 +109,62 @@ public class MusicServiceStarter extends Application {
 
         scene.setOnKeyReleased(e -> heldKeys.remove(e.getCode()));
 
+        addResizeSupport(stage, root);
+
         stage.show();
+    }
+
+    private void addResizeSupport(Stage stage, Parent root) {
+        final int B = 7; // ancho del borde de resize en píxeles
+        final double[] drag = new double[6]; // [mouseX, mouseY, stageX, stageY, stageW, stageH]
+        final boolean[] active = {false};
+        final int[] dir = {0}; // bitmask: 1=N 2=S 4=W 8=E
+
+        root.setOnMouseMoved(e -> {
+            if (active[0]) return;
+            double x = e.getSceneX(), y = e.getSceneY();
+            double w = stage.getWidth(), h = stage.getHeight();
+            boolean n = y < B, s = y > h - B, west = x < B, east = x > w - B;
+            int d = (n ? 1 : 0) | (s ? 2 : 0) | (west ? 4 : 0) | (east ? 8 : 0);
+            dir[0] = d;
+            root.setCursor(switch (d) {
+                case 1  -> Cursor.N_RESIZE;
+                case 2  -> Cursor.S_RESIZE;
+                case 4  -> Cursor.W_RESIZE;
+                case 8  -> Cursor.E_RESIZE;
+                case 5  -> Cursor.NW_RESIZE;
+                case 9  -> Cursor.NE_RESIZE;
+                case 6  -> Cursor.SW_RESIZE;
+                case 10 -> Cursor.SE_RESIZE;
+                default -> Cursor.DEFAULT;
+            });
+        });
+
+        root.setOnMousePressed(e -> {
+            if (dir[0] == 0) return;
+            active[0] = true;
+            drag[0] = e.getScreenX(); drag[1] = e.getScreenY();
+            drag[2] = stage.getX();   drag[3] = stage.getY();
+            drag[4] = stage.getWidth(); drag[5] = stage.getHeight();
+        });
+
+        root.setOnMouseDragged(e -> {
+            if (!active[0]) return;
+            double dx = e.getScreenX() - drag[0];
+            double dy = e.getScreenY() - drag[1];
+            double minW = stage.getMinWidth() > 0 ? stage.getMinWidth() : 400;
+            double minH = stage.getMinHeight() > 0 ? stage.getMinHeight() : 300;
+            int d = dir[0];
+            if ((d & 8) != 0) stage.setWidth(Math.max(minW, drag[4] + dx));
+            if ((d & 4) != 0) { double nw = Math.max(minW, drag[4] - dx); stage.setX(drag[2] + drag[4] - nw); stage.setWidth(nw); }
+            if ((d & 2) != 0) stage.setHeight(Math.max(minH, drag[5] + dy));
+            if ((d & 1) != 0) { double nh = Math.max(minH, drag[5] - dy); stage.setY(drag[3] + drag[5] - nh); stage.setHeight(nh); }
+        });
+
+        root.setOnMouseReleased(e -> {
+            active[0] = false;
+            root.setCursor(Cursor.DEFAULT);
+        });
     }
 
     public static void main(String[] args) {

@@ -65,6 +65,10 @@ public final class ConversorUtils {
     }
 
     public static double calculateGainForRMS(File audioFile) throws IOException, UnsupportedAudioFileException {
+        // MP3 is not decodable by javax.sound.sampled — return a safe default gain
+        if (audioFile.getName().toLowerCase().endsWith(".mp3")) {
+            return 0.8;
+        }
         AudioInputStream ais = AudioSystem.getAudioInputStream(audioFile);
         byte[] buffer = new byte[1024];
         int bytesRead;

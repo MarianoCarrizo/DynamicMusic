@@ -32,11 +32,11 @@
     -fx-border-width: 0 1 0 0;
 }
 
-/* Lista de archivos */
-.list-view {
+/* Lista de archivos y árbol de carpetas */
+.list-view, .tree-view {
     -fx-background-color: #2a2a32;
     -fx-border-color: #3a3a43;
-    -fx-background-radius: 0px !important; /* Cuadrado */
+    -fx-background-radius: 0px !important;
 }
 .list-cell {
     -fx-text-fill: #d0d0d0;
@@ -45,6 +45,27 @@
 }
 .list-cell:filled:hover {
     -fx-background-color: #383842;
+}
+.tree-cell {
+    -fx-text-fill: #d0d0d0;
+    -fx-background-color: transparent;
+    -fx-padding: 5px 8px;
+}
+.tree-cell:filled:hover {
+    -fx-background-color: #383842;
+}
+.tree-cell:filled:selected {
+    -fx-background-color: #3a3a48;
+    -fx-text-fill: #ffffff;
+}
+.tree-cell:filled:selected:focused {
+    -fx-background-color: #4a4a5a;
+}
+/* Track actualmente sonando en la playlist */
+.list-cell-now-playing {
+    -fx-background-color: #1a3a2a !important;
+    -fx-text-fill: #1db954 !important;
+    -fx-font-weight: bold;
 }
 
 /* Componentes de Entrada */
@@ -332,4 +353,60 @@
     -fx-text-fill: #b0b0b5 !important;
     -fx-border-color: #3a3a45 !important;
     -fx-cursor: default;
+}
+
+/* =========================================================================
+   TABPANE MODO MOODS / PLAYLISTS
+   ========================================================================= */
+.tab-pane {
+    -fx-background-color: transparent;
+    -fx-tab-min-height: 30px;
+}
+.tab-pane .tab-header-area {
+    -fx-background-color: #16161a;
+    -fx-padding: 0 0 0 0;
+}
+.tab-pane .tab-header-area .tab-header-background {
+    -fx-background-color: #16161a;
+}
+.tab-pane .tab-header-area .headers-region {
+    -fx-background-color: #16161a;
+}
+.tab-pane > .tab-content-area {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+.tab {
+    -fx-background-color: #1e1e24;
+    -fx-background-radius: 0;
+    -fx-border-color: transparent;
+    -fx-padding: 6px 18px;
+    -fx-cursor: hand;
+}
+.tab .tab-label {
+    -fx-text-fill: #707075;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+}
+.tab:hover .tab-label {
+    -fx-text-fill: #b0b0b8;
+}
+.tab:selected {
+    -fx-background-color: #2a2a32;
+}
+.tab:selected .tab-label {
+    -fx-text-fill: #ffffff;
+}
+.tab-pane .tab-header-area .tab-header-background {
+    -fx-border-color: #2d2d35;
+    -fx-border-width: 0 0 1 0;
+}
+
+/* Lista de tracks de playlist: highlighted item */
+.list-cell:filled:selected {
+    -fx-background-color: #3a3a48;
+    -fx-text-fill: #ffffff;
+}
+.list-cell:filled:selected:focused {
+    -fx-background-color: #4a4a5a;
 }
