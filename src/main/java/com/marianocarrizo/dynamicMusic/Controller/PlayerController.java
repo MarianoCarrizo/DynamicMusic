@@ -1075,11 +1075,29 @@ public class PlayerController {
         if (lastImgDir != null) {
             sessionConfig.setLastImageFolderPath(lastImgDir);
         }
+        // Reflejar valores de segmento en sessionConfig local para que saves posteriores los round-tripeen
+        Long segStart = cfg.getVideoSegmentStartMs();
+        Long segEnd   = cfg.getVideoSegmentEndMs();
+        sessionConfig.setVideoSegmentStartMs(segStart);
+        sessionConfig.setVideoSegmentEndMs(segEnd);
+
         final String bgPathFinal = bgPath;
         Platform.runLater(() -> {
             if (ambianceStage != null && bgPathFinal != null) {
-                ambianceStage.setBackground(bgPathFinal);
-                updateBackgroundLabel(bgPathFinal);
+                boolean isVideo = "Video".equals(backgroundMediaType(bgPathFinal));
+                if (isVideo && segStart != null && segEnd != null) {
+                    // Establecer el segmento ANTES de setBackground para que setVideo() lo reciba en READY
+                    ambianceStage.setVideoSegment(Duration.millis(segStart), Duration.millis(segEnd));
+                } else if (!isVideo) {
+                    // Guardia: segmento obsoleto de una sesión anterior donde cambió el tipo de fondo
+                    sessionConfig.setVideoSegmentStartMs(null);
+                    sessionConfig.setVideoSegmentEndMs(null);
+                    if (ambianceStage != null) {
+                        ambianceStage.clearVideoSegment();
+                    }
+                }
+                ambianceStage.setBackground(bgPathFinal);   // dispara setVideo → aplica campos en READY
+                updateBackgroundLabel(bgPathFinal);          // alterna visibilidad de segmentControls
             } else {
                 updateBackgroundLabel(null);
             }
