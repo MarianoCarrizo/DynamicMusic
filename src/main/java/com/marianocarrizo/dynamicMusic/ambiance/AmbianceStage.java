@@ -4,6 +4,7 @@ import com.marianocarrizo.dynamicMusic.Enums.TrackType;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;
+import javafx.scene.control.ProgressIndicator;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.TransferMode;
@@ -56,7 +57,9 @@ public class AmbianceStage {
     private Scene     scene;
     private ImageView imageView;
     private MediaView mediaView;
-    private Canvas    particleCanvas;
+    private Canvas             particleCanvas;
+    // Indicador de carga de video; siempre sobre particleCanvas (índice 3 en el StackPane)
+    private ProgressIndicator  loadingIndicator;
 
     private MediaPlayer    currentPlayer;
     private ParticleSystem currentEffect;
@@ -120,6 +123,17 @@ public class AmbianceStage {
         particleCanvas.widthProperty().bind(scene.widthProperty());
         particleCanvas.heightProperty().bind(scene.heightProperty());
         root.getChildren().add(particleCanvas);
+
+        // Overlay de carga de video: índice 3 (sobre particleCanvas), siempre mouse-transparent
+        // Estilo inline obligatorio: el scene de ambiance no tiene stylesheet asociado
+        loadingIndicator = new ProgressIndicator();
+        loadingIndicator.setMouseTransparent(true);
+        loadingIndicator.setStyle(
+                "-fx-progress-color: #7ecfff;" +
+                "-fx-background-color: transparent;"
+        );
+        loadingIndicator.setVisible(false);
+        root.getChildren().add(loadingIndicator);
 
         root.setBackground(javafx.scene.layout.Background.EMPTY);
         scene.setFill(Color.BLACK);
@@ -422,6 +436,7 @@ public class AmbianceStage {
 
     private void clearMedia() {
         disposePlayer();
+        loadingIndicator.setVisible(false);
         imageView.setImage(null);
         imageView.setVisible(false);
         mediaView.setVisible(false);
@@ -429,6 +444,7 @@ public class AmbianceStage {
 
     private void setImage(File f) {
         disposePlayer();
+        loadingIndicator.setVisible(false);
         mediaView.setVisible(false);
         Image img = new Image(f.toURI().toString(), true);
         imageView.setImage(img);
@@ -446,10 +462,19 @@ public class AmbianceStage {
         mediaView.setMediaPlayer(currentPlayer);
         mediaView.setVisible(true);
         currentPlayer.setOnError(this::onMediaError);
+        // Captura de identidad: ocultar el indicador solo si este player sigue siendo el actual
+        MediaPlayer player = currentPlayer;
+        player.setOnReady(() -> {
+            if (currentPlayer == player) {
+                loadingIndicator.setVisible(false);
+            }
+        });
+        loadingIndicator.setVisible(true);
         currentPlayer.play();
     }
 
     private void onMediaError() {
+        loadingIndicator.setVisible(false);
         clearMedia();
         ensureParticlesRunning();
     }
