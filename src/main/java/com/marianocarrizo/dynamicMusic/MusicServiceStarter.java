@@ -65,6 +65,7 @@ public class MusicServiceStarter extends Application {
                 yOffset = event.getSceneY();
             });
             header.setOnMouseDragged(event -> {
+                if (stage.isMaximized()) return; // drag no hace nada mientras está maximizado
                 stage.setX(event.getScreenX() - xOffset);
                 stage.setY(event.getScreenY() - yOffset);
             });
@@ -111,6 +112,8 @@ public class MusicServiceStarter extends Application {
 
         addResizeSupport(stage, root);
 
+        stage.setMinWidth(820);
+        stage.setMinHeight(560);
         stage.show();
     }
 
@@ -122,6 +125,7 @@ public class MusicServiceStarter extends Application {
 
         root.setOnMouseMoved(e -> {
             if (active[0]) return;
+            if (stage.isMaximized()) { root.setCursor(Cursor.DEFAULT); return; }
             double x = e.getSceneX(), y = e.getSceneY();
             double w = stage.getWidth(), h = stage.getHeight();
             boolean n = y < B, s = y > h - B, west = x < B, east = x > w - B;
@@ -141,6 +145,7 @@ public class MusicServiceStarter extends Application {
         });
 
         root.setOnMousePressed(e -> {
+            if (stage.isMaximized()) return;
             if (dir[0] == 0) return;
             active[0] = true;
             drag[0] = e.getScreenX(); drag[1] = e.getScreenY();
