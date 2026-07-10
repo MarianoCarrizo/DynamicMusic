@@ -48,6 +48,9 @@ public class SessionConfig {
     // Nombre de la playlist activa al cerrar la sesión; null si ninguna
     private String activePlaylistName;
 
+    // Sensibilidad por mood: TrackType.name() -> Double; null en sesiones antiguas (defecto 2.0)
+    private Map<String, Double> moodSensitivities;
+
     public SessionConfig() {
         this.assignments = new LinkedHashMap<>();
     }
@@ -183,4 +186,27 @@ public class SessionConfig {
 
     public String getActivePlaylistName() { return activePlaylistName; }
     public void setActivePlaylistName(String name) { this.activePlaylistName = name; }
+
+    // --- Mood sensitivities ---
+
+    /**
+     * Returns the sensitivity value for the given mood.
+     * Returns the default value 2.0 when the map is absent (first run or old session)
+     * or the mood key is not yet stored.
+     */
+    public double getMoodSensitivity(TrackType t) {
+        if (t == null || moodSensitivities == null) return 2.0;
+        Double stored = moodSensitivities.get(t.name());
+        return (stored != null) ? stored : 2.0;
+    }
+
+    /**
+     * Persists the sensitivity value for the given mood.
+     * Lazy-initialises the map on first write.
+     */
+    public void setMoodSensitivity(TrackType t, double value) {
+        if (t == null) return;
+        if (moodSensitivities == null) moodSensitivities = new LinkedHashMap<>();
+        moodSensitivities.put(t.name(), value);
+    }
 }
