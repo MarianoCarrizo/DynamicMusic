@@ -54,6 +54,9 @@ public class SessionConfig {
     // Modo de ajuste del fondo: "FILL" | "FIT" | "STRETCH" | "CENTER"; null en sesiones antiguas
     private String backgroundFitMode;
 
+    // Volumen maestro [0.0-1.0]; boxed Double para que Gson deserialice null (no 0.0) en sesiones antiguas
+    private Double masterVolume;
+
     public SessionConfig() {
         this.assignments = new LinkedHashMap<>();
     }
@@ -225,5 +228,19 @@ public class SessionConfig {
 
     public void setBackgroundFitMode(String mode) {
         this.backgroundFitMode = mode;
+    }
+
+    // --- Master volume ---
+
+    /**
+     * Returns the persisted master volume.
+     * Defaults to 1.0 when the field is absent in old session files (Gson leaves it null).
+     */
+    public double getMasterVolume() {
+        return (masterVolume != null) ? masterVolume : 1.0;
+    }
+
+    public void setMasterVolume(double v) {
+        this.masterVolume = v;
     }
 }
