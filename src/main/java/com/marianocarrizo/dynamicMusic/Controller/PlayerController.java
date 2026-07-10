@@ -36,6 +36,10 @@ public class PlayerController {
     @FXML private Label lblBackgroundType;
     @FXML private VBox assignmentsList;
 
+    // Slider y label del volumen maestro global
+    @FXML private Slider sldMasterVolume;
+    @FXML private Label  lblMasterVolume;
+
     // Sliders de sensibilidad por mood
     @FXML private Slider sldSensPaused;
     @FXML private Slider sldSensNormal;
@@ -264,6 +268,7 @@ public class PlayerController {
         for (TrackType t : TrackType.values()) moodSensitivity.put(t, 2.0);
 
         wireSensitivitySliders();
+        wireMasterVolumeSlider();
         refreshAssignments();
 
         // T-12: PlaylistManager + wiring de callbacks
@@ -636,6 +641,45 @@ public class PlayerController {
             case "mp4", "avi"                 -> "Video";
             default                           -> "";
         };
+    }
+
+    // --- Slider de volumen maestro ---
+
+    /** Persiste el valor actual del slider en la sesión. Solo se llama desde gestos del usuario. */
+    private void persistMasterVolume() {
+        double v = sldMasterVolume.getValue();
+        sessionConfig.setMasterVolume(v);
+        manager.save(sessionConfig);
+    }
+
+    /**
+     * Conecta el slider de volumen maestro con el servicio de audio y la persistencia.
+     * El listener de valor aplica el volumen en vivo pero nunca persiste;
+     * la persistencia ocurre solo en los tres handlers de gesto del usuario.
+     */
+    private void wireMasterVolumeSlider() {
+        if (sldMasterVolume == null) return;
+        double initial = sessionConfig.getMasterVolume();
+        sldMasterVolume.setValue(initial);
+        if (lblMasterVolume != null)
+            lblMasterVolume.setText(Math.round(initial * 100) + "%");
+
+        // LIVE: aplica el volumen en tiempo real; nunca persiste aqui
+        sldMasterVolume.valueProperty().addListener((obs, oldV, newV) -> {
+            double v = newV.doubleValue();
+            musicService.setMasterVolume(v);
+            if (lblMasterVolume != null)
+                lblMasterVolume.setText(Math.round(v * 100) + "%");
+        });
+
+        // Triple-trigger de persistencia (solo gestos del usuario)
+        sldMasterVolume.setOnMouseReleased(e -> persistMasterVolume());
+        sldMasterVolume.valueChangingProperty().addListener((o, was, is) -> {
+            if (was && !is) persistMasterVolume();
+        });
+        sldMasterVolume.focusedProperty().addListener((o, had, has) -> {
+            if (had && !has) persistMasterVolume();
+        });
     }
 
     // --- Sliders de sensibilidad ---
@@ -1040,6 +1084,15 @@ public class PlayerController {
             updateSensitivitySlider(TrackType.NORMAL,     sldSensNormal,     lblSensNormal);
             updateSensitivitySlider(TrackType.RAGED,      sldSensRaged,      lblSensRaged);
             updateSensitivitySlider(TrackType.ADVANTAGE,  sldSensAdvantage,  lblSensAdvantage);
+
+            // Restaurar volumen maestro desde sesión
+            double mv = cfg.getMasterVolume();
+            sessionConfig.setMasterVolume(mv);
+            musicService.setMasterVolume(mv);
+            if (sldMasterVolume != null) sldMasterVolume.setValue(mv); // listener fires -> idempotent
+            if (lblMasterVolume != null)
+                lblMasterVolume.setText(Math.round(mv * 100) + "%");
+
             refreshAssignments();
         });
     }

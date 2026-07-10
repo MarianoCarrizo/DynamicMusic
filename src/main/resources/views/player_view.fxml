@@ -103,6 +103,17 @@
                     <Insets top="10" right="10" bottom="10" left="10"/>
                 </padding>
 
+                <!-- Master volume row: always visible, above the mode tab pane -->
+                <Label text="VOLUME" styleClass="lbl-session-title"/>
+                <HBox styleClass="sensitivity-row" spacing="8" alignment="CENTER_LEFT">
+                    <Label text="MASTER" minWidth="90"/>
+                    <Slider fx:id="sldMasterVolume" min="0.0" max="1.0" value="1.0"
+                            HBox.hgrow="ALWAYS" blockIncrement="0.05"
+                            styleClass="spotify-slider"/>
+                    <Label fx:id="lblMasterVolume" minWidth="40" text="100%"
+                           styleClass="lbl-time"/>
+                </HBox>
+
                 <!-- T-10: TabPane que agrupa los modos Moods y Playlists -->
                 <TabPane fx:id="modeTabPane" VBox.vgrow="ALWAYS" tabClosingPolicy="UNAVAILABLE">
 
