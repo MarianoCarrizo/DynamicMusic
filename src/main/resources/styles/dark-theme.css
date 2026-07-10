@@ -183,7 +183,32 @@
     -fx-border-color: #24242b;
     -fx-border-radius: 0px !important;
     -fx-border-width: 1px;
-    -fx-max-width: 500px;
+}
+
+/* SplitPane principal: sin padding/borde propio para evitar destello de gutter */
+.main-split {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+    -fx-border-color: transparent;
+}
+
+.main-split > .split-pane-divider {
+    -fx-pref-width: 1px;
+    -fx-background-color: #2d2d35;
+}
+
+/* Panel de detalles: columna central del SplitPane */
+.details-panel {
+    -fx-background-color: #1e1e24;
+    -fx-border-color: #2d2d35;
+    -fx-border-width: 0 1px 0 1px;
+    -fx-padding: 10px;
+}
+
+/* Fila de slider de sensibilidad */
+.sensitivity-row {
+    -fx-alignment: CENTER_LEFT;
+    -fx-spacing: 8px;
 }
 
 /* Reset total para botones planos (Loop y Stop) */
