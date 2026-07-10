@@ -365,10 +365,8 @@ public class AmbianceStage {
         if (type == null) return;
         currentMood = type;
         setColor(MOOD_COLORS.getOrDefault(type, Color.BLACK));
-        if (backgroundAllowsParticles) {
-            stopParticleEffect();
-            startParticleEffect(moodEffects.getOrDefault(type, EffectType.AURORA));
-        }
+        stopParticleEffect();
+        startParticleEffect(moodEffects.getOrDefault(type, EffectType.AURORA));
     }
 
     // --- Per-mood effect override ---
@@ -376,7 +374,7 @@ public class AmbianceStage {
     public void setMoodEffect(TrackType mood, EffectType effect) {
         if (mood == null || effect == null) return;
         EffectType previous = moodEffects.put(mood, effect);
-        if (mood == currentMood && backgroundAllowsParticles && effect != previous) {
+        if (mood == currentMood && effect != previous) {
             stopParticleEffect();
             startParticleEffect(effect);
         }
