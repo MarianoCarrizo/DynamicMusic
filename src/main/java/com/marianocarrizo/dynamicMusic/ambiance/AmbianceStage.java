@@ -13,6 +13,7 @@ import javafx.scene.media.Media;
 import javafx.scene.media.MediaPlayer;
 import javafx.scene.media.MediaView;
 import javafx.scene.paint.Color;
+import javafx.scene.shape.Rectangle;
 import javafx.stage.Screen;
 import javafx.stage.Stage;
 import javafx.stage.StageStyle;
@@ -79,6 +80,9 @@ public class AmbianceStage {
 
     // Ruta del fondo actual para re-aplicar tras rebuildStage()
     private String currentBackgroundPath = null;
+
+    // Modo de ajuste del fondo; FILL por defecto (cubre sin barras, preserva aspecto)
+    private BackgroundFitMode currentFitMode = BackgroundFitMode.FILL;
 
     // Callback invocado cuando el usuario arrastra y suelta un archivo de imagen
     private Consumer<String> onBackgroundDropped = null;
@@ -170,6 +174,16 @@ public class AmbianceStage {
             event.setDropCompleted(success);
             event.consume();
         });
+
+        // Clip incondicional sobre el root: evita que CENTER desborde fuera del área de la escena
+        Rectangle clip = new Rectangle();
+        clip.widthProperty().bind(scene.widthProperty());
+        clip.heightProperty().bind(scene.heightProperty());
+        root.setClip(clip);
+
+        // Listener de redimensionado: recomputa el viewport FILL si está activo
+        scene.widthProperty().addListener((obs, o, n) -> recomputeFillViewportIfActive());
+        scene.heightProperty().addListener((obs, o, n) -> recomputeFillViewportIfActive());
     }
 
     // --- Apertura del stage ---
@@ -414,6 +428,149 @@ public class AmbianceStage {
         return amplitude;
     }
 
+    // --- Fit mode (public API) ---
+
+    /**
+     * Aplica el modo de ajuste del fondo al view visible actualmente.
+     * Null-safe: si mode es null, no hace nada.
+     */
+    public void setBackgroundFitMode(BackgroundFitMode mode) {
+        if (mode == null) return;
+        this.currentFitMode = mode;
+        applyFitModeToCurrentView();
+    }
+
+    // --- Fit mode (internos) ---
+
+    /**
+     * Despacha la aplicación del modo de ajuste al view que esté visible y listo.
+     */
+    private void applyFitModeToCurrentView() {
+        if (imageView.isVisible() && imageView.getImage() != null) {
+            applyFitToImageView();
+        } else if (mediaView.isVisible() && currentPlayer != null) {
+            applyFitToMediaView();
+        }
+    }
+
+    /**
+     * Aplica {@code currentFitMode} al ImageView.
+     * Siempre desvincula fitWidth/fitHeight antes de reasignar (regla unbind-first).
+     */
+    private void applyFitToImageView() {
+        imageView.fitWidthProperty().unbind();
+        imageView.fitHeightProperty().unbind();
+
+        switch (currentFitMode) {
+            case STRETCH -> {
+                imageView.setPreserveRatio(false);
+                imageView.fitWidthProperty().bind(scene.widthProperty());
+                imageView.fitHeightProperty().bind(scene.heightProperty());
+                imageView.setViewport(null);
+            }
+            case FIT -> {
+                imageView.setPreserveRatio(true);
+                imageView.fitWidthProperty().bind(scene.widthProperty());
+                imageView.fitHeightProperty().bind(scene.heightProperty());
+                imageView.setViewport(null);
+            }
+            case FILL -> {
+                imageView.setPreserveRatio(false);
+                imageView.fitWidthProperty().bind(scene.widthProperty());
+                imageView.fitHeightProperty().bind(scene.heightProperty());
+                Image img = imageView.getImage();
+                if (img != null && img.getWidth() > 0 && img.getHeight() > 0) {
+                    imageView.setViewport(computeFillViewport(
+                            img.getWidth(), img.getHeight(),
+                            scene.getWidth(), scene.getHeight()));
+                }
+                // Si la imagen aún no tiene dimensiones (carga async), el listener
+                // de widthProperty en setImage() aplicará el viewport cuando esté listo.
+            }
+            case CENTER -> {
+                imageView.setPreserveRatio(false);
+                imageView.setFitWidth(0);
+                imageView.setFitHeight(0);
+                imageView.setViewport(null);
+            }
+        }
+    }
+
+    /**
+     * Aplica {@code currentFitMode} al MediaView.
+     * Siempre desvincula fitWidth/fitHeight antes de reasignar (regla unbind-first).
+     */
+    private void applyFitToMediaView() {
+        if (currentPlayer == null) return;
+        mediaView.fitWidthProperty().unbind();
+        mediaView.fitHeightProperty().unbind();
+
+        switch (currentFitMode) {
+            case STRETCH -> {
+                mediaView.setPreserveRatio(false);
+                mediaView.fitWidthProperty().bind(scene.widthProperty());
+                mediaView.fitHeightProperty().bind(scene.heightProperty());
+                mediaView.setViewport(null);
+            }
+            case FIT -> {
+                mediaView.setPreserveRatio(true);
+                mediaView.fitWidthProperty().bind(scene.widthProperty());
+                mediaView.fitHeightProperty().bind(scene.heightProperty());
+                mediaView.setViewport(null);
+            }
+            case FILL -> {
+                mediaView.setPreserveRatio(false);
+                mediaView.fitWidthProperty().bind(scene.widthProperty());
+                mediaView.fitHeightProperty().bind(scene.heightProperty());
+                double natW = currentPlayer.getMedia().getWidth();
+                double natH = currentPlayer.getMedia().getHeight();
+                if (natW > 0 && natH > 0) {
+                    mediaView.setViewport(computeFillViewport(
+                            natW, natH, scene.getWidth(), scene.getHeight()));
+                }
+                // Si las dimensiones aún no están disponibles (estado pre-READY),
+                // el setOnReady extendido en setVideo() las aplicará al alcanzar READY.
+            }
+            case CENTER -> {
+                mediaView.setPreserveRatio(false);
+                mediaView.setFitWidth(0);
+                mediaView.setFitHeight(0);
+                mediaView.setViewport(null);
+            }
+        }
+    }
+
+    /**
+     * Calcula el viewport Rectangle2D para el modo FILL.
+     * Retorna null si alguna dimensión es <= 0 (señal de pendiente).
+     *
+     * <p>Fórmula: scale = max(sceneW/natW, sceneH/natH); viewW = sceneW/scale;
+     * viewH = sceneH/scale; x = (natW-viewW)/2; y = (natH-viewH)/2.
+     */
+    private Rectangle2D computeFillViewport(double natW, double natH,
+                                            double sceneW, double sceneH) {
+        if (natW <= 0 || natH <= 0 || sceneW <= 0 || sceneH <= 0) return null;
+        double scale = Math.max(sceneW / natW, sceneH / natH);
+        double viewW = sceneW / scale;
+        double viewH = sceneH / scale;
+        double x = (natW - viewW) / 2.0;
+        double y = (natH - viewH) / 2.0;
+        return new Rectangle2D(x, y, viewW, viewH);
+    }
+
+    /**
+     * Recomputa el viewport FILL en el view visible si el modo activo es FILL.
+     * No-op para los demás modos (STRETCH/FIT/CENTER no necesitan recálculo en resize).
+     */
+    private void recomputeFillViewportIfActive() {
+        if (currentFitMode != BackgroundFitMode.FILL) return;
+        if (imageView.isVisible() && imageView.getImage() != null) {
+            applyFitToImageView();
+        } else if (mediaView.isVisible() && currentPlayer != null) {
+            applyFitToMediaView();
+        }
+    }
+
     // --- Internal helpers ---
 
     private void ensureParticlesRunning() {
@@ -449,6 +606,22 @@ public class AmbianceStage {
         Image img = new Image(f.toURI().toString(), true);
         imageView.setImage(img);
         imageView.setVisible(true);
+        // Aplicar modo de ajuste de inmediato; para FILL con imagen async las dimensiones
+        // pueden ser 0 todavía — el listener de width las aplica cuando estén disponibles.
+        applyFitToImageView();
+        if (currentFitMode == BackgroundFitMode.FILL) {
+            // Listener de un solo disparo: aplica el viewport FILL cuando la imagen termine de cargar
+            javafx.beans.value.ChangeListener<Number>[] listenerRef = new javafx.beans.value.ChangeListener[1];
+            listenerRef[0] = (obs, oldW, newW) -> {
+                if (newW.doubleValue() > 0 && imageView.getImage() == img) {
+                    imageView.setViewport(computeFillViewport(
+                            img.getWidth(), img.getHeight(),
+                            scene.getWidth(), scene.getHeight()));
+                    img.widthProperty().removeListener(listenerRef[0]);
+                }
+            };
+            img.widthProperty().addListener(listenerRef[0]);
+        }
     }
 
     private void setVideo(File f) {
@@ -467,10 +640,13 @@ public class AmbianceStage {
         player.setOnReady(() -> {
             if (currentPlayer == player) {
                 loadingIndicator.setVisible(false);
+                applyFitToMediaView(); // las dimensiones del media ya son válidas en READY
             }
         });
         loadingIndicator.setVisible(true);
         currentPlayer.play();
+        // Aplicar modos no-FILL de inmediato (no necesitan dimensiones); FILL se aplica en onReady
+        applyFitToMediaView();
     }
 
     private void onMediaError() {
