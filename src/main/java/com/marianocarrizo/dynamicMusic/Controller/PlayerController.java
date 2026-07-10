@@ -2,6 +2,7 @@ package com.marianocarrizo.dynamicMusic.Controller;
 
 import com.marianocarrizo.dynamicMusic.Enums.TrackType;
 import com.marianocarrizo.dynamicMusic.ambiance.AmbianceStage;
+import com.marianocarrizo.dynamicMusic.ambiance.BackgroundFitMode;
 import com.marianocarrizo.dynamicMusic.ambiance.EffectType;
 import com.marianocarrizo.dynamicMusic.config.SessionConfig;
 import com.marianocarrizo.dynamicMusic.config.SessionConfigManager;
@@ -100,6 +101,7 @@ public class PlayerController {
     @FXML private ComboBox<TrackType> cmbTrackType;
     @FXML private ComboBox<EffectType> cmbEffect;
     @FXML private ComboBox<String> cmbScreen;
+    @FXML private ComboBox<BackgroundFitMode> cmbFitMode;
     @FXML private Label lblBackgroundFile;
 
     private File rootFolder;
@@ -215,6 +217,25 @@ public class PlayerController {
         if (cmbEffect != null) {
             cmbEffect.getItems().setAll(EffectType.values());
             cmbEffect.setValue(EffectType.AURORA);
+        }
+
+        if (cmbFitMode != null) {
+            cmbFitMode.setConverter(new javafx.util.StringConverter<>() {
+                @Override public String toString(BackgroundFitMode mode) {
+                    if (mode == null) return "";
+                    return switch (mode) {
+                        case FILL    -> "Fill";
+                        case FIT     -> "Fit";
+                        case STRETCH -> "Stretch";
+                        case CENTER  -> "Center";
+                    };
+                }
+                @Override public BackgroundFitMode fromString(String s) {
+                    return BackgroundFitMode.fromString(s != null ? s.toUpperCase() : null);
+                }
+            });
+            cmbFitMode.getItems().setAll(BackgroundFitMode.values());
+            cmbFitMode.setValue(BackgroundFitMode.FILL);
         }
 
         // Combo de selección de pantalla
@@ -518,6 +539,16 @@ public class PlayerController {
         sessionConfig.setMoodEffect(currentActiveType, effect);
         manager.save(sessionConfig);
         if (ambianceStage != null) ambianceStage.setMoodEffect(currentActiveType, effect);
+    }
+
+    @FXML
+    private void onSelectFitMode() {
+        if (refreshingUI || cmbFitMode == null) return;
+        BackgroundFitMode mode = cmbFitMode.getValue();
+        if (mode == null) return;
+        sessionConfig.setBackgroundFitMode(mode.name());
+        manager.save(sessionConfig);
+        if (ambianceStage != null) ambianceStage.setBackgroundFitMode(mode);
     }
 
     // --- Selección de pantalla de ambiance ---
@@ -954,6 +985,19 @@ public class PlayerController {
             if (ambianceStage != null) {
                 ambianceStage.applyScreen(screenIdx);
             }
+        });
+
+        // Restaurar modo de ajuste del fondo
+        BackgroundFitMode fit = BackgroundFitMode.fromString(cfg.getBackgroundFitMode());
+        sessionConfig.setBackgroundFitMode(fit.name());
+        Platform.runLater(() -> {
+            refreshingUI = true;
+            try {
+                if (cmbFitMode != null) cmbFitMode.setValue(fit);
+            } finally {
+                refreshingUI = false;
+            }
+            if (ambianceStage != null) ambianceStage.setBackgroundFitMode(fit);
         });
 
         String lastPath = cfg.getLastFolderPath();

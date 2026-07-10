@@ -52,6 +52,10 @@
                 <Label fx:id="lblBackgroundFile" text="No background set" styleClass="lbl-preview-track" maxWidth="Infinity"/>
                 <Label fx:id="lblBackgroundType" text="" styleClass="lbl-session-title" maxWidth="Infinity"/>
                 <Button text="🖼 Set Background" onAction="#onSetBackground" maxWidth="Infinity" styleClass="btn-secondary"/>
+                <HBox spacing="6" alignment="CENTER_LEFT">
+                    <Label text="Fit:" styleClass="lbl-session-title" minWidth="45"/>
+                    <ComboBox fx:id="cmbFitMode" HBox.hgrow="ALWAYS" maxWidth="Infinity" onAction="#onSelectFitMode"/>
+                </HBox>
 
                 <!-- Effect block -->
                 <Label text="Effect:" styleClass="lbl-session-title"/>
