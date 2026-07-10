@@ -194,6 +194,7 @@
 
 .main-split > .split-pane-divider {
     -fx-pref-width: 1px;
+    -fx-padding: 0 2px 0 2px;
     -fx-background-color: #2d2d35;
 }
 
