@@ -51,6 +51,9 @@ public class SessionConfig {
     // Sensibilidad por mood: TrackType.name() -> Double; null en sesiones antiguas (defecto 2.0)
     private Map<String, Double> moodSensitivities;
 
+    // Modo de ajuste del fondo: "FILL" | "FIT" | "STRETCH" | "CENTER"; null en sesiones antiguas
+    private String backgroundFitMode;
+
     public SessionConfig() {
         this.assignments = new LinkedHashMap<>();
     }
@@ -208,5 +211,19 @@ public class SessionConfig {
         if (t == null) return;
         if (moodSensitivities == null) moodSensitivities = new LinkedHashMap<>();
         moodSensitivities.put(t.name(), value);
+    }
+
+    // --- Background fit mode ---
+
+    /**
+     * Retorna el modo de ajuste del fondo guardado en sesión.
+     * Si es null (sesión antigua), retorna "FILL" como valor por defecto.
+     */
+    public String getBackgroundFitMode() {
+        return (backgroundFitMode != null) ? backgroundFitMode : "FILL";
+    }
+
+    public void setBackgroundFitMode(String mode) {
+        this.backgroundFitMode = mode;
     }
 }
