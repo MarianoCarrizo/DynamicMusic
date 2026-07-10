@@ -21,21 +21,19 @@
             <Label text="Dynamic Music" styleClass="window-title"/>
             <Region HBox.hgrow="ALWAYS" />
             <Button text="—" onAction="#onMinimizeWindow" styleClass="btn-window-control"/>
+            <Button fx:id="btnMaximize" text="▢" onAction="#onMaximizeRestoreWindow" styleClass="btn-window-control"/>
             <Button text="✕" onAction="#onCloseWindow" styleClass="btn-window-control, btn-window-close"/>
         </HBox>
 
-        <HBox spacing="20" VBox.vgrow="ALWAYS">
-            <padding>
-                <Insets top="15" right="20" bottom="20" left="20"/>
-            </padding>
+        <SplitPane fx:id="mainSplit" VBox.vgrow="ALWAYS" dividerPositions="0.22, 0.55" styleClass="main-split">
 
-            <!-- Panel izquierdo: lista de pistas -->
-            <VBox fx:id="leftPanel" spacing="10" prefWidth="280" minWidth="250">
-                <HBox spacing="6">
-                    <Button text="📂 Open Folder" onAction="#onOpenFolder" HBox.hgrow="ALWAYS" maxWidth="Infinity" styleClass="btn-secondary"/>
-                    <Button fx:id="btnExpandPanel" text="⛶" onAction="#onToggleExpandPanel" styleClass="btn-secondary" minWidth="32" maxWidth="32"/>
-                </HBox>
-                <TextField fx:id="txtSearch" promptText="Buscar pista por nombre..."/>
+            <!-- Column 1: Library -->
+            <VBox fx:id="leftPanel" spacing="10" minWidth="220">
+                <padding>
+                    <Insets top="10" right="8" bottom="10" left="10"/>
+                </padding>
+                <Button text="📂 Open Folder" onAction="#onOpenFolder" maxWidth="Infinity" styleClass="btn-secondary"/>
+                <TextField fx:id="txtSearch" promptText="Search track by name..."/>
                 <TreeView fx:id="treeFiles" VBox.vgrow="ALWAYS" showRoot="false"/>
                 <HBox spacing="8" alignment="CENTER_LEFT">
                     <ComboBox fx:id="cmbTrackType" HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
@@ -43,10 +41,35 @@
                 </HBox>
             </VBox>
 
-            <Separator fx:id="panelSeparator" orientation="VERTICAL"/>
+            <!-- Column 2: Details panel -->
+            <VBox fx:id="detailsPanel" spacing="12" styleClass="details-panel" minWidth="240">
+                <padding>
+                    <Insets top="10" right="10" bottom="10" left="10"/>
+                </padding>
 
-            <!-- Panel derecho: TabPane de modos + preescucha siempre visible -->
-            <VBox fx:id="rightPanel" spacing="14" HBox.hgrow="ALWAYS" alignment="CENTER">
+                <!-- Background block -->
+                <Label text="BACKGROUND" styleClass="lbl-session-title"/>
+                <Label fx:id="lblBackgroundFile" text="No background set" styleClass="lbl-preview-track" maxWidth="Infinity"/>
+                <Label fx:id="lblBackgroundType" text="" styleClass="lbl-session-title" maxWidth="Infinity"/>
+                <Button text="🖼 Set Background" onAction="#onSetBackground" maxWidth="Infinity" styleClass="btn-secondary"/>
+
+                <!-- Effect block -->
+                <Label text="Effect:" styleClass="lbl-session-title"/>
+                <ComboBox fx:id="cmbEffect" HBox.hgrow="ALWAYS" maxWidth="Infinity" onAction="#onSelectEffect"/>
+
+                <!-- Sensitivity block (rows added by Slice B) -->
+                <Label text="SENSITIVITY" styleClass="lbl-session-title"/>
+
+                <!-- Assignments block -->
+                <Label text="ASSIGNMENTS" styleClass="lbl-session-title"/>
+                <VBox fx:id="assignmentsList" spacing="4"/>
+            </VBox>
+
+            <!-- Column 3: Right panel (TabPane + preview) -->
+            <VBox fx:id="rightPanel" spacing="14" minWidth="300">
+                <padding>
+                    <Insets top="10" right="10" bottom="10" left="10"/>
+                </padding>
 
                 <!-- T-10: TabPane que agrupa los modos Moods y Playlists -->
                 <TabPane fx:id="modeTabPane" VBox.vgrow="ALWAYS" tabClosingPolicy="UNAVAILABLE">
@@ -61,7 +84,7 @@
 
                                 <!-- Título e info del mood activo -->
                                 <VBox spacing="4" alignment="CENTER" styleClass="track-info-container">
-                                    <Label text="AMBIENTACIÓN ACTIVA" styleClass="lbl-session-title"/>
+                                    <Label text="ACTIVE AMBIANCE" styleClass="lbl-session-title"/>
                                     <Label fx:id="lblNowPlaying" text="—" styleClass="lbl-track-active"/>
                                 </VBox>
 
@@ -91,18 +114,10 @@
                                     </children>
                                 </GridPane>
 
-                                <Button text="🖼 Set Background" onAction="#onSetBackground" maxWidth="Infinity" styleClass="btn-secondary"/>
-                                <Label fx:id="lblBackgroundFile" text="No background set" styleClass="lbl-preview-track" maxWidth="Infinity"/>
                                 <HBox spacing="6" alignment="CENTER_LEFT">
                                     <Label text="Screen:" styleClass="lbl-session-title" minWidth="45"/>
                                     <ComboBox fx:id="cmbScreen" HBox.hgrow="ALWAYS" maxWidth="Infinity" onAction="#onSelectScreen"/>
                                 </HBox>
-                                <HBox spacing="6" alignment="CENTER_LEFT">
-                                    <Label text="Effect:" styleClass="lbl-session-title" minWidth="45"/>
-                                    <ComboBox fx:id="cmbEffect" HBox.hgrow="ALWAYS" maxWidth="Infinity" onAction="#onSelectEffect"/>
-                                </HBox>
-                                <Button text="⚙ Sensitivity per Mood" onAction="#onOpenSensitivityConfig"
-                                        maxWidth="Infinity" styleClass="btn-secondary"/>
 
                                 <!-- Reproductor de mood -->
                                 <VBox spacing="8" alignment="CENTER" styleClass="playback-panel">
@@ -179,8 +194,8 @@
 
                 <!-- Reproductor de preescucha: siempre visible, fuera del TabPane -->
                 <VBox spacing="8" alignment="CENTER" styleClass="playback-panel, preview-panel">
-                    <Label text="PREESCUCHA" styleClass="lbl-panel-title"/>
-                    <Label fx:id="lblPreviewTrack" text="Sin preescucha activa" styleClass="lbl-preview-track"/>
+                    <Label text="PREVIEW" styleClass="lbl-panel-title"/>
+                    <Label fx:id="lblPreviewTrack" text="No active preview" styleClass="lbl-preview-track"/>
                     <HBox spacing="20" alignment="CENTER">
                         <ToggleButton fx:id="btnPreviewLoop" text="🔁" onAction="#onTogglePreviewLoop" styleClass="btn-spotify-flat, btn-loop"/>
                         <Button text="■" onAction="#onPreviewStop" styleClass="btn-spotify-flat, btn-stop"/>
@@ -194,6 +209,6 @@
                 </VBox>
 
             </VBox>
-        </HBox>
+        </SplitPane>
     </VBox>
 </VBox>

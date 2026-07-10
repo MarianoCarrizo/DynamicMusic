@@ -13,6 +13,7 @@ import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.scene.Node;
 import javafx.scene.control.*;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
@@ -29,12 +30,10 @@ public class PlayerController {
 
     // Layout
     @FXML private VBox mainRoot;
-    @FXML private VBox leftPanel;
-    @FXML private VBox rightPanel;
-    @FXML private Separator panelSeparator;
-    @FXML private Button btnExpandPanel;
-
-    private boolean leftPanelExpanded = false;
+    @FXML private Button btnMaximize;
+    @FXML private VBox detailsPanel;
+    @FXML private Label lblBackgroundType;
+    @FXML private VBox assignmentsList;
 
     // Botones de mood
     @FXML private Button btnPaused;
@@ -418,7 +417,7 @@ public class PlayerController {
         // (accedemos por el padre del botón no por fx:id — lo resolvemos por disable)
         if (previewSlider != null) previewSlider.setDisable(!active);
         if (!active && lblPreviewTrack != null)
-            lblPreviewTrack.setText("Sin preescucha activa");
+            lblPreviewTrack.setText("No active preview");
     }
 
     private void resetPreviewSlider() {
@@ -569,53 +568,28 @@ public class PlayerController {
         if (lblBackgroundFile == null) return;
         if (path == null || !new File(path).exists()) {
             lblBackgroundFile.setText("No background set");
+            if (lblBackgroundType != null) lblBackgroundType.setText("");
         } else {
             lblBackgroundFile.setText(new File(path).getName());
+            if (lblBackgroundType != null) lblBackgroundType.setText(backgroundMediaType(path));
         }
     }
 
-    @FXML
-    private void onOpenSensitivityConfig() {
-        javafx.stage.Stage dialog = new javafx.stage.Stage();
-        dialog.setTitle("Sensitivity per Mood");
-        dialog.initStyle(javafx.stage.StageStyle.UTILITY);
-        dialog.setResizable(false);
-
-        javafx.scene.layout.VBox vbox = new javafx.scene.layout.VBox(14);
-        vbox.setPadding(new javafx.geometry.Insets(20));
-
-        for (TrackType mood : TrackType.values()) {
-            javafx.scene.layout.HBox row = new javafx.scene.layout.HBox(12);
-            row.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
-
-            javafx.scene.control.Label name = new javafx.scene.control.Label(mood.name());
-            name.setMinWidth(90);
-
-            javafx.scene.control.Slider slider = new javafx.scene.control.Slider(0.5, 8.0,
-                    moodSensitivity.getOrDefault(mood, 2.0));
-            slider.setPrefWidth(200);
-            slider.setShowTickMarks(true);
-            slider.setMajorTickUnit(1.0);
-            slider.setBlockIncrement(0.5);
-
-            javafx.scene.control.Label valLabel = new javafx.scene.control.Label(
-                    String.format("%.1fx", slider.getValue()));
-            valLabel.setMinWidth(40);
-
-            slider.valueProperty().addListener((obs, oldV, newV) -> {
-                double s = Math.round(newV.doubleValue() * 10.0) / 10.0;
-                moodSensitivity.put(mood, s);
-                valLabel.setText(s + "x");
-                if (mood == currentActiveType && ambianceStage != null)
-                    ambianceStage.setSensitivity(s);
-            });
-
-            row.getChildren().addAll(name, slider, valLabel);
-            vbox.getChildren().add(row);
-        }
-
-        dialog.setScene(new javafx.scene.Scene(vbox));
-        dialog.show();
+    /**
+     * Infiere el tipo de medio a partir de la extensión del archivo.
+     * Retorna "Image", "GIF", "Video" o "" para extensiones desconocidas.
+     */
+    private String backgroundMediaType(String path) {
+        if (path == null) return "";
+        String lower = path.toLowerCase();
+        int dot = lower.lastIndexOf('.');
+        if (dot < 0) return "";
+        return switch (lower.substring(dot + 1)) {
+            case "png", "jpg", "jpeg", "bmp" -> "Image";
+            case "gif"                        -> "GIF";
+            case "mp4", "avi"                 -> "Video";
+            default                           -> "";
+        };
     }
 
     @FXML
@@ -909,7 +883,7 @@ public class PlayerController {
     @FXML
     private void onOpenFolder() {
         DirectoryChooser chooser = new DirectoryChooser();
-        chooser.setTitle("Seleccionar carpeta de música");
+        chooser.setTitle("Select music folder");
         String lastPath = sessionConfig.getLastFolderPath();
         if (lastPath != null) {
             File last = new File(lastPath);
@@ -972,18 +946,10 @@ public class PlayerController {
     }
 
     @FXML
-    private void onToggleExpandPanel() {
-        leftPanelExpanded = !leftPanelExpanded;
-        if (rightPanel != null)    rightPanel.setVisible(!leftPanelExpanded);
-        if (rightPanel != null)    rightPanel.setManaged(!leftPanelExpanded);
-        if (panelSeparator != null) panelSeparator.setVisible(!leftPanelExpanded);
-        if (panelSeparator != null) panelSeparator.setManaged(!leftPanelExpanded);
-        if (leftPanel != null) {
-            leftPanel.setMaxWidth(leftPanelExpanded ? Double.MAX_VALUE : 280);
-            javafx.scene.layout.HBox.setHgrow(leftPanel,
-                leftPanelExpanded ? javafx.scene.layout.Priority.ALWAYS : javafx.scene.layout.Priority.NEVER);
-        }
-        if (btnExpandPanel != null) btnExpandPanel.setText(leftPanelExpanded ? "◱" : "⛶");
+    public void onMaximizeRestoreWindow(ActionEvent event) {
+        Stage stage = (Stage) ((Node) event.getSource()).getScene().getWindow();
+        stage.setMaximized(!stage.isMaximized());
+        btnMaximize.setText(stage.isMaximized() ? "❐" : "▢");
     }
 
     @FXML
