@@ -65,9 +65,6 @@ public class AmbianceStage {
     private volatile double amplitude  = 0.0;
     private volatile double sensitivity = 2.0;
 
-    // true mientras el fondo permite que se rendericen partículas
-    private boolean backgroundAllowsParticles = true;
-
     // Preferencias de efecto por mood; defaults en el constructor
     private final Map<TrackType, EffectType> moodEffects = new EnumMap<>(TrackType.class);
 
@@ -334,39 +331,30 @@ public class AmbianceStage {
 
         if (path == null) {
             clearMedia();
-            backgroundAllowsParticles = true;
             ensureParticlesRunning();
             return;
         }
         File f = new File(path);
         if (!f.exists()) {
             clearMedia();
-            backgroundAllowsParticles = true;
             ensureParticlesRunning();
             return;
         }
         try {
             String e = ext(path);
             if (isVideo(e)) {
-                stopParticleEffect();
-                backgroundAllowsParticles = false;
                 setVideo(f);
             } else if ("gif".equals(e)) {
-                stopParticleEffect();
-                backgroundAllowsParticles = false;
                 setImage(f);
             } else if (isStaticImage(e)) {
-                backgroundAllowsParticles = true;
                 setImage(f);
                 ensureParticlesRunning();
             } else {
                 clearMedia();
-                backgroundAllowsParticles = true;
                 ensureParticlesRunning();
             }
         } catch (Exception ex) {
             clearMedia();
-            backgroundAllowsParticles = true;
             ensureParticlesRunning();
         }
     }
@@ -463,7 +451,6 @@ public class AmbianceStage {
 
     private void onMediaError() {
         clearMedia();
-        backgroundAllowsParticles = true;
         ensureParticlesRunning();
     }
 
