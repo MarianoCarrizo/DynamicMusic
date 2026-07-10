@@ -57,6 +57,23 @@
                     <ComboBox fx:id="cmbFitMode" HBox.hgrow="ALWAYS" maxWidth="Infinity" onAction="#onSelectFitMode"/>
                 </HBox>
 
+                <!-- Segment loop controls: visible only when background is a video -->
+                <VBox fx:id="segmentControls" spacing="6" visible="false" managed="false">
+                    <Label text="LOOP SEGMENT" styleClass="lbl-session-title"/>
+                    <HBox spacing="6">
+                        <Button fx:id="btnMarkStart" text="Mark start" onAction="#onMarkStart"
+                                HBox.hgrow="ALWAYS" maxWidth="Infinity" styleClass="btn-secondary" disable="true"/>
+                        <Button fx:id="btnMarkEnd" text="Mark end" onAction="#onMarkEnd"
+                                HBox.hgrow="ALWAYS" maxWidth="Infinity" styleClass="btn-secondary" disable="true"/>
+                    </HBox>
+                    <HBox spacing="6" alignment="CENTER_LEFT">
+                        <Label fx:id="lblSegmentInfo" text="Full video" styleClass="lbl-preview-track"
+                               HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
+                        <Button fx:id="btnClearSegment" text="Clear" onAction="#onClearSegment"
+                                styleClass="btn-secondary" disable="true"/>
+                    </HBox>
+                </VBox>
+
                 <!-- Effect block -->
                 <Label text="Effect:" styleClass="lbl-session-title"/>
                 <ComboBox fx:id="cmbEffect" HBox.hgrow="ALWAYS" maxWidth="Infinity" onAction="#onSelectEffect"/>

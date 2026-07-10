@@ -10,6 +10,7 @@ import com.marianocarrizo.dynamicMusic.service.MusicService;
 import com.marianocarrizo.dynamicMusic.service.PlaylistManager;
 import javafx.application.Platform;
 import javafx.collections.ListChangeListener;
+import javafx.util.Duration;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.scene.Node;
@@ -108,6 +109,13 @@ public class PlayerController {
     @FXML private ComboBox<BackgroundFitMode> cmbFitMode;
     @FXML private Label lblBackgroundFile;
 
+    // Segment loop controls (video-only, hidden by default via FXML)
+    @FXML private VBox   segmentControls;
+    @FXML private Button btnMarkStart;
+    @FXML private Button btnMarkEnd;
+    @FXML private Label  lblSegmentInfo;
+    @FXML private Button btnClearSegment;
+
     private File rootFolder;
 
     private final MusicService musicService = new MusicService();
@@ -120,6 +128,7 @@ public class PlayerController {
     private boolean isDraggingPlaylistSlider = false;
     private boolean applyingSession = false;
     private boolean refreshingUI = false;
+    private Duration pendingSegmentStart = null; // null = no start marked yet
     private TrackType currentActiveType = TrackType.NORMAL;
 
     private PlaylistManager playlistManager;
@@ -208,12 +217,22 @@ public class PlayerController {
 
         updatePreviewPanel(false);
         ambianceStage = new AmbianceStage();
+        ambianceStage.setOnVideoReady(() -> Platform.runLater(() -> {
+            if (btnMarkStart != null)    btnMarkStart.setDisable(false);
+            if (btnClearSegment != null) btnClearSegment.setDisable(false);
+            // btnMarkEnd permanece deshabilitado hasta que el usuario marque un inicio
+            refreshSegmentLabel();
+        }));
         musicService.setAmplitudeListener(amp -> ambianceStage.setAmplitude(amp));
 
         // Callback: el stage de ambiance notifica cuando el usuario suelta una imagen
         ambianceStage.setOnBackgroundDropped(path -> {
             sessionConfig.setBackgroundImagePath(path);
             sessionConfig.setLastImageFolderPath(new File(path).getParent());
+            // El fondo soltado siempre es imagen/gif (video excluido de DnD); limpiar segmento
+            pendingSegmentStart = null;
+            sessionConfig.setVideoSegmentStartMs(null);
+            sessionConfig.setVideoSegmentEndMs(null);
             manager.save(sessionConfig);
             Platform.runLater(() -> updateBackgroundLabel(path));
         });
@@ -531,6 +550,10 @@ public class PlayerController {
         String path = file.getAbsolutePath();
         sessionConfig.setBackgroundImagePath(path);
         sessionConfig.setLastImageFolderPath(file.getParent());
+        // Cualquier nuevo fondo borra la ventana de loop activa
+        pendingSegmentStart = null;
+        sessionConfig.setVideoSegmentStartMs(null);
+        sessionConfig.setVideoSegmentEndMs(null);
         manager.save(sessionConfig);
         if (ambianceStage != null) ambianceStage.setBackground(path);
         updateBackgroundLabel(path);
@@ -554,6 +577,49 @@ public class PlayerController {
         sessionConfig.setBackgroundFitMode(mode.name());
         manager.save(sessionConfig);
         if (ambianceStage != null) ambianceStage.setBackgroundFitMode(mode);
+    }
+
+    // --- Segment loop handlers ---
+
+    @FXML
+    private void onMarkStart() {
+        if (ambianceStage == null) return;
+        pendingSegmentStart = ambianceStage.getCurrentVideoTime();
+        if (lblSegmentInfo != null)
+            lblSegmentInfo.setText("Start " + formatSegmentTime(pendingSegmentStart) + " — mark end");
+        if (btnMarkEnd != null) btnMarkEnd.setDisable(false);
+    }
+
+    @FXML
+    private void onMarkEnd() {
+        if (ambianceStage == null || pendingSegmentStart == null) {
+            if (lblSegmentInfo != null) lblSegmentInfo.setText("Mark a start position first");
+            return;
+        }
+        Duration end = ambianceStage.getCurrentVideoTime();
+        Duration gap = end.subtract(pendingSegmentStart);
+        if (end.lessThanOrEqualTo(pendingSegmentStart) || gap.lessThan(Duration.seconds(2))) {
+            if (lblSegmentInfo != null) lblSegmentInfo.setText("End must be at least 2s after start");
+            return; // loop activo sin cambios; nada persistido
+        }
+        ambianceStage.setVideoSegment(pendingSegmentStart, end);
+        sessionConfig.setVideoSegmentStartMs((long) pendingSegmentStart.toMillis());
+        sessionConfig.setVideoSegmentEndMs((long) end.toMillis());
+        manager.save(sessionConfig);
+        if (lblSegmentInfo != null)
+            lblSegmentInfo.setText("Loop: " + formatSegmentTime(pendingSegmentStart) + " – " + formatSegmentTime(end));
+    }
+
+    @FXML
+    private void onClearSegment() {
+        if (ambianceStage == null) return;
+        ambianceStage.clearVideoSegment();
+        pendingSegmentStart = null;
+        sessionConfig.setVideoSegmentStartMs(null);
+        sessionConfig.setVideoSegmentEndMs(null);
+        manager.save(sessionConfig);
+        if (lblSegmentInfo != null) lblSegmentInfo.setText("Full video");
+        if (btnMarkEnd != null) btnMarkEnd.setDisable(true);
     }
 
     // --- Selección de pantalla de ambiance ---
@@ -624,6 +690,17 @@ public class PlayerController {
             lblBackgroundFile.setText(new File(path).getName());
             if (lblBackgroundType != null) lblBackgroundType.setText(backgroundMediaType(path));
         }
+        boolean isVideo = "Video".equals(backgroundMediaType(path));
+        if (segmentControls != null) {
+            segmentControls.setVisible(isVideo);
+            segmentControls.setManaged(isVideo);
+        }
+        // Resetear habilitación; los botones se re-habilitan en el callback onVideoReady
+        if (btnMarkStart != null)    btnMarkStart.setDisable(true);
+        if (btnMarkEnd != null)      btnMarkEnd.setDisable(true);
+        if (btnClearSegment != null) btnClearSegment.setDisable(true);
+        pendingSegmentStart = null;
+        refreshSegmentLabel();
     }
 
     /**
@@ -1188,5 +1265,33 @@ public class PlayerController {
     private String formatDuration(javafx.util.Duration dur) {
         int totalSeconds = (int) dur.toSeconds();
         return (totalSeconds / 60) + ":" + String.format("%02d", totalSeconds % 60);
+    }
+
+    /**
+     * Formatea un Duration como m:ss para el label del segmento (por ejemplo, "0:12", "1:05").
+     * Null-safe: retorna "0:00" para entrada null.
+     */
+    private String formatSegmentTime(Duration d) {
+        if (d == null) return "0:00";
+        int totalSeconds = (int) d.toSeconds();
+        return (totalSeconds / 60) + ":" + String.format("%02d", totalSeconds % 60);
+    }
+
+    /**
+     * Refresca lblSegmentInfo a partir de los valores de sesión persistidos.
+     * Muestra "Full video" cuando los campos ms son null, o "Loop: m:ss – m:ss" en caso contrario.
+     */
+    private void refreshSegmentLabel() {
+        if (lblSegmentInfo == null) return;
+        Long startMs = sessionConfig.getVideoSegmentStartMs();
+        Long endMs   = sessionConfig.getVideoSegmentEndMs();
+        if (startMs == null || endMs == null) {
+            lblSegmentInfo.setText("Full video");
+        } else {
+            lblSegmentInfo.setText("Loop: "
+                + formatSegmentTime(Duration.millis(startMs))
+                + " – "
+                + formatSegmentTime(Duration.millis(endMs)));
+        }
     }
 }
