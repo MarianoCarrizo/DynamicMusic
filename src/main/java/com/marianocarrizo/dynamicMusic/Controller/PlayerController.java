@@ -35,6 +35,18 @@ public class PlayerController {
     @FXML private Label lblBackgroundType;
     @FXML private VBox assignmentsList;
 
+    // Sliders de sensibilidad por mood
+    @FXML private Slider sldSensPaused;
+    @FXML private Slider sldSensNormal;
+    @FXML private Slider sldSensRaged;
+    @FXML private Slider sldSensAdvantage;
+
+    // Labels de valor de sensibilidad por mood
+    @FXML private Label lblSensPaused;
+    @FXML private Label lblSensNormal;
+    @FXML private Label lblSensRaged;
+    @FXML private Label lblSensAdvantage;
+
     // Botones de mood
     @FXML private Button btnPaused;
     @FXML private Button btnNormal;
@@ -229,6 +241,9 @@ public class PlayerController {
         });
 
         for (TrackType t : TrackType.values()) moodSensitivity.put(t, 2.0);
+
+        wireSensitivitySliders();
+        refreshAssignments();
 
         // T-12: PlaylistManager + wiring de callbacks
         playlistManager = new PlaylistManager();
@@ -592,6 +607,88 @@ public class PlayerController {
         };
     }
 
+    // --- Sliders de sensibilidad ---
+
+    /**
+     * Conecta los cuatro sliders de sensibilidad con el mapa en memoria y la persistencia.
+     * Llamado desde initialize() después de pre-sembrar moodSensitivity con valores por defecto.
+     */
+    private void wireSensitivitySliders() {
+        wireSingleSensitivitySlider(TrackType.PAUSED,     sldSensPaused,     lblSensPaused);
+        wireSingleSensitivitySlider(TrackType.NORMAL,     sldSensNormal,     lblSensNormal);
+        wireSingleSensitivitySlider(TrackType.RAGED,      sldSensRaged,      lblSensRaged);
+        wireSingleSensitivitySlider(TrackType.ADVANTAGE,  sldSensAdvantage,  lblSensAdvantage);
+    }
+
+    private void wireSingleSensitivitySlider(TrackType mood, Slider slider, Label valueLabel) {
+        if (slider == null) return;
+
+        // Valor inicial desde el mapa en memoria (ya pre-sembrado con 2.0 en initialize)
+        double initial = moodSensitivity.getOrDefault(mood, 2.0);
+        slider.setValue(initial);
+        if (valueLabel != null) valueLabel.setText(String.format("%.1fx", initial));
+
+        // Listener de valor: actualiza mapa y label en tiempo real
+        slider.valueProperty().addListener((obs, oldV, newV) -> {
+            double rounded = Math.round(newV.doubleValue() * 10.0) / 10.0;
+            moodSensitivity.put(mood, rounded);
+            if (valueLabel != null) valueLabel.setText(String.format("%.1fx", rounded));
+            if (mood == currentActiveType && ambianceStage != null) {
+                ambianceStage.setSensitivity(rounded);
+            }
+            // Persistencia en false-edge de valueChanging (cubre flechas de teclado)
+        });
+
+        // Persistencia al soltar el mouse
+        slider.setOnMouseReleased(e -> {
+            double rounded = Math.round(slider.getValue() * 10.0) / 10.0;
+            sessionConfig.setMoodSensitivity(mood, rounded);
+            manager.save(sessionConfig);
+        });
+
+        // Persistencia al finalizar cambio por teclado (false-edge de valueChanging)
+        slider.valueChangingProperty().addListener((obs, wasChanging, isChanging) -> {
+            if (wasChanging && !isChanging) {
+                double rounded = Math.round(slider.getValue() * 10.0) / 10.0;
+                sessionConfig.setMoodSensitivity(mood, rounded);
+                manager.save(sessionConfig);
+            }
+        });
+    }
+
+    /**
+     * Aplica el valor del mapa en memoria al slider y label indicados.
+     * Usado desde applySession (Platform.runLater) para restaurar la UI.
+     */
+    private void updateSensitivitySlider(TrackType mood, Slider slider, Label valueLabel) {
+        if (slider == null) return;
+        double v = moodSensitivity.getOrDefault(mood, 2.0);
+        slider.setValue(v);
+        if (valueLabel != null) valueLabel.setText(String.format("%.1fx", v));
+    }
+
+    // --- Lista de asignaciones ---
+
+    /**
+     * Reconstruye la lista de asignaciones del panel de detalles.
+     * Muestra una fila por TrackType con el nombre del archivo asignado o "(none)".
+     */
+    private void refreshAssignments() {
+        if (assignmentsList == null) return;
+        assignmentsList.getChildren().clear();
+        Map<TrackType, String> assignments = sessionConfig.getAssignments();
+        for (TrackType t : TrackType.values()) {
+            String path = assignments.get(t);
+            String display = (path != null && !path.isEmpty())
+                ? new File(path).getName()
+                : "(none)";
+            Label row = new Label(t.name() + "  →  " + display);
+            row.getStyleClass().add("lbl-preview-track");
+            row.setMaxWidth(Double.MAX_VALUE);
+            assignmentsList.getChildren().add(row);
+        }
+    }
+
     @FXML
     private void onAssignTrack() {
         if (treeFiles == null || cmbTrackType == null) return;
@@ -603,6 +700,7 @@ public class PlayerController {
             musicService.loadTrack(type, selected);
             sessionConfig.put(type, selected.getAbsolutePath());
             manager.save(sessionConfig);
+            refreshAssignments();
         }
     }
 
@@ -876,6 +974,21 @@ public class PlayerController {
             refreshPlaylistUI();
             applyingSession = false;
         }
+
+        // Restaurar sensibilidades por mood desde la sesión guardada
+        for (TrackType t : TrackType.values()) {
+            double v = cfg.getMoodSensitivity(t);
+            moodSensitivity.put(t, v);
+            sessionConfig.setMoodSensitivity(t, v);
+        }
+        // Aplicar en UI (puede ejecutarse antes de show(); Platform.runLater es seguro)
+        Platform.runLater(() -> {
+            updateSensitivitySlider(TrackType.PAUSED,     sldSensPaused,     lblSensPaused);
+            updateSensitivitySlider(TrackType.NORMAL,     sldSensNormal,     lblSensNormal);
+            updateSensitivitySlider(TrackType.RAGED,      sldSensRaged,      lblSensRaged);
+            updateSensitivitySlider(TrackType.ADVANTAGE,  sldSensAdvantage,  lblSensAdvantage);
+            refreshAssignments();
+        });
     }
 
     // --- Carpeta y búsqueda ---
