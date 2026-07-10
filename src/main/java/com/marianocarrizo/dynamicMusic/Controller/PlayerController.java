@@ -695,10 +695,11 @@ public class PlayerController {
             segmentControls.setVisible(isVideo);
             segmentControls.setManaged(isVideo);
         }
-        // Resetear habilitación; los botones se re-habilitan en el callback onVideoReady
+        // Resetear habilitación; los botones de marca se re-habilitan en el callback onVideoReady.
+        // Clear queda habilitado con cualquier fondo de video (REQ-04), sin esperar READY.
         if (btnMarkStart != null)    btnMarkStart.setDisable(true);
         if (btnMarkEnd != null)      btnMarkEnd.setDisable(true);
-        if (btnClearSegment != null) btnClearSegment.setDisable(true);
+        if (btnClearSegment != null) btnClearSegment.setDisable(!isVideo);
         pendingSegmentStart = null;
         refreshSegmentLabel();
     }
