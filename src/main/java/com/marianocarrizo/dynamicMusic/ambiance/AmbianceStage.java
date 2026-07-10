@@ -17,6 +17,7 @@ import javafx.scene.shape.Rectangle;
 import javafx.stage.Screen;
 import javafx.stage.Stage;
 import javafx.stage.StageStyle;
+import javafx.util.Duration;
 
 import java.io.File;
 import java.util.EnumMap;
@@ -86,6 +87,12 @@ public class AmbianceStage {
 
     // Callback invocado cuando el usuario arrastra y suelta un archivo de imagen
     private Consumer<String> onBackgroundDropped = null;
+
+    // Ventana de loop A→B; null = video completo (desde ZERO hasta duración del media)
+    private Duration segmentStart = null;
+    private Duration segmentEnd   = null;
+    // Callback del controlador: se dispara en cada transición READY de video en el hilo FX
+    private Runnable onVideoReady = null;
 
     public AmbianceStage() {
         moodEffects.put(TrackType.RAGED,     EffectType.FIRE);
@@ -358,12 +365,16 @@ public class AmbianceStage {
         currentBackgroundPath = path;
 
         if (path == null) {
+            segmentStart = null;
+            segmentEnd   = null;
             clearMedia();
             ensureParticlesRunning();
             return;
         }
         File f = new File(path);
         if (!f.exists()) {
+            segmentStart = null;
+            segmentEnd   = null;
             clearMedia();
             ensureParticlesRunning();
             return;
@@ -371,19 +382,28 @@ public class AmbianceStage {
         try {
             String e = ext(path);
             if (isVideo(e)) {
+                // No nulificar: el llamador estableció los campos antes de setBackground durante restore
                 setVideo(f);
                 ensureParticlesRunning();
             } else if ("gif".equals(e)) {
+                segmentStart = null;
+                segmentEnd   = null;
                 setImage(f);
                 ensureParticlesRunning();
             } else if (isStaticImage(e)) {
+                segmentStart = null;
+                segmentEnd   = null;
                 setImage(f);
                 ensureParticlesRunning();
             } else {
+                segmentStart = null;
+                segmentEnd   = null;
                 clearMedia();
                 ensureParticlesRunning();
             }
         } catch (Exception ex) {
+            segmentStart = null;
+            segmentEnd   = null;
             clearMedia();
             ensureParticlesRunning();
         }
@@ -635,6 +655,11 @@ public class AmbianceStage {
         currentPlayer = new MediaPlayer(media);
         currentPlayer.setCycleCount(MediaPlayer.INDEFINITE);
         currentPlayer.setMute(true);
+        // Aplicación pre-READY del segmento: la API garantiza que toma efecto en la transición READY
+        if (segmentStart != null && segmentEnd != null) {
+            currentPlayer.setStartTime(segmentStart);
+            currentPlayer.setStopTime(segmentEnd);
+        }
         mediaView.setMediaPlayer(currentPlayer);
         mediaView.setVisible(true);
         currentPlayer.setOnError(this::onMediaError);
@@ -644,6 +669,12 @@ public class AmbianceStage {
             if (currentPlayer == player) {
                 loadingIndicator.setVisible(false);
                 applyFitToMediaView(); // las dimensiones del media ya son válidas en READY
+                // Re-afirmar segmento (idempotente; también cubre setVideoSegment llamado entre creación y READY)
+                if (segmentStart != null && segmentEnd != null) {
+                    player.setStartTime(segmentStart);
+                    player.setStopTime(segmentEnd);
+                }
+                if (onVideoReady != null) onVideoReady.run();
             }
         });
         loadingIndicator.setVisible(true);
@@ -668,6 +699,63 @@ public class AmbianceStage {
             currentEffect.stop();
             currentEffect = null;
         }
+    }
+
+    // --- Segment loop API ---
+
+    /**
+     * Almacena la ventana A→B y la aplica en vivo si hay un player activo.
+     * Solo guarda estructuralmente: start y end deben ser no-null y start < end.
+     * La validación de brecha mínima (2s) es responsabilidad del llamador.
+     */
+    public void setVideoSegment(Duration start, Duration end) {
+        if (start == null || end == null || !start.lessThan(end)) return;
+        segmentStart = start;
+        segmentEnd   = end;
+        if (currentPlayer != null) {
+            currentPlayer.setStartTime(start);
+            currentPlayer.setStopTime(end);
+        }
+    }
+
+    /**
+     * Restablece el loop al video completo y nulifica los campos almacenados.
+     * Si hay un player activo, re-afirma ZERO → duración del media
+     * (guarda contra duración UNKNOWN/INDEFINITE).
+     */
+    public void clearVideoSegment() {
+        segmentStart = null;
+        segmentEnd   = null;
+        if (currentPlayer != null) {
+            currentPlayer.setStartTime(Duration.ZERO);
+            Duration mediaDuration = currentPlayer.getMedia().getDuration();
+            if (mediaDuration != null && !mediaDuration.isUnknown() && !mediaDuration.isIndefinite()) {
+                currentPlayer.setStopTime(mediaDuration);
+            }
+        }
+    }
+
+    /**
+     * Retorna la posición de reproducción actual. Retorna Duration.ZERO cuando no hay player activo.
+     */
+    public Duration getCurrentVideoTime() {
+        return currentPlayer != null ? currentPlayer.getCurrentTime() : Duration.ZERO;
+    }
+
+    /**
+     * Registra el Runnable que se dispara en cada transición READY de video en el hilo FX.
+     * Sigue el patrón de setOnBackgroundDropped.
+     */
+    public void setOnVideoReady(Runnable r) {
+        this.onVideoReady = r;
+    }
+
+    /**
+     * Retorna true cuando hay un MediaPlayer de video activo.
+     * Guarda secundario para PlayerController; la puerta primaria es el string de tipo de media.
+     */
+    public boolean isVideoBackground() {
+        return currentPlayer != null;
     }
 
     // --- Dispose ---
