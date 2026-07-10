@@ -57,6 +57,10 @@ public class SessionConfig {
     // Volumen maestro [0.0-1.0]; boxed Double para que Gson deserialice null (no 0.0) en sesiones antiguas
     private Double masterVolume;
 
+    // Ventana de loop A→B en ms; null = loop de video completo; compatible hacia atrás (clave ausente = null al deserializar)
+    private Long videoSegmentStartMs;
+    private Long videoSegmentEndMs;
+
     public SessionConfig() {
         this.assignments = new LinkedHashMap<>();
     }
@@ -243,4 +247,12 @@ public class SessionConfig {
     public void setMasterVolume(double v) {
         this.masterVolume = v;
     }
+
+    // --- Video segment loop ---
+
+    public Long getVideoSegmentStartMs() { return videoSegmentStartMs; }
+    public void setVideoSegmentStartMs(Long ms) { this.videoSegmentStartMs = ms; }
+
+    public Long getVideoSegmentEndMs() { return videoSegmentEndMs; }
+    public void setVideoSegmentEndMs(Long ms) { this.videoSegmentEndMs = ms; }
 }
