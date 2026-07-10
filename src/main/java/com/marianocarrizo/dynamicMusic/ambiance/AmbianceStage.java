@@ -614,9 +614,12 @@ public class AmbianceStage {
             javafx.beans.value.ChangeListener<Number>[] listenerRef = new javafx.beans.value.ChangeListener[1];
             listenerRef[0] = (obs, oldW, newW) -> {
                 if (newW.doubleValue() > 0 && imageView.getImage() == img) {
-                    imageView.setViewport(computeFillViewport(
-                            img.getWidth(), img.getHeight(),
-                            scene.getWidth(), scene.getHeight()));
+                    // Re-verificar el modo: pudo cambiar mientras la imagen cargaba
+                    if (currentFitMode == BackgroundFitMode.FILL) {
+                        imageView.setViewport(computeFillViewport(
+                                img.getWidth(), img.getHeight(),
+                                scene.getWidth(), scene.getHeight()));
+                    }
                     img.widthProperty().removeListener(listenerRef[0]);
                 }
             };
