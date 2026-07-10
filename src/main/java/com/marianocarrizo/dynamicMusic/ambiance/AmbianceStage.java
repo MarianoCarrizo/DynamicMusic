@@ -322,7 +322,7 @@ public class AmbianceStage {
 
     /**
      * Sets a single background for the whole window:
-     *  - Video (MP4/AVI) or GIF: played/shown without particles.
+     *  - Video (MP4/AVI) or GIF: played/shown; particles run if an effect is active.
      *  - Static image (PNG/JPG/JPEG/BMP): shown with particles on top.
      *  - null or missing file: solid black background + particles.
      */
@@ -344,8 +344,10 @@ public class AmbianceStage {
             String e = ext(path);
             if (isVideo(e)) {
                 setVideo(f);
+                ensureParticlesRunning();
             } else if ("gif".equals(e)) {
                 setImage(f);
+                ensureParticlesRunning();
             } else if (isStaticImage(e)) {
                 setImage(f);
                 ensureParticlesRunning();
