@@ -91,6 +91,12 @@ public class MusicService {
     // Ganancia RMS de la pista actual del playlist (para restaurar después del fade)
     private double playlistGain = 1.0;
 
+    // Volumen maestro global [0.0-1.0]; multiplicador sobre las ganancias RMS
+    private double masterVolume = 1.0;
+
+    // Ganancia RMS raw de la preescucha activa (necesaria para live-reapply del volumen maestro)
+    private double previewGain = 1.0;
+
     // Callback que el controlador suministra para avanzar al siguiente track
     private Runnable onPlaylistEnd = null;
 
@@ -111,6 +117,37 @@ public class MusicService {
         this.progressListener = null;
         this.previewProgressListener = null;
         this.previewPlayer = null;
+    }
+
+    // =========================================================================
+    // Volumen maestro global
+    // =========================================================================
+
+    /** Único punto de escala: toda ganancia RAW debe pasar por aquí antes de llegar a setVolume. */
+    private double effectiveGain(double rawGain) {
+        return rawGain * masterVolume;
+    }
+
+    /**
+     * Actualiza el volumen maestro y lo reaplica en tiempo real a todos los reproductores activos.
+     * No toca el reproductor de ambiance (INV-5).
+     */
+    public void setMasterVolume(double v) {
+        this.masterVolume = Math.max(0.0, Math.min(1.0, v));
+        if (currentTrack != null && players.containsKey(currentTrack)) {
+            players.get(currentTrack).setVolume(
+                effectiveGain(trackGains.getOrDefault(currentTrack, 1.0)));
+        }
+        if (playlistPlayer != null) {
+            playlistPlayer.setVolume(effectiveGain(playlistGain));
+        }
+        if (previewPlayer != null) {
+            previewPlayer.setVolume(effectiveGain(previewGain));
+        }
+    }
+
+    public double getMasterVolume() {
+        return masterVolume;
     }
 
     // =========================================================================
@@ -239,7 +276,7 @@ public class MusicService {
                     Media media = new Media(sourceUrl);
                     MediaPlayer player = new MediaPlayer(media);
 
-                    player.setVolume(gain);
+                    player.setVolume(effectiveGain(gain));
 
                     player.setOnError(() ->
                             System.err.println("Error en pista " + type + ": " + player.getError()));
@@ -369,7 +406,8 @@ public class MusicService {
                         String sourceUrl = finalFile.toURI().toString();
                         Media media = new Media(sourceUrl);
                         MediaPlayer player = new MediaPlayer(media);
-                        player.setVolume(gain);
+                        previewGain = gain;
+                        player.setVolume(effectiveGain(gain));
 
                         player.setOnEndOfMedia(() -> {
                             Platform.runLater(() -> {
@@ -489,7 +527,7 @@ public class MusicService {
         cancelActiveFade();
         if (currentTrack == null || !players.containsKey(currentTrack)) return;
         MediaPlayer player = players.get(currentTrack);
-        double targetVolume = trackGains.getOrDefault(currentTrack, 1.0);
+        double targetVolume = effectiveGain(trackGains.getOrDefault(currentTrack, 1.0));
         player.setVolume(0.0);
         player.play();
         activeFade = new Timeline(
@@ -511,12 +549,12 @@ public class MusicService {
             activeFade.stop();
             if (mode == PlaybackMode.PLAYLIST) {
                 if (playlistPlayer != null) {
-                    playlistPlayer.setVolume(playlistGain);
+                    playlistPlayer.setVolume(effectiveGain(playlistGain));
                 }
             } else {
                 if (currentTrack != null && players.containsKey(currentTrack)) {
                     double gain = trackGains.getOrDefault(currentTrack, 1.0);
-                    players.get(currentTrack).setVolume(gain);
+                    players.get(currentTrack).setVolume(effectiveGain(gain));
                 }
             }
             activeFade = null;
@@ -605,7 +643,7 @@ public class MusicService {
                     Media media = new Media(sourceUrl);
                     MediaPlayer player = new MediaPlayer(media);
 
-                    player.setVolume(gain);
+                    player.setVolume(effectiveGain(gain));
                     playlistGain = gain;
 
                     // T-16: adjuntar espectro ANTES de setOnReady (activo desde el primer frame)
@@ -684,7 +722,7 @@ public class MusicService {
         activeFade.setOnFinished(e -> {
             if (playlistPlayer != null) {
                 playlistPlayer.pause();
-                playlistPlayer.setVolume(savedGain);
+                playlistPlayer.setVolume(effectiveGain(savedGain));
             }
             activeFade = null;
         });
