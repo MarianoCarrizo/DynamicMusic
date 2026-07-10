@@ -654,6 +654,15 @@ public class PlayerController {
                 manager.save(sessionConfig);
             }
         });
+
+        // Persistencia al perder el foco (cubre teclas en los extremos del rango)
+        slider.focusedProperty().addListener((obs, hadFocus, hasFocus) -> {
+            if (hadFocus && !hasFocus) {
+                double rounded = Math.round(slider.getValue() * 10.0) / 10.0;
+                sessionConfig.setMoodSensitivity(mood, rounded);
+                manager.save(sessionConfig);
+            }
+        });
     }
 
     /**
