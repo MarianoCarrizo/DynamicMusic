@@ -31,3 +31,9 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Build output (jlink/jpackage) ###
+output/
+
+### AI agent tool cache ###
+.atl/
