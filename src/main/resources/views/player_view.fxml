@@ -2,6 +2,8 @@
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
 <?import javafx.geometry.Insets?>
+<?import javafx.scene.media.MediaView?>
+<?import javafx.scene.image.ImageView?>
 
 <VBox xmlns:fx="http://javafx.com/fxml/1"
       fx:controller="com.marianocarrizo.dynamicMusic.Controller.PlayerController"
@@ -51,35 +53,61 @@
                 <Label text="BACKGROUND" styleClass="lbl-session-title"/>
                 <Label fx:id="lblBackgroundFile" text="No background set" styleClass="lbl-preview-track" maxWidth="Infinity"/>
                 <Label fx:id="lblBackgroundType" text="" styleClass="lbl-session-title" maxWidth="Infinity"/>
-                <Button text="🖼 Set Background" onAction="#onSetBackground" maxWidth="Infinity" styleClass="btn-secondary"/>
+                <HBox spacing="6">
+                    <Button text="🖼 Set Background" onAction="#onSetBackground" HBox.hgrow="ALWAYS" maxWidth="Infinity" styleClass="btn-secondary"/>
+                    <Button fx:id="btnEditBackground" text="Edit" onAction="#onEditBackground"
+                            styleClass="btn-secondary" disable="true"/>
+                </HBox>
                 <HBox spacing="6" alignment="CENTER_LEFT">
                     <Label text="Fit:" styleClass="lbl-session-title" minWidth="45"/>
                     <ComboBox fx:id="cmbFitMode" HBox.hgrow="ALWAYS" maxWidth="Infinity" onAction="#onSelectFitMode"/>
                 </HBox>
 
-                <!-- Segment loop controls: visible only when background is a video -->
-                <VBox fx:id="segmentControls" spacing="6" visible="false" managed="false">
-                    <Label text="LOOP SEGMENT" styleClass="lbl-session-title"/>
+                <!-- bg preview panel: shown only while pendingBgPath != null -->
+                <VBox fx:id="bgPreviewPanel" spacing="6" visible="false" managed="false">
+                    <StackPane fx:id="bgPreviewStack" prefHeight="135" minHeight="126">
+                        <MediaView fx:id="bgPreviewMediaView"/>
+                        <ImageView fx:id="bgPreviewImageView" visible="false" preserveRatio="true"
+                                   fitWidth="224" fitHeight="126"/>
+                        <ProgressIndicator fx:id="bgPreviewSpinner" visible="false" mouseTransparent="true"
+                                           maxWidth="48" maxHeight="48"/>
+                        <Label fx:id="lblBgPreviewPlaceholder" text="No preview" styleClass="lbl-preview-track"/>
+                    </StackPane>
+                    <!-- Scrub row -->
+                    <HBox spacing="4" alignment="CENTER_LEFT">
+                        <Label fx:id="lblBgPreviewCurrentTime" text="0:00" styleClass="lbl-time" minWidth="35"/>
+                        <Slider fx:id="bgPreviewSlider" HBox.hgrow="ALWAYS" min="0" max="100" value="0"
+                                styleClass="spotify-slider"/>
+                        <Label fx:id="lblBgPreviewTotalTime" text="0:00" styleClass="lbl-time" minWidth="35"/>
+                    </HBox>
+                    <!-- Mark row -->
                     <HBox spacing="6">
-                        <Button fx:id="btnMarkStart" text="Mark start" onAction="#onMarkStart"
+                        <Button fx:id="btnBgMarkStart" text="Mark start" onAction="#onBgMarkStart"
                                 HBox.hgrow="ALWAYS" maxWidth="Infinity" styleClass="btn-secondary" disable="true"/>
-                        <Button fx:id="btnMarkEnd" text="Mark end" onAction="#onMarkEnd"
+                        <Button fx:id="btnBgMarkEnd" text="Mark end" onAction="#onBgMarkEnd"
                                 HBox.hgrow="ALWAYS" maxWidth="Infinity" styleClass="btn-secondary" disable="true"/>
                     </HBox>
                     <HBox spacing="6" alignment="CENTER_LEFT">
-                        <Label fx:id="lblSegmentInfo" text="Full video" styleClass="lbl-preview-track"
+                        <Label fx:id="lblBgSegmentInfo" text="Full video" styleClass="lbl-preview-track"
                                HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
-                        <Button fx:id="btnClearSegment" text="Clear" onAction="#onClearSegment"
+                        <Button fx:id="btnBgClearSegment" text="Clear" onAction="#onBgClearSegment"
                                 styleClass="btn-secondary" disable="true"/>
                     </HBox>
+                    <!-- Boomerang + speed row -->
                     <HBox spacing="6" alignment="CENTER_LEFT">
                         <Label text="Speed:" styleClass="lbl-session-title" minWidth="45"/>
-                        <ComboBox fx:id="cmbVideoSpeed" HBox.hgrow="ALWAYS" maxWidth="Infinity" onAction="#onSelectVideoSpeed"/>
-                    </HBox>
-                    <HBox spacing="6" alignment="CENTER_LEFT">
-                        <ToggleButton fx:id="btnBoomerang" text="↩ Boomerang" onAction="#onToggleBoomerang"
+                        <ComboBox fx:id="cmbBgVideoSpeed" HBox.hgrow="ALWAYS" maxWidth="Infinity"
+                                  onAction="#onSelectBgVideoSpeed"/>
+                        <ToggleButton fx:id="btnBgBoomerang" text="↩ Boomerang" onAction="#onToggleBgBoomerang"
                                       HBox.hgrow="ALWAYS" maxWidth="Infinity" styleClass="btn-secondary" disable="true"/>
-                        <Label fx:id="lblBoomerangHint" text="" styleClass="lbl-preview-track" minWidth="90"/>
+                        <Label fx:id="lblBgBoomerangHint" text="" styleClass="lbl-preview-track" minWidth="90"/>
+                    </HBox>
+                    <!-- Apply / Cancel row -->
+                    <HBox spacing="6">
+                        <Button fx:id="btnApplyBackground" text="Apply" onAction="#onApplyBackground"
+                                HBox.hgrow="ALWAYS" maxWidth="Infinity" styleClass="btn-primary"/>
+                        <Button fx:id="btnCancelBackground" text="Cancel" onAction="#onCancelBackground"
+                                HBox.hgrow="ALWAYS" maxWidth="Infinity" styleClass="btn-secondary"/>
                     </HBox>
                 </VBox>
 
