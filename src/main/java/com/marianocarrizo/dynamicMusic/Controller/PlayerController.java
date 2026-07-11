@@ -3,11 +3,13 @@ package com.marianocarrizo.dynamicMusic.Controller;
 import com.marianocarrizo.dynamicMusic.Enums.TrackType;
 import com.marianocarrizo.dynamicMusic.ambiance.AmbianceStage;
 import com.marianocarrizo.dynamicMusic.ambiance.BackgroundFitMode;
+import com.marianocarrizo.dynamicMusic.ambiance.BoomerangBaker;
 import com.marianocarrizo.dynamicMusic.ambiance.EffectType;
 import com.marianocarrizo.dynamicMusic.config.SessionConfig;
 import com.marianocarrizo.dynamicMusic.config.SessionConfigManager;
 import com.marianocarrizo.dynamicMusic.service.MusicService;
 import com.marianocarrizo.dynamicMusic.service.PlaylistManager;
+import javafx.animation.PauseTransition;
 import javafx.application.Platform;
 import javafx.collections.ListChangeListener;
 import javafx.util.Duration;
@@ -117,6 +119,10 @@ public class PlayerController {
     @FXML private Button btnClearSegment;
     @FXML private ComboBox<Double> cmbVideoSpeed;
 
+    // Boomerang controls
+    @FXML private ToggleButton btnBoomerang;
+    @FXML private Label        lblBoomerangHint;
+
     private File rootFolder;
 
     private final MusicService musicService = new MusicService();
@@ -131,6 +137,13 @@ public class PlayerController {
     private boolean refreshingUI = false;
     private Duration pendingSegmentStart = null; // null = no start marked yet
     private TrackType currentActiveType = TrackType.NORMAL;
+
+    // Boomerang state
+    private final BoomerangBaker boomerangBaker = new BoomerangBaker();
+    private boolean ffmpegAvailable = false;
+    private String bakeGuardSrc;   // snapshot en el momento del bake para la guardia de stale
+    private long   bakeGuardStart;
+    private long   bakeGuardEnd;
 
     private PlaylistManager playlistManager;
     private final Map<TrackType, Double> moodSensitivity = new java.util.EnumMap<>(TrackType.class);
@@ -223,6 +236,7 @@ public class PlayerController {
             if (btnClearSegment != null) btnClearSegment.setDisable(false);
             // btnMarkEnd permanece deshabilitado hasta que el usuario marque un inicio
             refreshSegmentLabel();
+            updateBoomerangEnablement();
         }));
         musicService.setAmplitudeListener(amp -> ambianceStage.setAmplitude(amp));
 
@@ -627,13 +641,25 @@ public class PlayerController {
         sessionConfig.setVideoSegmentStartMs((long) pendingSegmentStart.toMillis());
         sessionConfig.setVideoSegmentEndMs((long) end.toMillis());
         manager.save(sessionConfig);
-        if (lblSegmentInfo != null)
-            lblSegmentInfo.setText("Loop: " + formatSegmentTime(pendingSegmentStart) + " – " + formatSegmentTime(end));
+        String segLabel = "Loop: " + formatSegmentTime(pendingSegmentStart) + " – " + formatSegmentTime(end);
+        if (lblSegmentInfo != null) lblSegmentInfo.setText(segLabel);
+        // Advertencia suave para segmentos largos (T-21)
+        if (gap.greaterThan(Duration.seconds(30)) && lblSegmentInfo != null) {
+            lblSegmentInfo.setText(segLabel + "  (long segment — bake may be slow)");
+        }
+        rebakeIfBoomerangOn();
+        updateBoomerangEnablement();
     }
 
     @FXML
     private void onClearSegment() {
         if (ambianceStage == null) return;
+        // Forzar boomerang OFF antes de limpiar el segmento (T-11)
+        if (btnBoomerang != null && btnBoomerang.isSelected()) {
+            revertToggle();
+            ambianceStage.deactivateBoomerang();
+            sessionConfig.setBoomerangEnabled(false);
+        }
         ambianceStage.clearVideoSegment();
         pendingSegmentStart = null;
         sessionConfig.setVideoSegmentStartMs(null);
@@ -641,6 +667,7 @@ public class PlayerController {
         manager.save(sessionConfig);
         if (lblSegmentInfo != null) lblSegmentInfo.setText("Full video");
         if (btnMarkEnd != null) btnMarkEnd.setDisable(true);
+        updateBoomerangEnablement();
     }
 
     // --- Velocidad de reproducción de video ---
@@ -653,6 +680,175 @@ public class PlayerController {
         if (ambianceStage != null) ambianceStage.setVideoRate(v);
         sessionConfig.setVideoPlaybackRate(v);
         manager.save(sessionConfig);
+    }
+
+    // --- Boomerang ---
+
+    /**
+     * Inyecta el resultado del sondeo de ffmpeg antes de applySession.
+     * Configura el hint en el label si ffmpeg no está disponible.
+     */
+    public void setFfmpegAvailable(boolean available) {
+        this.ffmpegAvailable = available;
+        if (btnBoomerang != null && lblBoomerangHint != null) {
+            lblBoomerangHint.setText(available ? "" : "Requires ffmpeg");
+        }
+    }
+
+    /**
+     * Actualiza el estado de habilitación del botón de boomerang.
+     * Requiere: video listo + segmento válido + ffmpeg disponible.
+     */
+    private void updateBoomerangEnablement() {
+        if (btnBoomerang == null) return;
+        boolean hasSegment = sessionConfig.getVideoSegmentStartMs() != null
+                          && sessionConfig.getVideoSegmentEndMs()   != null;
+        boolean ready = ambianceStage != null && ambianceStage.isVideoBackground();
+        btnBoomerang.setDisable(!(ffmpegAvailable && hasSegment && ready));
+    }
+
+    /**
+     * Revierte el toggle a estado no-seleccionado usando la guardia refreshingUI
+     * para evitar que setSelected dispare onToggleBoomerang recursivamente.
+     */
+    private void revertToggle() {
+        if (btnBoomerang == null) return;
+        refreshingUI = true;
+        try {
+            btnBoomerang.setSelected(false);
+        } finally {
+            refreshingUI = false;
+        }
+    }
+
+    /**
+     * Resetea el toggle del boomerang y desactiva el boomerang en AmbianceStage.
+     */
+    private void resetBoomerangToggle() {
+        revertToggle();
+        if (ambianceStage != null) ambianceStage.deactivateBoomerang();
+    }
+
+    /**
+     * Manejador FXML del toggle de boomerang.
+     * La guardia refreshingUI previene recursión cuando se hace setSelected programáticamente.
+     */
+    @FXML
+    private void onToggleBoomerang() {
+        if (refreshingUI) return;
+        if (btnBoomerang == null || ambianceStage == null) return;
+
+        boolean wantOn = btnBoomerang.isSelected();
+        Long s = sessionConfig.getVideoSegmentStartMs();
+        Long e = sessionConfig.getVideoSegmentEndMs();
+        String src = sessionConfig.getBackgroundImagePath();
+
+        if (!wantOn) {
+            // Toggle apagado
+            ambianceStage.deactivateBoomerang();
+            sessionConfig.setBoomerangEnabled(false);
+            manager.save(sessionConfig);
+            refreshSegmentLabel();
+            return;
+        }
+
+        // Toggle encendido — validar condiciones
+        if (src == null || s == null || e == null) {
+            revertToggle();
+            return;
+        }
+        sessionConfig.setBoomerangEnabled(true);
+        manager.save(sessionConfig);
+
+        if (boomerangBaker.isCached(src, s, e)) {
+            // Cache hit: activación instantánea sin bake (T-06)
+            ambianceStage.activateBoomerang(boomerangBaker.cacheKeyPath(src, s, e).toString());
+            updateBoomerangEnablement();
+            refreshSegmentLabel();
+            return;
+        }
+
+        // Cache miss: iniciar bake asíncrono
+        startBake(src, s, e);
+    }
+
+    /**
+     * Inicia el bake asíncrono y configura el estado pendiente.
+     */
+    private void startBake(String src, long s, long e) {
+        bakeGuardSrc   = src;
+        bakeGuardStart = s;
+        bakeGuardEnd   = e;
+        if (lblSegmentInfo != null) lblSegmentInfo.setText("Baking boomerang…");
+        // Deshabilitar el toggle durante el bake para evitar doble disparo
+        if (btnBoomerang != null) btnBoomerang.setDisable(true);
+        boomerangBaker.bakeAsync(src, s, e,
+                outPath -> Platform.runLater(() -> onBakeSuccess(outPath, src, s, e)),
+                err     -> Platform.runLater(() -> onBakeFailure(err)));
+    }
+
+    /**
+     * Callback de éxito del bake, ejecutado en el hilo FX.
+     * Aplica la guardia de stale-bake antes de activar el boomerang.
+     */
+    private void onBakeSuccess(java.nio.file.Path out, String src, long s, long e) {
+        boolean stillValid =
+                btnBoomerang != null && btnBoomerang.isSelected()
+                && src.equals(sessionConfig.getBackgroundImagePath())
+                && sessionConfig.getVideoSegmentStartMs() != null
+                && s == sessionConfig.getVideoSegmentStartMs()
+                && e == sessionConfig.getVideoSegmentEndMs()
+                && src.equals(bakeGuardSrc)
+                && s == bakeGuardStart
+                && e == bakeGuardEnd;
+
+        if (!stillValid) {
+            // Bake obsoleto: descartar silenciosamente (T-10)
+            updateBoomerangEnablement();
+            refreshSegmentLabel();
+            return;
+        }
+        ambianceStage.activateBoomerang(out.toString());
+        updateBoomerangEnablement();
+        refreshSegmentLabel();
+    }
+
+    /**
+     * Callback de fallo del bake, ejecutado en el hilo FX.
+     * El toggle nunca queda bloqueado: revertToggle() se llama primero.
+     */
+    private void onBakeFailure(String stderrTail) {
+        revertToggle();
+        if (ambianceStage != null) ambianceStage.deactivateBoomerang();
+        sessionConfig.setBoomerangEnabled(false);
+        manager.save(sessionConfig);
+        updateBoomerangEnablement();
+        if (lblSegmentInfo != null) {
+            lblSegmentInfo.setText("Boomerang bake failed");
+            PauseTransition pt = new PauseTransition(Duration.seconds(3));
+            pt.setOnFinished(ev -> refreshSegmentLabel());
+            pt.play();
+        }
+        System.err.println(stderrTail);
+    }
+
+    /**
+     * Si el boomerang está ON al re-marcar un segmento, recomputa o re-bakea.
+     */
+    private void rebakeIfBoomerangOn() {
+        if (btnBoomerang == null || !btnBoomerang.isSelected()) return;
+        String src = sessionConfig.getBackgroundImagePath();
+        Long s = sessionConfig.getVideoSegmentStartMs();
+        Long e = sessionConfig.getVideoSegmentEndMs();
+        if (src == null || s == null || e == null) return;
+        if (boomerangBaker.isCached(src, s, e)) {
+            // Cache hit: swap instantáneo (T-09)
+            ambianceStage.activateBoomerang(boomerangBaker.cacheKeyPath(src, s, e).toString());
+            refreshSegmentLabel();
+        } else {
+            // Cache miss: re-bake; el clip bakeado actual sigue reproduciendo (T-08)
+            startBake(src, s, e);
+        }
     }
 
     // --- Selección de pantalla de ambiance ---
@@ -735,6 +931,10 @@ public class PlayerController {
         if (btnClearSegment != null) btnClearSegment.setDisable(!isVideo);
         pendingSegmentStart = null;
         refreshSegmentLabel();
+        // Resetear boomerang al cambiar el fondo (T-12/T-13)
+        resetBoomerangToggle();
+        sessionConfig.setBoomerangEnabled(false);
+        updateBoomerangEnablement();
     }
 
     /**
@@ -1138,6 +1338,31 @@ public class PlayerController {
                 if (ambianceStage != null) ambianceStage.setVideoRate(restoredRate);
                 ambianceStage.setBackground(bgPathFinal);   // dispara setVideo → aplica campos en READY
                 updateBackgroundLabel(bgPathFinal);          // alterna visibilidad de segmentControls
+
+                // Bloque de restauración de boomerang — R-4: debe ir DESPUÉS de updateBackgroundLabel
+                // (segmento ya establecido, velocidad ya establecida, fondo ya cargado)
+                boolean isVideoBg = "Video".equals(backgroundMediaType(bgPathFinal));
+                boolean wantBoomerang = Boolean.TRUE.equals(cfg.getBoomerangEnabled());
+                if (wantBoomerang && isVideoBg && segStart != null && segEnd != null && ffmpegAvailable) {
+                    sessionConfig.setBoomerangEnabled(true);
+                    refreshingUI = true;
+                    try {
+                        if (btnBoomerang != null) btnBoomerang.setSelected(true);
+                    } finally {
+                        refreshingUI = false;
+                    }
+                    if (boomerangBaker.isCached(bgPathFinal, segStart, segEnd)) {
+                        // Cache hit: activación instantánea (T-17)
+                        ambianceStage.activateBoomerang(
+                                boomerangBaker.cacheKeyPath(bgPathFinal, segStart, segEnd).toString());
+                    } else {
+                        // Cache miss: re-bake silencioso (T-18)
+                        startBake(bgPathFinal, segStart, segEnd);
+                    }
+                } else {
+                    sessionConfig.setBoomerangEnabled(false);
+                }
+                updateBoomerangEnablement();
             } else {
                 updateBackgroundLabel(null);
             }
