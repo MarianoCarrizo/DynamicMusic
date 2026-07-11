@@ -598,8 +598,9 @@ public class PlayerController {
         }
         Duration end = ambianceStage.getCurrentVideoTime();
         Duration gap = end.subtract(pendingSegmentStart);
-        if (end.lessThanOrEqualTo(pendingSegmentStart) || gap.lessThan(Duration.seconds(2))) {
-            if (lblSegmentInfo != null) lblSegmentInfo.setText("End must be at least 2s after start");
+        // Piso de 0.5s: verificado empíricamente que loops sub-2s reproducen sin problemas
+        if (end.lessThanOrEqualTo(pendingSegmentStart) || gap.lessThan(Duration.millis(500))) {
+            if (lblSegmentInfo != null) lblSegmentInfo.setText("End must be at least 0.5s after start");
             return; // loop activo sin cambios; nada persistido
         }
         ambianceStage.setVideoSegment(pendingSegmentStart, end);
