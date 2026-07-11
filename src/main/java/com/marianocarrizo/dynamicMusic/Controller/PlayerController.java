@@ -1030,6 +1030,11 @@ public class PlayerController {
         // 3. CRITICAL ORDER: setBackground(path) FIRST, then activateBoomerang(baked)
         //    activateBoomerang internally re-calls setBackground(currentBackgroundPath);
         //    currentBackgroundPath must be pendingBgPath BEFORE that re-call
+        // Si el boomerang pendiente está apagado, limpiar el estado previo ANTES de setBackground:
+        // el branch de video confía en el estado del llamador y reproduciría el bake viejo.
+        if (!pendingBoomerangOn) {
+            ambianceStage.resetBoomerang();
+        }
         ambianceStage.setBackground(pendingBgPath);
         if (pendingBoomerangOn && pendingBakedPath != null) {
             ambianceStage.activateBoomerang(pendingBakedPath);

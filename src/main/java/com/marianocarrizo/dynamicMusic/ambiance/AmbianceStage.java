@@ -382,6 +382,15 @@ public class AmbianceStage {
     }
 
     /**
+     * Limpia el estado boomerang sin re-reproducir el fondo.
+     * Para llamadores que invocan setBackground inmediatamente después
+     * (el branch de video confía en el estado que fijó el llamador).
+     */
+    public void resetBoomerang() {
+        clearBoomerangState();
+    }
+
+    /**
      * Sets a single background for the whole window:
      *  - Video (MP4/AVI) or GIF: played/shown; particles run if an effect is active.
      *  - Static image (PNG/JPG/JPEG/BMP): shown with particles on top.
