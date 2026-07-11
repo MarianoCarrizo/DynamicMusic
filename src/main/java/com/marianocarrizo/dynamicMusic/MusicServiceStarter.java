@@ -1,6 +1,7 @@
 package com.marianocarrizo.dynamicMusic;
 
 import com.marianocarrizo.dynamicMusic.Controller.PlayerController;
+import com.marianocarrizo.dynamicMusic.ambiance.BoomerangBaker;
 import com.marianocarrizo.dynamicMusic.Enums.TrackType;
 import com.marianocarrizo.dynamicMusic.config.SessionConfig;
 import com.marianocarrizo.dynamicMusic.config.SessionConfigManager;
@@ -87,6 +88,10 @@ public class MusicServiceStarter extends Application {
 
         // Captura de teclado numérico - 1, 2, 3, 4
         PlayerController controller = loader.getController();
+
+        // Sondeo de ffmpeg: se inyecta ANTES de applySession para que la restauración
+        // del boomerang sepa si ffmpeg está disponible antes de intentar un re-bake
+        controller.setFfmpegAvailable(BoomerangBaker.isFfmpegAvailable());
 
         // Auto-carga de sesión guardada (G3): se aplica ANTES de stage.show()
         // para que la UI refleje el estado anterior desde el primer render

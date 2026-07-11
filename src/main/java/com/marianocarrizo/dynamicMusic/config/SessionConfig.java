@@ -64,6 +64,9 @@ public class SessionConfig {
     // Velocidad de reproducción del video; boxed Double para null-safety (null en sesiones antiguas → defecto 1.0)
     private Double videoPlaybackRate;
 
+    // Boomerang: null o ausente en sesiones antiguas se trata como false (Boolean.TRUE.equals(null) == false)
+    private Boolean boomerangEnabled;
+
     public SessionConfig() {
         this.assignments = new LinkedHashMap<>();
     }
@@ -271,5 +274,16 @@ public class SessionConfig {
 
     public void setVideoPlaybackRate(Double rate) {
         this.videoPlaybackRate = rate;
+    }
+
+    // --- Boomerang ---
+
+    /** Puede retornar null en sesiones antiguas; usar Boolean.TRUE.equals() para null-safety. */
+    public Boolean getBoomerangEnabled() {
+        return boomerangEnabled;
+    }
+
+    public void setBoomerangEnabled(Boolean v) {
+        this.boomerangEnabled = v;
     }
 }

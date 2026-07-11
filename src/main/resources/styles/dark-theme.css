@@ -435,3 +435,9 @@
 .list-cell:filled:selected:focused {
     -fx-background-color: #4a4a5a;
 }
+
+/* Estado ON del toggle de boomerang */
+.btn-secondary:selected {
+    -fx-background-color: #1db954;
+    -fx-text-fill: #0d0d0d;
+}

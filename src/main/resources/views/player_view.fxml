@@ -76,6 +76,11 @@
                         <Label text="Speed:" styleClass="lbl-session-title" minWidth="45"/>
                         <ComboBox fx:id="cmbVideoSpeed" HBox.hgrow="ALWAYS" maxWidth="Infinity" onAction="#onSelectVideoSpeed"/>
                     </HBox>
+                    <HBox spacing="6" alignment="CENTER_LEFT">
+                        <ToggleButton fx:id="btnBoomerang" text="↩ Boomerang" onAction="#onToggleBoomerang"
+                                      HBox.hgrow="ALWAYS" maxWidth="Infinity" styleClass="btn-secondary" disable="true"/>
+                        <Label fx:id="lblBoomerangHint" text="" styleClass="lbl-preview-track" minWidth="90"/>
+                    </HBox>
                 </VBox>
 
                 <!-- Effect block -->
