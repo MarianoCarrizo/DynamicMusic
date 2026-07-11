@@ -742,7 +742,9 @@ public class AmbianceStage {
         if (start == null || end == null || !start.lessThan(end)) return;
         segmentStart = start;
         segmentEnd   = end;
-        if (currentPlayer != null) {
+        // Si el boomerang está activo, el archivo bakeado ES el segmento;
+        // no mutar startTime/stopTime del player en vivo (se recalcula tras el swap).
+        if (!boomerangActive && currentPlayer != null) {
             currentPlayer.setStartTime(start);
             currentPlayer.setStopTime(end);
         }

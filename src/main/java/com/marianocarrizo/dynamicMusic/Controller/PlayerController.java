@@ -803,7 +803,10 @@ public class PlayerController {
                 && e == bakeGuardEnd;
 
         if (!stillValid) {
-            // Bake obsoleto: descartar silenciosamente (T-10)
+            // Bake obsoleto: revertir el toggle y corregir el estado persistido (T-10)
+            revertToggle();
+            sessionConfig.setBoomerangEnabled(false);
+            manager.save(sessionConfig);
             updateBoomerangEnablement();
             refreshSegmentLabel();
             return;
@@ -931,10 +934,13 @@ public class PlayerController {
         if (btnClearSegment != null) btnClearSegment.setDisable(!isVideo);
         pendingSegmentStart = null;
         refreshSegmentLabel();
-        // Resetear boomerang al cambiar el fondo (T-12/T-13)
-        resetBoomerangToggle();
-        sessionConfig.setBoomerangEnabled(false);
-        updateBoomerangEnablement();
+        // Resetear boomerang al cambiar el fondo (T-12/T-13).
+        // Durante restauración de sesión se omite: el bloque de restore aplica el estado correcto.
+        if (!applyingSession) {
+            resetBoomerangToggle();
+            sessionConfig.setBoomerangEnabled(false);
+            updateBoomerangEnablement();
+        }
     }
 
     /**
@@ -1321,6 +1327,8 @@ public class PlayerController {
 
         final String bgPathFinal = bgPath;
         Platform.runLater(() -> {
+            applyingSession = true;
+            try {
             if (ambianceStage != null && bgPathFinal != null) {
                 boolean isVideo = "Video".equals(backgroundMediaType(bgPathFinal));
                 if (isVideo && segStart != null && segEnd != null) {
@@ -1376,6 +1384,9 @@ public class PlayerController {
                 }
             } finally {
                 refreshingUI = false;
+            }
+            } finally {
+                applyingSession = false;
             }
         });
 
