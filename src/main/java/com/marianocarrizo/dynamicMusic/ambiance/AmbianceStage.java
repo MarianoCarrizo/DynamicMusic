@@ -1,6 +1,7 @@
 package com.marianocarrizo.dynamicMusic.ambiance;
 
 import com.marianocarrizo.dynamicMusic.Enums.TrackType;
+import javafx.application.Platform;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;
@@ -24,6 +25,8 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 
 /**
@@ -100,6 +103,16 @@ public class AmbianceStage {
     // Estado de boomerang: cuando está activo, setVideo reproduce el archivo bakeado en lugar del original
     private boolean boomerangActive = false;
     private String  bakedVideoPath  = null;
+
+    // Executor de inicialización de media: mueve new Media(uri) fuera del hilo FX
+    private final ExecutorService mediaInit = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "media-init");
+        t.setDaemon(true);
+        return t;
+    });
+    // Contador de generación: protege callbacks Platform.runLater contra media obsoleto
+    // Solo se accede desde el hilo FX; no necesita volatile
+    private int mediaGeneration = 0;
 
     public AmbianceStage() {
         moodEffects.put(TrackType.RAGED,     EffectType.FIRE);
@@ -631,6 +644,7 @@ public class AmbianceStage {
     }
 
     private void clearMedia() {
+        mediaGeneration++; // invalida cualquier callback de video pendiente
         disposePlayer();
         loadingIndicator.setVisible(false);
         imageView.setImage(null);
@@ -639,6 +653,7 @@ public class AmbianceStage {
     }
 
     private void setImage(File f) {
+        mediaGeneration++; // invalida cualquier callback de video pendiente (transición video→imagen)
         disposePlayer();
         loadingIndicator.setVisible(false);
         mediaView.setVisible(false);
@@ -670,47 +685,66 @@ public class AmbianceStage {
         // Cuando el boomerang está activo, reproducir el archivo bakeado en lugar del original
         File toPlay = (boomerangActive && bakedVideoPath != null) ? new File(bakedVideoPath) : f;
 
+        // Incrementar generación ANTES de cualquier trabajo en background
+        final int gen = ++mediaGeneration;
+
         imageView.setVisible(false);
         imageView.setImage(null);
-        disposePlayer();
-        Media media = new Media(toPlay.toURI().toString());
-        currentPlayer = new MediaPlayer(media);
-        currentPlayer.setCycleCount(MediaPlayer.INDEFINITE);
-        currentPlayer.setMute(true);
-        // Aplicación pre-READY del segmento: solo cuando NO está activo el boomerang
-        // (el archivo bakeado ya es el segmento completo — no se aplica startTime/stopTime)
-        if (!(boomerangActive && bakedVideoPath != null)) {
-            if (segmentStart != null && segmentEnd != null) {
-                currentPlayer.setStartTime(segmentStart);
-                currentPlayer.setStopTime(segmentEnd);
-            }
-        }
-        // Velocidad de reproducción: no requiere estado READY; se aplica directamente
-        currentPlayer.setRate(videoRate);
-        mediaView.setMediaPlayer(currentPlayer);
+        disposePlayer();                   // descartar el player anterior de forma síncrona
         mediaView.setVisible(true);
-        currentPlayer.setOnError(this::onMediaError);
-        // Captura de identidad: ocultar el indicador solo si este player sigue siendo el actual
-        MediaPlayer player = currentPlayer;
-        player.setOnReady(() -> {
-            if (currentPlayer == player) {
-                loadingIndicator.setVisible(false);
-                applyFitToMediaView(); // las dimensiones del media ya son válidas en READY
-                // Re-afirmar segmento solo cuando el boomerang NO está activo
-                // (previene que un segmento obsoleto se aplique al palíndromo bakeado)
-                if (!(boomerangActive && bakedVideoPath != null)) {
-                    if (segmentStart != null && segmentEnd != null) {
-                        player.setStartTime(segmentStart);
-                        player.setStopTime(segmentEnd);
-                    }
-                }
-                if (onVideoReady != null) onVideoReady.run();
+        loadingIndicator.setVisible(true); // spinner PRIMERO — pinta antes de cualquier llamada nativa
+
+        final String uri = toPlay.toURI().toString();
+        final boolean bakedActive = (boomerangActive && bakedVideoPath != null);
+
+        mediaInit.submit(() -> {
+            Media media;
+            try {
+                media = new Media(uri);    // sondeo nativo pesado — fuera del hilo FX
+            } catch (Exception ex) {
+                Platform.runLater(this::onMediaError);
+                return;
             }
+            // Volver al hilo FX para construir el player y asignarlo al scene graph
+            Platform.runLater(() -> {
+                // Guardia de generación: si el usuario cambió el fondo mientras el sondeo
+                // corría, este callback es obsoleto — descartar sin tocar ningún estado
+                if (gen != mediaGeneration) {
+                    new MediaPlayer(media).dispose(); // evitar fuga del Media ya inicializado
+                    return;
+                }
+                MediaPlayer player = new MediaPlayer(media);
+                currentPlayer = player;
+                player.setCycleCount(MediaPlayer.INDEFINITE);
+                player.setMute(true);
+                // Aplicar segmento pre-READY solo cuando el boomerang NO está activo
+                if (!bakedActive && segmentStart != null && segmentEnd != null) {
+                    player.setStartTime(segmentStart);
+                    player.setStopTime(segmentEnd);
+                }
+                player.setRate(videoRate);
+                // CRÍTICO: mediaView y loadingIndicator se leen como campos de instancia
+                // al momento de ejecución — nunca capturados como locales antes del submit,
+                // para que rebuildStage() pueda reasignar los campos sin romper este callback
+                mediaView.setMediaPlayer(player);
+                player.setOnError(this::onMediaError);
+                player.setOnReady(() -> {
+                    // Doble guardia: identidad + generación (defensa en profundidad)
+                    if (currentPlayer == player && gen == mediaGeneration) {
+                        loadingIndicator.setVisible(false);
+                        applyFitToMediaView();
+                        // Re-afirmar segmento en READY cuando el boomerang NO está activo
+                        if (!bakedActive && segmentStart != null && segmentEnd != null) {
+                            player.setStartTime(segmentStart);
+                            player.setStopTime(segmentEnd);
+                        }
+                        if (onVideoReady != null) onVideoReady.run();
+                    }
+                });
+                player.play();
+                applyFitToMediaView();
+            });
         });
-        loadingIndicator.setVisible(true);
-        currentPlayer.play();
-        // Aplicar modos no-FILL de inmediato (no necesitan dimensiones); FILL se aplica en onReady
-        applyFitToMediaView();
     }
 
     private void onMediaError() {
@@ -842,6 +876,7 @@ public class AmbianceStage {
 
     public void dispose() {
         stopParticleEffect();
+        mediaInit.shutdownNow();
         disposePlayer();
         stage.close();
     }
