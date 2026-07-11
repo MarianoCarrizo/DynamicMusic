@@ -317,6 +317,13 @@ public class PlayerController {
             bgPreviewPanel.setVisible(false);
             bgPreviewPanel.setManaged(false);
         }
+        // Clip para que el MediaView no desborde el StackPane cuando el video es más grande que el panel
+        if (bgPreviewStack != null) {
+            javafx.scene.shape.Rectangle clip = new javafx.scene.shape.Rectangle();
+            clip.widthProperty().bind(bgPreviewStack.widthProperty());
+            clip.heightProperty().bind(bgPreviewStack.heightProperty());
+            bgPreviewStack.setClip(clip);
+        }
 
         // Combo de selección de pantalla
         populateScreenCombo();
@@ -1619,6 +1626,13 @@ public class PlayerController {
             } else {
                 updateBackgroundLabel(null);
             }
+            // Invariante de startup (spec B2-c): el panel de preview NUNCA debe quedar visible
+            // tras la restauración de sesión — cualquier estado pendiente previo se descarta aquí.
+            if (bgPreviewPanel != null) {
+                bgPreviewPanel.setVisible(false);
+                bgPreviewPanel.setManaged(false);
+            }
+            pendingBgPath = null;
             } finally {
                 applyingSession = false;
             }
