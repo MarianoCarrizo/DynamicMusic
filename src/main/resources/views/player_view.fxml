@@ -84,28 +84,28 @@
                     <Label text="PAUSED" minWidth="90"/>
                     <Slider fx:id="sldSensPaused" min="0.5" max="8.0" HBox.hgrow="ALWAYS"
                             showTickMarks="true" majorTickUnit="1.0" blockIncrement="0.5"
-                            styleClass="spotify-slider, settings-slider"/>
+                            styleClass="spotify-slider"/>
                     <Label fx:id="lblSensPaused" minWidth="40" text="2.0x" styleClass="lbl-time"/>
                 </HBox>
                 <HBox styleClass="sensitivity-row" spacing="8" alignment="CENTER_LEFT">
                     <Label text="NORMAL" minWidth="90"/>
                     <Slider fx:id="sldSensNormal" min="0.5" max="8.0" HBox.hgrow="ALWAYS"
                             showTickMarks="true" majorTickUnit="1.0" blockIncrement="0.5"
-                            styleClass="spotify-slider, settings-slider"/>
+                            styleClass="spotify-slider"/>
                     <Label fx:id="lblSensNormal" minWidth="40" text="2.0x" styleClass="lbl-time"/>
                 </HBox>
                 <HBox styleClass="sensitivity-row" spacing="8" alignment="CENTER_LEFT">
                     <Label text="RAGED" minWidth="90"/>
                     <Slider fx:id="sldSensRaged" min="0.5" max="8.0" HBox.hgrow="ALWAYS"
                             showTickMarks="true" majorTickUnit="1.0" blockIncrement="0.5"
-                            styleClass="spotify-slider, settings-slider"/>
+                            styleClass="spotify-slider"/>
                     <Label fx:id="lblSensRaged" minWidth="40" text="2.0x" styleClass="lbl-time"/>
                 </HBox>
                 <HBox styleClass="sensitivity-row" spacing="8" alignment="CENTER_LEFT">
                     <Label text="ADVANTAGE" minWidth="90"/>
                     <Slider fx:id="sldSensAdvantage" min="0.5" max="8.0" HBox.hgrow="ALWAYS"
                             showTickMarks="true" majorTickUnit="1.0" blockIncrement="0.5"
-                            styleClass="spotify-slider, settings-slider"/>
+                            styleClass="spotify-slider"/>
                     <Label fx:id="lblSensAdvantage" minWidth="40" text="2.0x" styleClass="lbl-time"/>
                 </HBox>
 
@@ -126,7 +126,7 @@
                     <Label text="MASTER" minWidth="90"/>
                     <Slider fx:id="sldMasterVolume" min="0.0" max="1.0" value="1.0"
                             HBox.hgrow="ALWAYS" blockIncrement="0.05"
-                            styleClass="spotify-slider, settings-slider"/>
+                            styleClass="spotify-slider"/>
                     <Label fx:id="lblMasterVolume" minWidth="40" text="100%"
                            styleClass="lbl-time"/>
                 </HBox>

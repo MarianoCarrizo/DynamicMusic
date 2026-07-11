@@ -278,17 +278,14 @@
 .spotify-slider { -fx-cursor: hand; }
 .spotify-slider .track { -fx-background-color: #2c2c30; -fx-background-radius: 0px; -fx-pref-height: 4px; }
 .spotify-slider .range-bar { -fx-background-radius: 0px; }
+/* Thumb siempre visible: indica el valor/posición actual en todos los sliders */
 .spotify-slider .thumb {
     -fx-background-color: #ffffff;
     -fx-background-radius: 0px;
     -fx-pref-width: 10px;
     -fx-pref-height: 10px;
-    -fx-opacity: 0;
     -fx-background-insets: 0;
 }
-.spotify-slider:hover .thumb { -fx-opacity: 1; }
-/* Sliders de ajuste (volumen, sensibilidad): el thumb siempre visible — es el indicador de valor */
-.settings-slider .thumb { -fx-opacity: 1; }
 .lbl-time { -fx-font-family: "Segoe UI", Arial, sans-serif; -fx-font-size: 11px; -fx-text-fill: #a7a7a7; -fx-min-width: 30px; }
 
 /* =========================================================================
