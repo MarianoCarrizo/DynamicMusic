@@ -624,8 +624,8 @@ public class PlayerController {
 
     /**
      * Disposes the bg preview player and resets ImageView.
-     * Called from exactly 4 sites: onCancelBackground, onSetBackground (replace),
-     * onApplyBackground (after handoff), and window close.
+     * Called from exactly 5 sites: onCancelBackground, onSetBackground (replace),
+     * onEditBackground (replace), onApplyBackground (after handoff), and window close.
      */
     private void disposeBgPreview() {
         bgPreviewGeneration++;
@@ -711,11 +711,8 @@ public class PlayerController {
                     bgPreviewPlayer = player;
                     player.setMute(true);
                     player.setCycleCount(MediaPlayer.INDEFINITE);
-                    // Re-apply pending segment if already set
-                    if (pendingBgStart != null && pendingBgEnd != null) {
-                        player.setStartTime(pendingBgStart);
-                        player.setStopTime(pendingBgEnd);
-                    }
+                    // El preview NO aplica startTime/stopTime: se usa para re-marcar, así que
+                    // el scrub debe recorrer el video completo; el loop se muestra en el label.
                     player.setRate(pendingBgRate);
                     if (bgPreviewMediaView != null) {
                         bgPreviewMediaView.setMediaPlayer(player);
@@ -1069,6 +1066,8 @@ public class PlayerController {
     private void onEditBackground() {
         String applied = sessionConfig.getBackgroundImagePath();
         if (applied == null || !new File(applied).exists()) return;
+        // Edit reemplaza cualquier preview activo: liberar el player anterior primero
+        disposeBgPreview();
         // Preload pending* from applied state
         pendingBgPath = applied;
         Long sMs = sessionConfig.getVideoSegmentStartMs();
