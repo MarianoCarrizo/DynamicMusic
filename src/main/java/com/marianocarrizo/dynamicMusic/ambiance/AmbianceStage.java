@@ -97,6 +97,10 @@ public class AmbianceStage {
     // Velocidad de reproducción del video; 1.0 = normal; rango [0.25, 2.0]
     private double videoRate = 1.0;
 
+    // Estado de boomerang: cuando está activo, setVideo reproduce el archivo bakeado en lugar del original
+    private boolean boomerangActive = false;
+    private String  bakedVideoPath  = null;
+
     public AmbianceStage() {
         moodEffects.put(TrackType.RAGED,     EffectType.FIRE);
         moodEffects.put(TrackType.NORMAL,    EffectType.AURORA);
@@ -358,6 +362,12 @@ public class AmbianceStage {
 
     // --- Background (session-wide, independent of mood) ---
 
+    /** Limpia el estado de boomerang. Llamado en todos los sites no-video de setBackground. */
+    private void clearBoomerangState() {
+        boomerangActive = false;
+        bakedVideoPath  = null;
+    }
+
     /**
      * Sets a single background for the whole window:
      *  - Video (MP4/AVI) or GIF: played/shown; particles run if an effect is active.
@@ -368,6 +378,7 @@ public class AmbianceStage {
         currentBackgroundPath = path;
 
         if (path == null) {
+            clearBoomerangState();
             segmentStart = null;
             segmentEnd   = null;
             clearMedia();
@@ -376,6 +387,7 @@ public class AmbianceStage {
         }
         File f = new File(path);
         if (!f.exists()) {
+            clearBoomerangState();
             segmentStart = null;
             segmentEnd   = null;
             clearMedia();
@@ -385,26 +397,30 @@ public class AmbianceStage {
         try {
             String e = ext(path);
             if (isVideo(e)) {
-                // No nulificar: el llamador estableció los campos antes de setBackground durante restore
+                // No nulificar segmento ni boomerang: el llamador los estableció antes de setBackground durante restore
                 setVideo(f);
                 ensureParticlesRunning();
             } else if ("gif".equals(e)) {
+                clearBoomerangState();
                 segmentStart = null;
                 segmentEnd   = null;
                 setImage(f);
                 ensureParticlesRunning();
             } else if (isStaticImage(e)) {
+                clearBoomerangState();
                 segmentStart = null;
                 segmentEnd   = null;
                 setImage(f);
                 ensureParticlesRunning();
             } else {
+                clearBoomerangState();
                 segmentStart = null;
                 segmentEnd   = null;
                 clearMedia();
                 ensureParticlesRunning();
             }
         } catch (Exception ex) {
+            clearBoomerangState();
             segmentStart = null;
             segmentEnd   = null;
             clearMedia();
@@ -651,17 +667,23 @@ public class AmbianceStage {
     }
 
     private void setVideo(File f) {
+        // Cuando el boomerang está activo, reproducir el archivo bakeado en lugar del original
+        File toPlay = (boomerangActive && bakedVideoPath != null) ? new File(bakedVideoPath) : f;
+
         imageView.setVisible(false);
         imageView.setImage(null);
         disposePlayer();
-        Media media = new Media(f.toURI().toString());
+        Media media = new Media(toPlay.toURI().toString());
         currentPlayer = new MediaPlayer(media);
         currentPlayer.setCycleCount(MediaPlayer.INDEFINITE);
         currentPlayer.setMute(true);
-        // Aplicación pre-READY del segmento: la API garantiza que toma efecto en la transición READY
-        if (segmentStart != null && segmentEnd != null) {
-            currentPlayer.setStartTime(segmentStart);
-            currentPlayer.setStopTime(segmentEnd);
+        // Aplicación pre-READY del segmento: solo cuando NO está activo el boomerang
+        // (el archivo bakeado ya es el segmento completo — no se aplica startTime/stopTime)
+        if (!(boomerangActive && bakedVideoPath != null)) {
+            if (segmentStart != null && segmentEnd != null) {
+                currentPlayer.setStartTime(segmentStart);
+                currentPlayer.setStopTime(segmentEnd);
+            }
         }
         // Velocidad de reproducción: no requiere estado READY; se aplica directamente
         currentPlayer.setRate(videoRate);
@@ -674,10 +696,13 @@ public class AmbianceStage {
             if (currentPlayer == player) {
                 loadingIndicator.setVisible(false);
                 applyFitToMediaView(); // las dimensiones del media ya son válidas en READY
-                // Re-afirmar segmento (idempotente; también cubre setVideoSegment llamado entre creación y READY)
-                if (segmentStart != null && segmentEnd != null) {
-                    player.setStartTime(segmentStart);
-                    player.setStopTime(segmentEnd);
+                // Re-afirmar segmento solo cuando el boomerang NO está activo
+                // (previene que un segmento obsoleto se aplique al palíndromo bakeado)
+                if (!(boomerangActive && bakedVideoPath != null)) {
+                    if (segmentStart != null && segmentEnd != null) {
+                        player.setStartTime(segmentStart);
+                        player.setStopTime(segmentEnd);
+                    }
                 }
                 if (onVideoReady != null) onVideoReady.run();
             }
@@ -727,8 +752,11 @@ public class AmbianceStage {
      * Restablece el loop al video completo y nulifica los campos almacenados.
      * Si hay un player activo, re-afirma ZERO → duración del media
      * (guarda contra duración UNKNOWN/INDEFINITE).
+     * Limpia el estado de boomerang como defensa en profundidad
+     * (el controlador ya debería haberlo desactivado antes de llamar aquí).
      */
     public void clearVideoSegment() {
+        clearBoomerangState();
         segmentStart = null;
         segmentEnd   = null;
         if (currentPlayer != null) {
@@ -756,6 +784,40 @@ public class AmbianceStage {
         if (currentPlayer != null) {
             currentPlayer.setRate(videoRate);
         }
+    }
+
+    // --- Boomerang playback API ---
+
+    /**
+     * Activa el boomerang: recarga el fondo usando el archivo bakeado indicado.
+     * La velocidad de reproducción y el modo de ajuste se aplican normalmente via setVideo.
+     *
+     * @param bakedPath ruta absoluta del archivo MP4 bakeado (palíndromo A→B→A)
+     */
+    public void activateBoomerang(String bakedPath) {
+        this.boomerangActive = true;
+        this.bakedVideoPath  = bakedPath;
+        if (currentBackgroundPath != null) {
+            setBackground(currentBackgroundPath);
+        }
+    }
+
+    /**
+     * Desactiva el boomerang: recarga el fondo original con el segmento A→B normal.
+     */
+    public void deactivateBoomerang() {
+        this.boomerangActive = false;
+        this.bakedVideoPath  = null;
+        if (currentBackgroundPath != null) {
+            setBackground(currentBackgroundPath);
+        }
+    }
+
+    /**
+     * Retorna true si el boomerang está activo en este momento.
+     */
+    public boolean isBoomerangActive() {
+        return boomerangActive;
     }
 
     /**
