@@ -124,6 +124,7 @@ public class PlayerController {
     @FXML private ProgressIndicator            bgPreviewSpinner;
     @FXML private Label           lblBgPreviewPlaceholder;
     @FXML private Slider          bgPreviewSlider;
+    @FXML private javafx.scene.layout.Pane bgMarkBand;
     @FXML private Label           lblBgPreviewCurrentTime;
     @FXML private Label           lblBgPreviewTotalTime;
     @FXML private Button          btnBgMarkStart;
@@ -323,6 +324,10 @@ public class PlayerController {
             clip.widthProperty().bind(bgPreviewStack.widthProperty());
             clip.heightProperty().bind(bgPreviewStack.heightProperty());
             bgPreviewStack.setClip(clip);
+        }
+        // Redibujar la banda de marcas cuando cambia el ancho disponible
+        if (bgMarkBand != null) {
+            bgMarkBand.widthProperty().addListener((obs, o, n) -> updateBgMarkOverlay());
         }
 
         // Combo de selección de pantalla
@@ -733,6 +738,8 @@ public class PlayerController {
                             if (btnBgClearSegment != null) btnBgClearSegment.setDisable(false);
                             if (cmbBgVideoSpeed != null)   cmbBgVideoSpeed.setDisable(false);
                             updateBgBoomerangEnablement();
+                            // Duración ya conocida: refrescar label y banda de marcas
+                            updateBgSegmentLabel();
                             // Wire time listener
                             Duration total = player.getTotalDuration();
                             if (total != null && !total.isUnknown() && !total.isIndefinite()) {
@@ -774,16 +781,61 @@ public class PlayerController {
         }
     }
 
-    /** Updates lblBgSegmentInfo with the current pending marks. */
+    /** Updates lblBgSegmentInfo with the current pending marks (with guidance text). */
     private void updateBgSegmentLabel() {
-        if (lblBgSegmentInfo == null) return;
-        if (pendingBgStart == null || pendingBgEnd == null) {
-            lblBgSegmentInfo.setText("Full video");
-        } else {
-            lblBgSegmentInfo.setText("Loop: "
-                    + formatSegmentTime(pendingBgStart)
-                    + " – "
-                    + formatSegmentTime(pendingBgEnd));
+        if (lblBgSegmentInfo != null) {
+            if (pendingBgStart == null) {
+                lblBgSegmentInfo.setText("Full video — press Mark start during playback");
+            } else if (pendingBgEnd == null) {
+                lblBgSegmentInfo.setText("Start " + formatSegmentTime(pendingBgStart)
+                        + " — now press Mark end");
+            } else {
+                lblBgSegmentInfo.setText("Loop: "
+                        + formatSegmentTime(pendingBgStart)
+                        + " – "
+                        + formatSegmentTime(pendingBgEnd));
+            }
+        }
+        updateBgMarkOverlay();
+    }
+
+    // Rectángulos de la banda de marcas (rango A-B + ticks); hijos de bgMarkBand
+    private final javafx.scene.shape.Rectangle bgMarkRange = new javafx.scene.shape.Rectangle();
+    private final javafx.scene.shape.Rectangle bgMarkTickA = new javafx.scene.shape.Rectangle();
+    private final javafx.scene.shape.Rectangle bgMarkTickB = new javafx.scene.shape.Rectangle();
+
+    /** Dibuja el rango marcado A-B sobre la banda alineada con el scrub del preview. */
+    private void updateBgMarkOverlay() {
+        if (bgMarkBand == null) return;
+        if (bgMarkBand.getChildren().isEmpty()) {
+            bgMarkRange.setFill(javafx.scene.paint.Color.web("#1db954", 0.45));
+            bgMarkTickA.setFill(javafx.scene.paint.Color.web("#1db954"));
+            bgMarkTickB.setFill(javafx.scene.paint.Color.web("#1db954"));
+            bgMarkBand.getChildren().addAll(bgMarkRange, bgMarkTickA, bgMarkTickB);
+        }
+        double w = bgMarkBand.getWidth();
+        Duration tot = bgPreviewPlayer != null ? bgPreviewPlayer.getTotalDuration() : null;
+        boolean valid = w > 0 && tot != null && !tot.isUnknown() && !tot.isIndefinite()
+                && tot.toMillis() > 0;
+        double aFrac = (valid && pendingBgStart != null)
+                ? Math.min(pendingBgStart.toMillis() / tot.toMillis(), 1.0) : -1;
+        double bFrac = (valid && pendingBgEnd != null)
+                ? Math.min(pendingBgEnd.toMillis() / tot.toMillis(), 1.0) : -1;
+        bgMarkTickA.setVisible(aFrac >= 0);
+        if (aFrac >= 0) {
+            bgMarkTickA.setX(aFrac * w - 1); bgMarkTickA.setY(0);
+            bgMarkTickA.setWidth(2);         bgMarkTickA.setHeight(6);
+        }
+        bgMarkTickB.setVisible(bFrac >= 0);
+        if (bFrac >= 0) {
+            bgMarkTickB.setX(bFrac * w - 1); bgMarkTickB.setY(0);
+            bgMarkTickB.setWidth(2);         bgMarkTickB.setHeight(6);
+        }
+        boolean hasRange = aFrac >= 0 && bFrac > aFrac;
+        bgMarkRange.setVisible(hasRange);
+        if (hasRange) {
+            bgMarkRange.setX(aFrac * w);              bgMarkRange.setY(1);
+            bgMarkRange.setWidth((bFrac - aFrac) * w); bgMarkRange.setHeight(4);
         }
     }
 
@@ -852,10 +904,8 @@ public class PlayerController {
             return;
         }
         pendingBgEnd = pos;
-        if (bgPreviewPlayer != null) {
-            bgPreviewPlayer.setStartTime(pendingBgStart);
-            bgPreviewPlayer.setStopTime(pendingBgEnd);
-        }
+        // NO aplicar startTime/stopTime al preview: debe seguir recorriendo el video completo
+        // para poder re-marcar; el rango marcado se visualiza en la banda sobre el scrub.
         updateBgSegmentLabel();
         updateBgBoomerangEnablement();
     }

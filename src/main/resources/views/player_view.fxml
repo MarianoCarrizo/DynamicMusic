@@ -73,6 +73,12 @@
                                            maxWidth="48" maxHeight="48"/>
                         <Label fx:id="lblBgPreviewPlaceholder" text="No preview" styleClass="lbl-preview-track"/>
                     </StackPane>
+                    <!-- Marks band: visual A-B range over the scrub timeline -->
+                    <HBox spacing="4" alignment="CENTER_LEFT">
+                        <Region minWidth="35" maxWidth="35"/>
+                        <Pane fx:id="bgMarkBand" HBox.hgrow="ALWAYS" prefHeight="6" minHeight="6" maxHeight="6"/>
+                        <Region minWidth="35" maxWidth="35"/>
+                    </HBox>
                     <!-- Scrub row -->
                     <HBox spacing="4" alignment="CENTER_LEFT">
                         <Label fx:id="lblBgPreviewCurrentTime" text="0:00" styleClass="lbl-time" minWidth="35"/>
