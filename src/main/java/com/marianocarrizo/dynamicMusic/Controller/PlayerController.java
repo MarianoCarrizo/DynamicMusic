@@ -719,7 +719,12 @@ public class PlayerController {
                         bgPreviewMediaView.setVisible(true);
                     }
 
-                    player.setOnReady(() -> {
+                    // El Media ya viene parseado del hilo de fondo: READY puede ocurrir antes
+                    // de registrar el handler y setOnReady no se dispara retroactivamente.
+                    final boolean[] bgReadyFired = { false };
+                    Runnable bgReadyHandler = () -> {
+                        if (bgReadyFired[0]) return;
+                        bgReadyFired[0] = true;
                         if (bgPreviewPlayer == player && gen == bgPreviewGeneration) {
                             if (bgPreviewSpinner != null) bgPreviewSpinner.setVisible(false);
                             // Enable controls per enablement matrix
@@ -760,8 +765,10 @@ public class PlayerController {
                                 });
                             }
                         }
-                    });
+                    };
+                    player.setOnReady(bgReadyHandler);
                     player.play();
+                    if (player.getStatus() == MediaPlayer.Status.READY) bgReadyHandler.run();
                 });
             });
         }

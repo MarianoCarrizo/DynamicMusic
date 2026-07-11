@@ -737,7 +737,13 @@ public class AmbianceStage {
                 // para que rebuildStage() pueda reasignar los campos sin romper este callback
                 mediaView.setMediaPlayer(player);
                 player.setOnError(this::onMediaError);
-                player.setOnReady(() -> {
+                // El Media ya viene parseado del hilo de fondo: el player puede llegar a READY
+                // ANTES de registrar el handler, y setOnReady no se dispara retroactivamente.
+                // Registrar y luego verificar el estado actual, con guardia de ejecución única.
+                final boolean[] readyFired = { false };
+                Runnable readyHandler = () -> {
+                    if (readyFired[0]) return;
+                    readyFired[0] = true;
                     // Doble guardia: identidad + generación (defensa en profundidad)
                     if (currentPlayer == player && gen == mediaGeneration) {
                         loadingIndicator.setVisible(false);
@@ -749,9 +755,11 @@ public class AmbianceStage {
                         }
                         if (onVideoReady != null) onVideoReady.run();
                     }
-                });
+                };
+                player.setOnReady(readyHandler);
                 player.play();
                 applyFitToMediaView();
+                if (player.getStatus() == MediaPlayer.Status.READY) readyHandler.run();
             });
         });
     }
