@@ -130,7 +130,8 @@ public final class BoomerangBaker {
                 "-ss", startSec,
                 "-to", endSec,
                 "-i", srcAbsPath,
-                "-vf", "split[fwd][rev];[rev]reverse[rev_out];[fwd][rev_out]concat=n=2:v=1:a=0[out]",
+                // -filter_complex (no -vf): las salidas etiquetadas + -map requieren un grafo complejo
+                "-filter_complex", "[0:v]split[fwd][rev];[rev]reverse[rev_out];[fwd][rev_out]concat=n=2:v=1:a=0[out]",
                 "-map", "[out]",
                 "-an",
                 "-c:v", "libx264",
