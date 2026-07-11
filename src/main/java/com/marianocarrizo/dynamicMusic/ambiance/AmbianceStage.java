@@ -94,6 +94,9 @@ public class AmbianceStage {
     // Callback del controlador: se dispara en cada transición READY de video en el hilo FX
     private Runnable onVideoReady = null;
 
+    // Velocidad de reproducción del video; 1.0 = normal; rango [0.25, 2.0]
+    private double videoRate = 1.0;
+
     public AmbianceStage() {
         moodEffects.put(TrackType.RAGED,     EffectType.FIRE);
         moodEffects.put(TrackType.NORMAL,    EffectType.AURORA);
@@ -660,6 +663,8 @@ public class AmbianceStage {
             currentPlayer.setStartTime(segmentStart);
             currentPlayer.setStopTime(segmentEnd);
         }
+        // Velocidad de reproducción: no requiere estado READY; se aplica directamente
+        currentPlayer.setRate(videoRate);
         mediaView.setMediaPlayer(currentPlayer);
         mediaView.setVisible(true);
         currentPlayer.setOnError(this::onMediaError);
@@ -740,6 +745,17 @@ public class AmbianceStage {
      */
     public Duration getCurrentVideoTime() {
         return currentPlayer != null ? currentPlayer.getCurrentTime() : Duration.ZERO;
+    }
+
+    /**
+     * Establece la velocidad de reproducción del video.
+     * El valor se clampea al rango [0.25, 2.0] y se aplica en vivo si hay un player activo.
+     */
+    public void setVideoRate(double rate) {
+        videoRate = Math.max(0.25, Math.min(2.0, rate));
+        if (currentPlayer != null) {
+            currentPlayer.setRate(videoRate);
+        }
     }
 
     /**

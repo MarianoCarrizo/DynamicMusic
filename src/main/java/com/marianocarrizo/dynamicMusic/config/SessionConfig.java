@@ -61,6 +61,9 @@ public class SessionConfig {
     private Long videoSegmentStartMs;
     private Long videoSegmentEndMs;
 
+    // Velocidad de reproducción del video; boxed Double para null-safety (null en sesiones antiguas → defecto 1.0)
+    private Double videoPlaybackRate;
+
     public SessionConfig() {
         this.assignments = new LinkedHashMap<>();
     }
@@ -255,4 +258,18 @@ public class SessionConfig {
 
     public Long getVideoSegmentEndMs() { return videoSegmentEndMs; }
     public void setVideoSegmentEndMs(Long ms) { this.videoSegmentEndMs = ms; }
+
+    // --- Video playback rate ---
+
+    /**
+     * Returns the persisted video playback rate.
+     * Defaults to 1.0 when the field is absent in old session files (Gson leaves it null).
+     */
+    public double getVideoPlaybackRate() {
+        return (videoPlaybackRate != null) ? videoPlaybackRate : 1.0;
+    }
+
+    public void setVideoPlaybackRate(Double rate) {
+        this.videoPlaybackRate = rate;
+    }
 }

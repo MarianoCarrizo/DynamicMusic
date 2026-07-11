@@ -115,6 +115,7 @@ public class PlayerController {
     @FXML private Button btnMarkEnd;
     @FXML private Label  lblSegmentInfo;
     @FXML private Button btnClearSegment;
+    @FXML private ComboBox<Double> cmbVideoSpeed;
 
     private File rootFolder;
 
@@ -259,6 +260,25 @@ public class PlayerController {
             });
             cmbFitMode.getItems().setAll(BackgroundFitMode.values());
             cmbFitMode.setValue(BackgroundFitMode.FILL);
+        }
+
+        // Combo de velocidad de reproducción de video
+        if (cmbVideoSpeed != null) {
+            cmbVideoSpeed.getItems().setAll(0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0);
+            cmbVideoSpeed.setConverter(new javafx.util.StringConverter<>() {
+                @Override public String toString(Double v) {
+                    if (v == null) return "";
+                    // Formatear sin ceros finales; "1x" en lugar de "1.0x"
+                    String s = (v == Math.floor(v)) ? String.valueOf(v.intValue()) : String.valueOf(v);
+                    return s + "x";
+                }
+                @Override public Double fromString(String s) {
+                    if (s == null || s.isEmpty()) return 1.0;
+                    try { return Double.parseDouble(s.replace("x", "")); }
+                    catch (NumberFormatException e) { return 1.0; }
+                }
+            });
+            cmbVideoSpeed.setValue(1.0);
         }
 
         // Combo de selección de pantalla
@@ -621,6 +641,18 @@ public class PlayerController {
         manager.save(sessionConfig);
         if (lblSegmentInfo != null) lblSegmentInfo.setText("Full video");
         if (btnMarkEnd != null) btnMarkEnd.setDisable(true);
+    }
+
+    // --- Velocidad de reproducción de video ---
+
+    @FXML
+    private void onSelectVideoSpeed() {
+        if (refreshingUI || cmbVideoSpeed == null) return;
+        Double v = cmbVideoSpeed.getValue();
+        if (v == null) return;
+        if (ambianceStage != null) ambianceStage.setVideoRate(v);
+        sessionConfig.setVideoPlaybackRate(v);
+        manager.save(sessionConfig);
     }
 
     // --- Selección de pantalla de ambiance ---
@@ -1083,6 +1115,10 @@ public class PlayerController {
         sessionConfig.setVideoSegmentStartMs(segStart);
         sessionConfig.setVideoSegmentEndMs(segEnd);
 
+        // Restaurar velocidad de reproducción de video
+        double restoredRate = cfg.getVideoPlaybackRate();
+        sessionConfig.setVideoPlaybackRate(restoredRate);
+
         final String bgPathFinal = bgPath;
         Platform.runLater(() -> {
             if (ambianceStage != null && bgPathFinal != null) {
@@ -1098,10 +1134,23 @@ public class PlayerController {
                         ambianceStage.clearVideoSegment();
                     }
                 }
+                // Establecer la velocidad ANTES de setBackground para que setVideo() la lea al crear el player
+                if (ambianceStage != null) ambianceStage.setVideoRate(restoredRate);
                 ambianceStage.setBackground(bgPathFinal);   // dispara setVideo → aplica campos en READY
                 updateBackgroundLabel(bgPathFinal);          // alterna visibilidad de segmentControls
             } else {
                 updateBackgroundLabel(null);
+            }
+            // Restaurar selección del combo dentro del bloque refreshingUI
+            refreshingUI = true;
+            try {
+                if (cmbVideoSpeed != null) {
+                    // Buscar el valor en la lista; si no existe, seleccionar 1.0
+                    boolean found = cmbVideoSpeed.getItems().contains(restoredRate);
+                    cmbVideoSpeed.setValue(found ? restoredRate : 1.0);
+                }
+            } finally {
+                refreshingUI = false;
             }
         });
 

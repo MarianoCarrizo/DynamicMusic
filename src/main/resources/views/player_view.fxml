@@ -72,6 +72,10 @@
                         <Button fx:id="btnClearSegment" text="Clear" onAction="#onClearSegment"
                                 styleClass="btn-secondary" disable="true"/>
                     </HBox>
+                    <HBox spacing="6" alignment="CENTER_LEFT">
+                        <Label text="Speed:" styleClass="lbl-session-title" minWidth="45"/>
+                        <ComboBox fx:id="cmbVideoSpeed" HBox.hgrow="ALWAYS" maxWidth="Infinity" onAction="#onSelectVideoSpeed"/>
+                    </HBox>
                 </VBox>
 
                 <!-- Effect block -->
