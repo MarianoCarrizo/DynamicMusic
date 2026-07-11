@@ -441,3 +441,57 @@
     -fx-background-color: #1db954;
     -fx-text-fill: #0d0d0d;
 }
+
+/* =========================================================================
+   BG PREVIEW PANEL (WU-5)
+   ========================================================================= */
+
+/* Primary action button — used by Apply in the preview panel */
+.btn-primary {
+    -fx-background-color: #1db954;
+    -fx-text-fill: #0d0d0d;
+    -fx-font-weight: bold;
+    -fx-background-radius: 0px !important;
+    -fx-padding: 7px 14px;
+    -fx-cursor: hand;
+}
+.btn-primary:hover {
+    -fx-background-color: #1ed760;
+}
+.btn-primary:disabled {
+    -fx-opacity: 0.35;
+    -fx-cursor: default;
+}
+
+/* Preview stack: dark background so MediaView and ImageView have a defined container */
+#bgPreviewStack {
+    -fx-background-color: #0d0d0f;
+    -fx-alignment: CENTER;
+}
+
+/* Spinner overlay: keep it centered and on top (StackPane handles z-order) */
+#bgPreviewSpinner {
+    -fx-max-width: 48px;
+    -fx-max-height: 48px;
+}
+
+/* Placeholder label when no media is loaded yet */
+#lblBgPreviewPlaceholder {
+    -fx-text-fill: #505058;
+    -fx-font-size: 12px;
+    -fx-font-style: italic;
+}
+
+/* bgPreviewSlider inherits spotify-slider — no additional rule needed */
+
+/* Segment info label in preview */
+#lblBgSegmentInfo {
+    -fx-text-fill: #909098;
+    -fx-font-size: 11px;
+}
+
+/* Boomerang hint label */
+#lblBgBoomerangHint {
+    -fx-text-fill: #e07040;
+    -fx-font-size: 11px;
+}

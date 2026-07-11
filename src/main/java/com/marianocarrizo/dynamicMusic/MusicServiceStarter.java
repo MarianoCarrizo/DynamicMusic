@@ -118,7 +118,7 @@ public class MusicServiceStarter extends Application {
         addResizeSupport(stage, root);
 
         stage.setMinWidth(820);
-        stage.setMinHeight(560);
+        stage.setMinHeight(620);
         stage.show();
     }
 
