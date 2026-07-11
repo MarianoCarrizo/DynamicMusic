@@ -105,6 +105,21 @@ public final class BoomerangBaker {
         return Files.exists(cacheKeyPath(srcAbsPath, startMs, endMs));
     }
 
+    /**
+     * Retorna true si la ruta apunta DENTRO del directorio de caché de boomerang.
+     * Los archivos de caché son estado derivado: jamás deben persistirse como
+     * identidad del fondo (backgroundImagePath).
+     */
+    public boolean isCachePath(String absPath) {
+        if (absPath == null) return false;
+        try {
+            return Paths.get(absPath).toAbsolutePath().normalize()
+                    .startsWith(cacheDir().toAbsolutePath().normalize());
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     // --- Bake asíncrono ---
 
     /**

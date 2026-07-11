@@ -617,14 +617,15 @@ public class PlayerController {
 
         // Dispose any existing preview before loading the new file (B2-d)
         disposeBgPreview();
-        // Reset all pending fields for the new file
+        // Reset all pending fields — el llamador es dueño de pendingBgPath (ruta FUENTE)
+        pendingBgPath = file.getAbsolutePath();
         pendingBgStart = null;
         pendingBgEnd   = null;
         pendingBakedPath = null;
         pendingBoomerangOn = false;
         pendingBgRate = 1.0;
         // Load file into preview — ambiance is NOT touched here
-        loadBgPreview(file.getAbsolutePath());
+        loadBgPreview(pendingBgPath);
     }
 
     /**
@@ -651,7 +652,9 @@ public class PlayerController {
                 || bgPreviewImageView == null || bgPreviewSpinner == null
                 || lblBgPreviewPlaceholder == null) return;
 
-        pendingBgPath = absolutePath;
+        // NO asignar pendingBgPath aquí: el llamador es dueño de la ruta FUENTE.
+        // Este método también reproduce archivos bakeados (boomerang) que jamás
+        // deben convertirse en la identidad del fondo pendiente.
 
         // Show panel
         bgPreviewPanel.setVisible(true);
@@ -1636,6 +1639,15 @@ public class PlayerController {
 
         // Restaurar ruta de imagen de fondo global
         String bgPath = cfg.getBackgroundImagePath();
+        // Sanear sesiones corruptas: un archivo de la caché de boomerang jamás es
+        // identidad válida de fondo (estado derivado; puede ser purgado en cualquier momento)
+        if (bgPath != null && boomerangBaker.isCachePath(bgPath)) {
+            bgPath = null;
+            sessionConfig.setBackgroundImagePath(null);
+            sessionConfig.setVideoSegmentStartMs(null);
+            sessionConfig.setVideoSegmentEndMs(null);
+            sessionConfig.setBoomerangEnabled(false);
+        }
         if (bgPath != null && new File(bgPath).exists()) {
             // La ruta existe: persistir y aplicar normalmente.
             sessionConfig.setBackgroundImagePath(bgPath);
