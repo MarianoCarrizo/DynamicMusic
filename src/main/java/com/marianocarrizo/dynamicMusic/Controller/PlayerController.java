@@ -642,6 +642,10 @@ public class PlayerController {
      * Caller must call disposeBgPreview() first if a previous preview was active.
      */
     private void loadBgPreview(String absolutePath) {
+        if (bgPreviewPanel == null || bgPreviewMediaView == null
+                || bgPreviewImageView == null || bgPreviewSpinner == null
+                || lblBgPreviewPlaceholder == null) return;
+
         pendingBgPath = absolutePath;
 
         // Show panel
@@ -690,9 +694,11 @@ public class PlayerController {
                     media = new javafx.scene.media.Media(uri);
                 } catch (Exception ex) {
                     Platform.runLater(() -> {
-                        bgPreviewSpinner.setVisible(false);
-                        lblBgPreviewPlaceholder.setText("Error loading preview");
-                        lblBgPreviewPlaceholder.setVisible(true);
+                        if (bgPreviewSpinner != null) bgPreviewSpinner.setVisible(false);
+                        if (lblBgPreviewPlaceholder != null) {
+                            lblBgPreviewPlaceholder.setText("Error loading preview");
+                            lblBgPreviewPlaceholder.setVisible(true);
+                        }
                     });
                     return;
                 }
@@ -711,12 +717,14 @@ public class PlayerController {
                         player.setStopTime(pendingBgEnd);
                     }
                     player.setRate(pendingBgRate);
-                    bgPreviewMediaView.setMediaPlayer(player);
-                    bgPreviewMediaView.setVisible(true);
+                    if (bgPreviewMediaView != null) {
+                        bgPreviewMediaView.setMediaPlayer(player);
+                        bgPreviewMediaView.setVisible(true);
+                    }
 
                     player.setOnReady(() -> {
                         if (bgPreviewPlayer == player && gen == bgPreviewGeneration) {
-                            bgPreviewSpinner.setVisible(false);
+                            if (bgPreviewSpinner != null) bgPreviewSpinner.setVisible(false);
                             // Enable controls per enablement matrix
                             if (bgPreviewSlider != null)   bgPreviewSlider.setDisable(false);
                             if (btnBgMarkStart != null)    btnBgMarkStart.setDisable(false);
@@ -1085,6 +1093,11 @@ public class PlayerController {
             if (btnBgBoomerang != null)  btnBgBoomerang.setSelected(pendingBoomerangOn);
         } finally {
             refreshingUI = false;
+        }
+        // Re-enable Mark End if a start mark was restored — loadBgPreview disables it initially
+        // and setOnReady does not re-enable it; the user would otherwise need to re-click Mark Start
+        if (pendingBgStart != null && btnBgMarkEnd != null) {
+            btnBgMarkEnd.setDisable(false);
         }
         updateBgSegmentLabel();
     }
