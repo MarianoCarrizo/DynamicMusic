@@ -7,7 +7,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class YouTubeCleanupTest {
 
@@ -30,7 +32,7 @@ class YouTubeCleanupTest {
     @Test
     void doesNotMatchOtherIdsOrPrefixCollisions() {
         assertFalse(YouTubeDownloader.isLeftover(OTHER + ".mp3", ID, false));
-        assertFalse(YouTubeDownloader.isLeftover(ID + "X.mp3", ID, false)); // needs the '.' boundary
+        assertFalse(YouTubeDownloader.isLeftover(ID + "X.mp3", ID, false));
         assertFalse(YouTubeDownloader.isLeftover("notes.txt", ID, false));
     }
 

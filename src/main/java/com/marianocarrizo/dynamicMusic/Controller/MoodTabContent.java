@@ -24,18 +24,12 @@ import java.io.File;
 import java.util.EnumMap;
 import java.util.Map;
 
-/**
- * Content of one mood tab (or the On demand tab) in the scene editor: track picker
- * (moods only) and the aura controls for the slot. Every edit is written straight into the
- * active scene and reported to the {@link SceneHost}.
- */
 final class MoodTabContent extends VBox {
 
     private final AuraSlot slot;
-    private final TrackType trackType; // null for ON_DEMAND
+    private final TrackType trackType;
     private final SceneHost host;
 
-    // Blocks listeners while controls are being filled from the model
     private boolean updating = false;
 
     private Label lblTrack;
@@ -67,8 +61,6 @@ final class MoodTabContent extends VBox {
         getChildren().add(buildLevelSection());
     }
 
-    // --- Sections ---
-
     private VBox buildTrackSection() {
         lblTrack = new Label("No track assigned");
         lblTrack.getStyleClass().add("lbl-preview-track");
@@ -95,7 +87,6 @@ final class MoodTabContent extends VBox {
             tb.setToggleGroup(presetGroup);
             tb.setMaxWidth(Double.MAX_VALUE);
             HBox.setHgrow(tb, Priority.ALWAYS);
-            // A click on the selected toggle would deselect it: always keep one selected
             tb.setOnAction(e -> {
                 tb.setSelected(true);
                 if (!updating) pickPreset(p);
@@ -144,9 +135,6 @@ final class MoodTabContent extends VBox {
                 levelRow("Reactivity", sldReactivity, lblReactivity));
     }
 
-    // --- Model sync ---
-
-    /** Fills every control from the given scene without triggering edits. */
     void refresh(Scene scene) {
         updating = true;
         try {
@@ -172,7 +160,6 @@ final class MoodTabContent extends VBox {
         }
     }
 
-    /** Updates only the track label. */
     void refreshTrack(Scene scene) {
         if (trackType == null) return;
         String path = scene.getAssignments().get(trackType);
@@ -182,7 +169,7 @@ final class MoodTabContent extends VBox {
     private void pickPreset(AuraPreset preset) {
         Scene scene = host.session().getActiveScene();
         AuraConfig old = scene.getAura(slot);
-        AuraConfig fresh = preset.defaults(); // colors, layers and intensity reset; reactivity is kept
+        AuraConfig fresh = preset.defaults();
         fresh.setReactivity(old.getReactivity());
         scene.setAura(slot, fresh);
         refresh(scene);
@@ -211,8 +198,6 @@ final class MoodTabContent extends VBox {
         File file = chooser.showOpenDialog(getScene().getWindow());
         if (file != null) host.assignTrack(trackType, file);
     }
-
-    // --- Layout helpers ---
 
     private static VBox section(String title, javafx.scene.Node... content) {
         Label header = new Label(title);

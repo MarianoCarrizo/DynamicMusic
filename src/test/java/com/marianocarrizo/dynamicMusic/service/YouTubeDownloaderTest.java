@@ -9,7 +9,9 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class YouTubeDownloaderTest {
 
@@ -61,6 +63,18 @@ class YouTubeDownloaderTest {
         assertTrue(args.indexOf(evil) > marker);
         assertTrue(args.contains("-x"));
         assertTrue(args.contains("--no-playlist"));
+    }
+
+    @Test
+    void downloadArgsPointYtDlpAtTheBundledFfmpegBeforeTheMarker() {
+        Path ffmpegDir = Path.of("install", "ffmpeg");
+        List<String> args = YouTubeDownloader.downloadArgs(Path.of("out", ID + ".mp3"), "https://youtu.be/" + ID,
+                java.util.Optional.of(ffmpegDir));
+
+        int flag = args.indexOf("--ffmpeg-location");
+        assertTrue(flag >= 0 && flag < args.indexOf("--"));
+        assertEquals(ffmpegDir.toString(), args.get(flag + 1));
+        assertFalse(YouTubeDownloader.downloadArgs(Path.of("out", ID + ".mp3"), "u").contains("--ffmpeg-location"));
     }
 
     @Test

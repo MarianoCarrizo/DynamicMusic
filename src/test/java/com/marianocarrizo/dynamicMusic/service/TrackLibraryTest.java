@@ -9,7 +9,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TrackLibraryTest {
 
@@ -22,7 +25,7 @@ class TrackLibraryTest {
     @BeforeEach
     void setUp() throws IOException {
         cache = Files.createDirectories(root.resolve("yt-cache"));
-        library = root.resolve("library"); // intentionally not created: pin must create it
+        library = root.resolve("library");
     }
 
     @Test
@@ -72,7 +75,7 @@ class TrackLibraryTest {
         Files.writeString(src, "12345");
         Files.createDirectories(library);
         Path target = library.resolve("abc.mp3");
-        Files.writeString(target, "ABCDE"); // same size, different content
+        Files.writeString(target, "ABCDE");
         FileTime stamp = FileTime.fromMillis(1_000_000_000L);
         Files.setLastModifiedTime(target, stamp);
 

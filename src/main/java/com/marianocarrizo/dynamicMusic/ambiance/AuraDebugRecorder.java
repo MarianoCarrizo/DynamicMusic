@@ -8,11 +8,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Locale;
 
-/**
- * Writes one CSV row per rendered frame while the aura diagnostics HUD is on, so audio
- * reactivity can be tuned from data instead of by eye. Each recording overwrites
- * %APPDATA%/DynamicMusic/audio-debug.csv. FX thread only.
- */
 final class AuraDebugRecorder {
 
     static final String HEADER = "wall_s,media_s,raw_bass,bass,mid,high,energy,beat_count,beat_strength,"
@@ -20,13 +15,12 @@ final class AuraDebugRecorder {
             + "bass_g,mid_g,high_g,energy_g,beat_g,reactivity,intensity,zoom,"
             + "kick,snare,tonal,kick_hit,snare_hit,kick_g,snare_g,tonal_g,kick_hit_g";
 
-    private static final int FLUSH_EVERY = 40; // ~0.7 s at 60 fps, so a crash loses little
+    private static final int FLUSH_EVERY = 40;
 
     private BufferedWriter out;
     private long startNs;
     private int rows;
 
-    /** Opens a fresh file. Returns false (and stays closed) when the file cannot be written. */
     boolean open() {
         close();
         try {
@@ -69,7 +63,6 @@ final class AuraDebugRecorder {
         try {
             out.close();
         } catch (IOException ignored) {
-            // best effort: diagnostics only
         }
         out = null;
     }

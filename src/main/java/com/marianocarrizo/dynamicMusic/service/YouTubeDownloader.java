@@ -28,11 +28,6 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-/**
- * Wraps yt-dlp to download a YouTube video's audio as an MP3 and cache it locally.
- * No JavaFX imports — callbacks fire on the ForkJoin pool thread;
- * callers must marshal to Platform.runLater.
- */
 public final class YouTubeDownloader {
 
     private static final int  MAX_CACHE_ENTRIES        = 20;
@@ -40,8 +35,6 @@ public final class YouTubeDownloader {
     private static final long TITLE_TIMEOUT_SECONDS    = 15;
     private static final int  STDERR_TAIL_BYTES        = 2048;
     private static final long SEARCH_TIMEOUT_SECONDS   = 30;
-
-    // --- Search result DTO ---
 
     public record SearchResult(String id, String title, String channel, long durationSeconds) {
 
@@ -61,8 +54,6 @@ public final class YouTubeDownloader {
         }
     }
 
-    // --- URL validation ---
-
     private static final Pattern PATTERN_SHORT =
             Pattern.compile("youtu\\.be/([A-Za-z0-9_-]{11})");
     private static final Pattern PATTERN_WATCH =
@@ -70,11 +61,6 @@ public final class YouTubeDownloader {
     private static final Pattern PATTERN_PATH =
             Pattern.compile("youtube\\.com/(?:shorts|embed)/([A-Za-z0-9_-]{11})");
 
-    /**
-     * Extracts the 11-character video ID from a YouTube URL.
-     * Returns {@link Optional#empty()} for non-YouTube or unrecognised inputs.
-     * This is the URL validation gate — an empty result means the URL should be rejected.
-     */
     public static Optional<String> extractVideoId(String url) {
         if (url == null) return Optional.empty();
         Matcher m1 = PATTERN_SHORT.matcher(url);
@@ -86,26 +72,17 @@ public final class YouTubeDownloader {
         return Optional.empty();
     }
 
-    // --- yt-dlp availability ---
-
     private static volatile boolean availableCached;
     private static volatile long    unavailableUntilMs;
 
-    // Covers the first setup's checksum (30 s) and binary (120 s) request timeouts plus margin
     private static final long SETUP_WAIT_SECONDS = 180;
 
-    /** Daemon pool for YouTube work; tasks may block for minutes (setup wait, subprocess), so not the common pool. */
     private static final ExecutorService EXECUTOR = Executors.newCachedThreadPool(r -> {
         Thread t = new Thread(r, "youtube-task");
         t.setDaemon(true);
         return t;
     });
 
-    /**
-     * True when the managed yt-dlp exists or yt-dlp on PATH runs. Blocks for up to 3 s on a probe, so keep
-     * it off the FX thread. A positive result is cached for the session; a negative one for 30 s, but never
-     * while the managed download is in progress (the binary is about to appear).
-     */
     public static boolean isYtDlpAvailable() {
         YtDlpManager mgr = YtDlpManager.get();
         if (availableCached || mgr.hasManagedBinary()) return true;
@@ -128,14 +105,10 @@ public final class YouTubeDownloader {
         }
     }
 
-    /**
-     * Like {@link #isYtDlpAvailable()} but, when no yt-dlp is usable, starts (or joins) the managed setup and
-     * waits up to {@value #SETUP_WAIT_SECONDS} s for it. Blocking: never call on the FX thread.
-     */
     static boolean awaitYtDlp() {
         if (isYtDlpAvailable()) return true;
         YtDlpManager mgr = YtDlpManager.get();
-        mgr.ensureReadyAsync(); // no-op while running; retries if an earlier attempt failed
+        mgr.ensureReadyAsync();
         if (mgr.isSetupRunning()) {
             mgr.announce("Downloading yt-dlp...");
             try {
@@ -144,7 +117,6 @@ public final class YouTubeDownloader {
                 Thread.currentThread().interrupt();
                 return false;
             } catch (ExecutionException | TimeoutException e) {
-                // fall through to the final check
             }
         }
         if (mgr.hasManagedBinary()) return true;
@@ -156,8 +128,6 @@ public final class YouTubeDownloader {
     private static final String NOT_FOUND_MESSAGE =
             "yt-dlp is not available. Check your internet connection and try again.";
 
-    // --- Command execution with update-and-retry ---
-
     private static boolean isRetryable(String output) {
         return output.contains("HTTP Error 403")
                 || output.contains("older than 90 days")
@@ -165,11 +135,6 @@ public final class YouTubeDownloader {
                 || output.contains("nsig");
     }
 
-    /**
-     * Runs yt-dlp with {@code args} (executable and JS runtime args are prepended). If it fails with a
-     * known "outdated yt-dlp" signature, updates yt-dlp once and retries once with the new executable.
-     * Each attempt is bounded by a watchdog.
-     */
     private static YtDlpManager.ProcResult runYtDlp(List<String> args, long timeoutSec)
             throws IOException, InterruptedException {
         YtDlpManager mgr = YtDlpManager.get();
@@ -186,8 +151,6 @@ public final class YouTubeDownloader {
         cmd.addAll(args);
         return cmd;
     }
-
-    // --- Async search ---
 
     public void searchAsync(String query, int maxResults,
                             Consumer<List<SearchResult>> onResults,
@@ -235,7 +198,6 @@ public final class YouTubeDownloader {
 
                         results.add(new SearchResult(id, title, channel, duration));
                     } catch (Exception ignored) {
-                        // one bad line never aborts the batch
                     }
                 }
 
@@ -259,9 +221,6 @@ public final class YouTubeDownloader {
         });
     }
 
-    // --- Cache directory ---
-
-    /** App data root: %APPDATA%/DynamicMusic on Windows, user.home/DynamicMusic elsewhere. */
     static Path appDir() {
         return appDir(System.getProperty("os.name", ""), System.getenv("APPDATA"),
                 System.getProperty("user.home"));
@@ -273,7 +232,6 @@ public final class YouTubeDownloader {
                 : Paths.get(home, "DynamicMusic");
     }
 
-    /** Resolves the yt-cache directory path without creating it. */
     static Path cacheDirPath() {
         return appDir().resolve("yt-cache");
     }
@@ -284,23 +242,6 @@ public final class YouTubeDownloader {
         return dir;
     }
 
-    // --- Async download ---
-
-    /**
-     * Downloads the audio for {@code url} asynchronously, caching the result as
-     * {@code {videoId}.mp3} under the yt-cache directory.
-     *
-     * <p>If a cached file already exists, {@code onSuccess} is called immediately
-     * without launching yt-dlp.
-     *
-     * <p>Callbacks are invoked on the ForkJoin pool thread — callers must use
-     * {@code Platform.runLater} to update the UI.
-     *
-     * @param url       the YouTube URL (already validated by {@link #extractVideoId})
-     * @param videoId   the 11-char video ID extracted from {@code url}
-     * @param onSuccess receives a {@link PlaylistItem} with path, url, and title on success
-     * @param onFailure receives a human-readable error message on failure
-     */
     public void downloadAsync(String url, String videoId,
                               Consumer<PlaylistItem> onSuccess,
                               Consumer<String> onFailure) {
@@ -312,21 +253,17 @@ public final class YouTubeDownloader {
             return;
         }
 
-        // A running download of this id may already have created <id>.mp3 while ffmpeg is still
-        // writing it, so join it before trusting the file as a cache hit
         CompletableFuture<PlaylistItem> inFlight = IN_FLIGHT.get(videoId);
         if (inFlight != null) {
             subscribe(inFlight, onSuccess, onFailure);
             return;
         }
 
-        // Cache hit: no subprocess needed
         if (Files.exists(out)) {
             onSuccess.accept(new PlaylistItem(out.toString(), url, null));
             return;
         }
 
-        // One run per video id: a second request for the same id joins the running download.
         CompletableFuture<PlaylistItem> mine = new CompletableFuture<>();
         CompletableFuture<PlaylistItem> running = IN_FLIGHT.putIfAbsent(videoId, mine);
         if (running != null) {
@@ -346,7 +283,6 @@ public final class YouTubeDownloader {
         });
     }
 
-    /** Downloads of the same video id currently running; shared by every caller asking for that id. */
     private static final Map<String, CompletableFuture<PlaylistItem>> IN_FLIGHT = new ConcurrentHashMap<>();
 
     private static void subscribe(CompletableFuture<PlaylistItem> f,
@@ -357,17 +293,13 @@ public final class YouTubeDownloader {
         });
     }
 
-    /**
-     * Runs the download and returns the item, or throws an {@link IOException} with a user-facing message.
-     * Leftovers are deleted only when yt-dlp itself failed or timed out in THIS run.
-     */
     private PlaylistItem runDownload(String url, String videoId, Path out) throws IOException {
         Path dir = out.getParent();
         if (!awaitYtDlp()) throw new IOException(NOT_FOUND_MESSAGE);
 
         YtDlpManager.ProcResult r;
         try {
-            r = runYtDlp(downloadArgs(out, url), DOWNLOAD_TIMEOUT_SECONDS);
+            r = runYtDlp(downloadArgs(out, url, FfmpegLocator.directory()), DOWNLOAD_TIMEOUT_SECONDS);
         } catch (IOException | InterruptedException e) {
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();
             cleanupLeftovers(dir, videoId, false);
@@ -385,16 +317,11 @@ public final class YouTubeDownloader {
         }
         if (!Files.exists(out)) throw new IOException("Output file not found after download");
 
-        String title = fetchTitle(url); // non-fatal secondary step
+        String title = fetchTitle(url);
         evictOldEntries();
         return new PlaylistItem(out.toString(), url, title);
     }
 
-    /**
-     * Deletes yt-dlp's intermediates for {@code videoId} in {@code dir}: every file named {@code <id>.*}
-     * (partial/fragment/temp/.ytdl files, merged streams). The finished {@code <id>.mp3} is kept when
-     * {@code keepFinal} is true. Other ids are never touched. Returns the number of files deleted.
-     */
     static int cleanupLeftovers(Path dir, String videoId, boolean keepFinal) {
         int deleted = 0;
         try (Stream<Path> stream = Files.list(dir)) {
@@ -407,32 +334,34 @@ public final class YouTubeDownloader {
         return deleted;
     }
 
-    /** Name match for {@link #cleanupLeftovers}: {@code <id>.<anything>}, minus the final mp3 when kept. */
     static boolean isLeftover(String fileName, String videoId, boolean keepFinal) {
         if (!fileName.startsWith(videoId + ".")) return false;
         return !(keepFinal && fileName.equals(videoId + ".mp3"));
     }
 
-    /** yt-dlp arguments for an audio download; the URL goes after "--" so it can never be parsed as a flag. */
     static List<String> downloadArgs(Path out, String url) {
-        return List.of(
+        return downloadArgs(out, url, Optional.empty());
+    }
+
+    static List<String> downloadArgs(Path out, String url, Optional<Path> ffmpegDir) {
+        List<String> args = new ArrayList<>(List.of(
                 "-x",
                 "--audio-format", "mp3",
                 "--no-playlist",
-                "-o", out.toString(),
-                "--", // end of options: a pasted string can never be parsed as a yt-dlp flag
-                url
-        );
+                "-o", out.toString()));
+        ffmpegDir.ifPresent(dir -> {
+            args.add("--ffmpeg-location");
+            args.add(dir.toString());
+        });
+        args.add("--");
+        args.add(url);
+        return List.copyOf(args);
     }
 
-    /** yt-dlp arguments for a title lookup; the URL goes after "--". */
     static List<String> titleArgs(String url) {
         return List.of("--get-title", "--no-playlist", "--", url);
     }
 
-    // --- Title fetch ---
-
-    /** Runs {@code yt-dlp --get-title} and returns the trimmed output, or null on any failure. */
     private String fetchTitle(String url) {
         try {
             YtDlpManager.ProcResult r = runYtDlp(titleArgs(url), TITLE_TIMEOUT_SECONDS);
@@ -444,8 +373,6 @@ public final class YouTubeDownloader {
             return null;
         }
     }
-
-    // --- Cache eviction ---
 
     private void evictOldEntries() {
         try {
@@ -473,9 +400,6 @@ public final class YouTubeDownloader {
         } catch (IOException ignored) {}
     }
 
-    // --- Internal utility ---
-
-    /** Last {@code maxChars} characters of {@code s}, trimmed. */
     private static String tail(String s, int maxChars) {
         String t = s.strip();
         return t.length() <= maxChars ? t : t.substring(t.length() - maxChars);

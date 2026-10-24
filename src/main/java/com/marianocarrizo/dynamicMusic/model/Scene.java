@@ -8,25 +8,17 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 
-/**
- * A full package for one enemy/situation: 4 mood track assignments,
- * a background and 5 auras (one per mood plus an on-demand one).
- * Getters are null-safe so partial JSON never yields NPEs.
- */
 public class Scene {
 
     private String id;
     private String name;
 
-    // Key = TrackType name, value = absolute file path
     private Map<String, String> assignments;
 
     private BackgroundConfig background;
 
-    // Key = AuraSlot name
     private Map<String, AuraConfig> auras;
 
-    /** No-arg constructor required by Gson. */
     public Scene() {
         this.id = UUID.randomUUID().toString();
         this.assignments = new LinkedHashMap<>();
@@ -48,9 +40,6 @@ public class Scene {
     public String getName() { return (name != null && !name.isBlank()) ? name : "Scene"; }
     public void setName(String name) { this.name = name; }
 
-    // --- Assignments ---
-
-    /** Returns assignments as a type-safe EnumMap copy; unknown keys and null values are skipped. */
     public Map<TrackType, String> getAssignments() {
         Map<TrackType, String> result = new EnumMap<>(TrackType.class);
         if (assignments == null) return result;
@@ -59,17 +48,11 @@ public class Scene {
             try {
                 result.put(TrackType.valueOf(key), value);
             } catch (IllegalArgumentException ignored) {
-                // Unknown enum key: skipped for forward compatibility
             }
         });
         return result;
     }
 
-    /**
-     * Assigns a track to a mood. This is the single choke point for YouTube pinning:
-     * paths inside the yt-cache are copied to the permanent library so cache eviction
-     * never breaks a scene. A null path clears the assignment.
-     */
     public void setAssignment(TrackType type, String path) {
         if (type == null) return;
         if (assignments == null) assignments = new LinkedHashMap<>();
@@ -80,17 +63,12 @@ public class Scene {
         }
     }
 
-    // --- Background ---
-
     public BackgroundConfig getBackground() {
         if (background == null) background = new BackgroundConfig();
         return background;
     }
     public void setBackground(BackgroundConfig b) { this.background = b; }
 
-    // --- Auras ---
-
-    /** Returns the aura for the slot, lazily creating it with defaults if missing. */
     public AuraConfig getAura(AuraSlot slot) {
         if (auras == null) auras = new LinkedHashMap<>();
         AuraConfig a = auras.get(slot.name());
@@ -107,7 +85,6 @@ public class Scene {
         auras.put(slot.name(), aura);
     }
 
-    /** Fills any missing aura slot with defaults. */
     public void ensureAuras() {
         for (AuraSlot s : AuraSlot.values()) getAura(s);
     }
@@ -122,7 +99,6 @@ public class Scene {
         };
     }
 
-    /** Deep copy (same id). Callers duplicating a scene must assign a new id and name. */
     public Scene copy() {
         Scene s = new Scene();
         s.id = id;

@@ -27,7 +27,17 @@
             <Button text="✕" onAction="#onCloseWindow" styleClass="btn-window-control, btn-window-close"/>
         </HBox>
 
-        <!-- Scene bar: scene selector, ambiance toggle (+ screen menu) and master volume -->
+        <HBox fx:id="updateBar" spacing="10" alignment="CENTER_LEFT" styleClass="update-bar"
+              visible="false" managed="false">
+            <padding>
+                <Insets top="6" right="12" bottom="6" left="12"/>
+            </padding>
+            <Label fx:id="lblUpdate" text="" styleClass="update-label"/>
+            <Region HBox.hgrow="ALWAYS"/>
+            <Button fx:id="btnUpdateNow" text="Install now" onAction="#onInstallUpdateNow" styleClass="btn-primary"/>
+            <Button fx:id="btnUpdateOnClose" text="On close" onAction="#onInstallUpdateOnClose" styleClass="btn-secondary"/>
+        </HBox>
+
         <HBox fx:id="sceneBar" spacing="8" alignment="CENTER_LEFT" styleClass="scene-bar">
             <padding>
                 <Insets top="8" right="12" bottom="8" left="12"/>
@@ -62,7 +72,6 @@
                 <TextField fx:id="txtSearch" promptText="Search track by name..."/>
                 <TreeView fx:id="treeFiles" VBox.vgrow="ALWAYS" showRoot="false"/>
 
-                <!-- Reproductor de preescucha: visible solo mientras hay una preescucha activa -->
                 <VBox fx:id="previewPanel" spacing="6" alignment="CENTER"
                       styleClass="playback-panel, preview-panel, preview-strip"
                       visible="false" managed="false">
@@ -81,7 +90,6 @@
                     </HBox>
                 </VBox>
 
-                <!-- On-demand player: visible only while an on-demand track is loaded -->
                 <VBox fx:id="onDemandPanel" spacing="6" alignment="CENTER"
                       styleClass="playback-panel, preview-panel, preview-strip"
                       visible="false" managed="false">
@@ -103,7 +111,6 @@
                     </HBox>
                 </VBox>
 
-                <!-- YouTube URL -> playlist (Add) or straight to playback (Play) -->
                 <HBox spacing="8" alignment="CENTER_LEFT">
                     <TextField fx:id="txtYoutubeUrl" HBox.hgrow="ALWAYS" maxWidth="Infinity"
                                promptText="Paste YouTube URL..."/>
@@ -118,7 +125,6 @@
                        visible="false" managed="false" wrapText="true"/>
             </VBox>
 
-            <!-- Column 2: Moods / Playlists -->
             <VBox fx:id="rightPanel" spacing="14" minWidth="420">
                 <padding>
                     <Insets top="10" right="10" bottom="10" left="10"/>
@@ -127,7 +133,6 @@
                 <!-- T-10: TabPane que agrupa los modos Moods y Playlists -->
                 <TabPane fx:id="modeTabPane" VBox.vgrow="ALWAYS" tabClosingPolicy="UNAVAILABLE">
 
-                    <!-- Tab Moods -->
                     <Tab fx:id="moodsTab" text="Moods">
                         <content>
                             <VBox spacing="14" alignment="CENTER">
@@ -135,13 +140,11 @@
                                     <Insets top="10" right="4" bottom="4" left="4"/>
                                 </padding>
 
-                                <!-- Mood activo y su pista -->
                                 <VBox spacing="4" alignment="CENTER" styleClass="track-info-container">
                                     <Label fx:id="lblNowPlayingMood" text="NOW PLAYING" styleClass="lbl-session-title"/>
                                     <Label fx:id="lblNowPlaying" text="—" styleClass="lbl-track-active"/>
                                 </VBox>
 
-                                <!-- Grid de tarjetas de mood (el contenido se arma en código) -->
                                 <GridPane hgap="10" vgap="10" alignment="CENTER" VBox.vgrow="ALWAYS">
                                     <columnConstraints>
                                         <ColumnConstraints hgrow="ALWAYS" minWidth="100" percentWidth="50"/>
@@ -240,7 +243,6 @@
 
                 </TabPane>
 
-                <!-- Live aura: outside the tabs so it is reachable from Moods and Playlists; edits the aura on screen -->
                 <VBox spacing="6" styleClass="playback-panel">
                     <Label fx:id="lblLiveAura" text="LIVE AURA" styleClass="lbl-panel-title"/>
                     <HBox fx:id="livePresetBox" spacing="6" alignment="CENTER"/>

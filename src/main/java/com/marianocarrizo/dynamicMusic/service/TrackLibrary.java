@@ -5,29 +5,18 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 
-/**
- * Keeps scene tracks alive: YouTube downloads live in an evicting cache,
- * so tracks referenced by a scene are copied to a permanent library folder.
- */
 public final class TrackLibrary {
 
     private TrackLibrary() {}
 
-    /** %APPDATA%/DynamicMusic/library */
     public static Path libraryDir() {
         return YouTubeDownloader.appDir().resolve("library");
     }
 
-    /**
-     * If {@code path} is inside the yt-cache, copies it to the library (skipping the copy
-     * when the target already exists with the same size) and returns the new path.
-     * Otherwise returns {@code path} unchanged. Never throws; on failure returns the original.
-     */
     public static String pin(String path) {
         return pin(path, YouTubeDownloader.cacheDirPath(), libraryDir());
     }
 
-    /** Test seam: same as {@link #pin(String)} with explicit cache and library directories. */
     static String pin(String path, Path cacheDir, Path libraryDir) {
         if (path == null || path.isBlank()) return path;
         try {

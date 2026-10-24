@@ -9,7 +9,11 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class YtDlpManagerTest {
 
@@ -57,8 +61,8 @@ class YtDlpManagerTest {
 
     @Test
     void parseChecksumRejectsMissingOrMalformed() {
-        assertTrue(YtDlpManager.parseChecksum(SUMS, "yt-dlp_macos").isEmpty());   // hash too short
-        assertTrue(YtDlpManager.parseChecksum(SUMS, "yt-dlp").isEmpty());         // no prefix matching
+        assertTrue(YtDlpManager.parseChecksum(SUMS, "yt-dlp_macos").isEmpty());
+        assertTrue(YtDlpManager.parseChecksum(SUMS, "yt-dlp").isEmpty());
         assertTrue(YtDlpManager.parseChecksum("", "yt-dlp.exe").isEmpty());
         assertTrue(YtDlpManager.parseChecksum(null, "yt-dlp.exe").isEmpty());
     }

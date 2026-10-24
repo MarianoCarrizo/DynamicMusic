@@ -13,14 +13,13 @@
         <java.version>21</java.version>
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <javafx.version>21.0.2</javafx.version>
+        <javafx.version>21.0.13</javafx.version>
         <!--
-            Directorio de jmods de JavaFX 21.0.2 (requerido por jpackage/jlink).
+            Directorio de jmods de JavaFX 21.0.13 (requerido por jpackage/jlink).
             Descargar de https://gluonhq.com/products/javafx/ → SDK → jmods para Windows.
-            Sobreescribir con: mvn package -Djavafx.jmods=C:/ruta/a/javafx-jmods-21.0.2
+            Sobreescribir con: mvn package -Djavafx.jmods=C:/ruta/a/javafx-jmods-21.0.13
         -->
-        <javafx.jmods>C:/javafx-jmods-21.0.2</javafx.jmods>
-        <!-- Offline corpus evaluation (AudioAnalyzerCorpusTest) is opt-in: -Dgroups=corpus -DexcludedGroups=none -->
+        <javafx.jmods>C:/javafx-jmods-21.0.13</javafx.jmods>
         <excludedGroups>corpus</excludedGroups>
     </properties>
 
@@ -74,7 +73,7 @@
         <dependency>
             <groupId>com.google.code.gson</groupId>
             <artifactId>gson</artifactId>
-            <version>2.11.0</version>
+            <version>2.14.0</version>
         </dependency>
 
         <dependency>
@@ -92,6 +91,19 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.14.0</version>
+                <executions>
+                    <execution>
+                        <id>default-testCompile</id>
+                        <configuration>
+                            <compilerArgs>
+                                <arg>--add-modules</arg>
+                                <arg>jdk.httpserver</arg>
+                                <arg>--add-reads</arg>
+                                <arg>com.marianocarrizo.dynamicMusic=jdk.httpserver</arg>
+                            </compilerArgs>
+                        </configuration>
+                    </execution>
+                </executions>
                 <configuration>
                     <release>${maven.compiler.release}</release>
                     <!--
@@ -104,7 +116,36 @@
                 </configuration>
             </plugin>
 
-            <!-- Unit tests run on the classpath (no module path) so tests can reach package-private code -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-checkstyle-plugin</artifactId>
+                <version>3.6.0</version>
+                <dependencies>
+                    <dependency>
+                        <groupId>com.puppycrawl.tools</groupId>
+                        <artifactId>checkstyle</artifactId>
+                        <version>10.21.4</version>
+                    </dependency>
+                </dependencies>
+                <configuration>
+                    <configLocation>config/checkstyle/checkstyle.xml</configLocation>
+                    <includeTestSourceDirectory>true</includeTestSourceDirectory>
+                    <failOnViolation>true</failOnViolation>
+                    <violationSeverity>error</violationSeverity>
+                    <consoleOutput>true</consoleOutput>
+                    <excludes>**/module-info.java</excludes>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>checkstyle-validate</id>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
@@ -205,7 +246,7 @@
                 Pre-requisitos en la máquina de build:
                   - JDK 21 (jpackage incluido desde JDK 14)
                   - WiX Toolset 3.x (requerido por jpackage para tipo MSI en Windows)
-                  - JavaFX 21.0.2 jmods descargados y path configurado en javafx.jmods
+                  - JavaFX 21.0.13 jmods descargados y path configurado en javafx.jmods
                 Omitir el instalador en builds de desarrollo: mvn package -DskipInstaller
             -->
             <plugin>
@@ -238,7 +279,7 @@
                         <modulePath>${project.build.directory}/deps</modulePath>
                         <!-- JAR principal de la aplicación -->
                         <modulePath>${project.build.directory}/${project.artifactId}-${project.version}.jar</modulePath>
-                        <!-- jmods de JavaFX 21.0.2 (requeridos por jlink) -->
+                        <!-- jmods de JavaFX 21.0.13 (requeridos por jlink) -->
                         <modulePath>${javafx.jmods}</modulePath>
                     </modulePaths>
                     <destination>${project.build.directory}/dist</destination>
@@ -254,11 +295,6 @@
         </plugins>
     </build>
     <profiles>
-        <!--
-            Debug profile: ./mvnw javafx:run -Pdebug
-            Enables developer diagnostics (F3 aura HUD + audio-debug.csv recording).
-            Never active in the normal run or the MSI build.
-        -->
         <profile>
             <id>debug</id>
             <build>

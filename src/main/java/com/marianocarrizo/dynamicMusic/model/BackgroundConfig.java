@@ -1,19 +1,14 @@
 package com.marianocarrizo.dynamicMusic.model;
 
-/**
- * Background settings of a scene. Same semantics as the former global session fields:
- * null segment = full video loop, null rate = 1.0, null boomerang = false.
- */
 public class BackgroundConfig {
 
     private String path;
-    private String fitMode;           // "FILL" | "FIT" | "STRETCH" | "CENTER"; null = FILL
+    private String fitMode;
     private Long segmentStartMs;
     private Long segmentEndMs;
     private Double playbackRate;
     private Boolean boomerangEnabled;
 
-    /** No-arg constructor required by Gson. */
     public BackgroundConfig() {}
 
     public String getPath() { return path; }

@@ -6,7 +6,12 @@ import com.marianocarrizo.dynamicMusic.config.SessionConfig;
 import javafx.animation.PauseTransition;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
-import javafx.scene.control.*;
+import javafx.scene.control.Button;
+import javafx.scene.control.ComboBox;
+import javafx.scene.control.Label;
+import javafx.scene.control.ProgressIndicator;
+import javafx.scene.control.Slider;
+import javafx.scene.control.ToggleButton;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.Pane;
@@ -26,12 +31,6 @@ import java.nio.file.Path;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/**
- * Background section of the scene editor: choose a file, fit mode and, for videos, the
- * preview with A-B segment, speed and boomerang. Edits are staged in the pending* fields and
- * previewed locally; nothing touches the scene or the ambiance until Apply, which writes the
- * active scene's background and asks the host to re-apply it live.
- */
 public class BackgroundEditorController {
 
     @FXML private Label lblBackgroundFile;
@@ -64,14 +63,13 @@ public class BackgroundEditorController {
 
     private final BoomerangBaker boomerangBaker = new BoomerangBaker();
 
-    // --- preview state (ephemeral; never written to the scene until Apply) ---
     private final ExecutorService bgPrep = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "bg-preview-init");
         t.setDaemon(true);
         return t;
     });
     private MediaPlayer bgPreviewPlayer       = null;
-    private String      pendingBgPath         = null;  // null = idle
+    private String      pendingBgPath         = null;
     private Duration    pendingBgStart        = null;
     private Duration    pendingBgEnd          = null;
     private double      pendingBgRate         = 1.0;
@@ -79,12 +77,10 @@ public class BackgroundEditorController {
     private String      pendingBakedPath      = null;
     private int         bgPreviewGeneration   = 0;
     private boolean     isDraggingBgPreviewSlider = false;
-    // Stale-bake guard snapshots (captured at bake start, compared in onBgBakeSuccess)
     private String bgBakeGuardSrc;
     private long   bgBakeGuardStart;
     private long   bgBakeGuardEnd;
 
-    // Marked range A-B + ticks; children of bgMarkBand
     private final Rectangle bgMarkRange = new Rectangle();
     private final Rectangle bgMarkTickA = new Rectangle();
     private final Rectangle bgMarkTickB = new Rectangle();
@@ -115,7 +111,6 @@ public class BackgroundEditorController {
         });
         cmbBgVideoSpeed.setValue(1.0);
 
-        // Clip so the MediaView does not overflow the StackPane when the video is larger than the panel
         Rectangle clip = new Rectangle();
         clip.widthProperty().bind(bgPreviewStack.widthProperty());
         clip.heightProperty().bind(bgPreviewStack.heightProperty());
@@ -124,15 +119,11 @@ public class BackgroundEditorController {
         bgMarkBand.widthProperty().addListener((obs, o, n) -> updateBgMarkOverlay());
     }
 
-    /** Wires the host; call once right after the FXML is loaded. */
     void init(SceneHost host) {
         this.host = host;
         refresh();
     }
 
-    // --- Lifecycle driven by the scene editor ---
-
-    /** Reloads everything from the active scene. Discards any pending (unapplied) edit. */
     void refresh() {
         onCancelBackground();
         SessionConfig session = host.session();
@@ -145,17 +136,13 @@ public class BackgroundEditorController {
         }
     }
 
-    /** Refreshes only the file labels (background changed from outside, e.g. dropped on the ambiance). */
     void refreshLabel() {
         updateBackgroundLabel(host.session().getBackgroundImagePath());
     }
 
-    /** Releases the preview player; call when the editor window closes or the app exits. */
     void dispose() {
         onCancelBackground();
     }
-
-    // --- File selection ---
 
     @FXML
     private void onSetBackground() {
@@ -174,9 +161,7 @@ public class BackgroundEditorController {
         File file = chooser.showOpenDialog(bgPreviewPanel.getScene().getWindow());
         if (file == null) return;
 
-        // Dispose any existing preview before loading the new file
         disposeBgPreview();
-        // Reset all pending fields; the caller owns pendingBgPath (SOURCE path)
         pendingBgPath = file.getAbsolutePath();
         pendingBgStart = null;
         pendingBgEnd   = null;
@@ -184,11 +169,9 @@ public class BackgroundEditorController {
         pendingBoomerangOn = false;
         pendingBgRate = 1.0;
         resetPendingControls();
-        // Load file into preview; the ambiance is NOT touched here
         loadBgPreview(pendingBgPath);
     }
 
-    /** Puts speed and boomerang controls back to the pending defaults without firing handlers. */
     private void resetPendingControls() {
         refreshingUI = true;
         try {
@@ -201,10 +184,6 @@ public class BackgroundEditorController {
         if (lblBgSegmentInfo != null) lblBgSegmentInfo.setText("Full video");
     }
 
-    /**
-     * Disposes the bg preview player and resets the ImageView.
-     * Called when cancelling, replacing the file, applying and closing.
-     */
     private void disposeBgPreview() {
         bgPreviewGeneration++;
         if (bgPreviewPlayer != null) {
@@ -215,14 +194,7 @@ public class BackgroundEditorController {
         bgPreviewImageView.setImage(null);
     }
 
-    /**
-     * Loads a file (video or image/GIF) into the bg preview panel.
-     * Caller must call disposeBgPreview() first if a previous preview was active.
-     */
     private void loadBgPreview(String absolutePath) {
-        // Do NOT assign pendingBgPath here: the caller owns the SOURCE path.
-        // This method also plays baked (boomerang) files, which must never
-        // become the identity of the pending background.
 
         bgPreviewPanel.setVisible(true);
         bgPreviewPanel.setManaged(true);
@@ -239,7 +211,6 @@ public class BackgroundEditorController {
         boolean isVideo = extPart.equals("mp4") || extPart.equals("avi");
 
         if (!isVideo) {
-            // Image / GIF branch
             Image img = new Image(new File(absolutePath).toURI().toString(), true);
             bgPreviewImageView.setImage(img);
             bgPreviewImageView.setVisible(true);
@@ -272,14 +243,10 @@ public class BackgroundEditorController {
                     bgPreviewPlayer = player;
                     player.setMute(true);
                     player.setCycleCount(MediaPlayer.INDEFINITE);
-                    // The preview does NOT apply startTime/stopTime: it is used to re-mark, so
-                    // scrubbing must cover the whole video; the loop is shown in the label.
                     player.setRate(pendingBgRate);
                     bgPreviewMediaView.setMediaPlayer(player);
                     bgPreviewMediaView.setVisible(true);
 
-                    // The Media is already parsed on the background thread: READY can happen
-                    // before the handler is registered and setOnReady does not fire retroactively.
                     final boolean[] bgReadyFired = { false };
                     Runnable bgReadyHandler = () -> {
                         if (bgReadyFired[0]) return;
@@ -291,7 +258,6 @@ public class BackgroundEditorController {
                             btnBgClearSegment.setDisable(false);
                             cmbBgVideoSpeed.setDisable(false);
                             updateBgBoomerangEnablement();
-                            // Duration is known now: refresh label and marks band
                             updateBgSegmentLabel();
                             Duration total = player.getTotalDuration();
                             if (total != null && !total.isUnknown() && !total.isIndefinite()) {
@@ -335,7 +301,6 @@ public class BackgroundEditorController {
         btnBgBoomerang.setDisable(true);
     }
 
-    /** Updates lblBgSegmentInfo with the current pending marks (with guidance text). */
     private void updateBgSegmentLabel() {
         if (pendingBgStart == null) {
             lblBgSegmentInfo.setText("Full video - press Mark start during playback");
@@ -351,7 +316,6 @@ public class BackgroundEditorController {
         updateBgMarkOverlay();
     }
 
-    /** Draws the marked A-B range over the band aligned with the preview scrub bar. */
     private void updateBgMarkOverlay() {
         if (bgMarkBand == null) return;
         if (bgMarkBand.getChildren().isEmpty()) {
@@ -396,8 +360,6 @@ public class BackgroundEditorController {
         host.applyFitMode();
     }
 
-    // --- Preview panel handlers ---
-
     @FXML
     private void onCancelBackground() {
         disposeBgPreview();
@@ -438,15 +400,12 @@ public class BackgroundEditorController {
             return;
         }
         pendingBgEnd = pos;
-        // Do NOT apply startTime/stopTime to the preview: it must keep covering the whole
-        // video so the marks can be redone; the range is drawn on the band over the scrub bar.
         updateBgSegmentLabel();
         updateBgBoomerangEnablement();
     }
 
     @FXML
     private void onBgClearSegment() {
-        // If boomerang is ON, revert it first
         if (pendingBoomerangOn) revertBgBoomerangToggle();
         pendingBgStart = pendingBgEnd = null;
         pendingBgRate = 1.0;
@@ -502,9 +461,7 @@ public class BackgroundEditorController {
 
         boolean wantOn = btnBgBoomerang.isSelected();
         if (!wantOn) {
-            // Toggle OFF: reload original preview with marks
             revertBgBoomerangToggle();
-            // Dispose current baked preview, reload from original
             disposePreviewPlayerOnly();
             btnBgMarkStart.setDisable(false);
             btnBgMarkEnd.setDisable(pendingBgStart == null);
@@ -513,7 +470,6 @@ public class BackgroundEditorController {
             return;
         }
 
-        // Toggle ON
         if (pendingBgStart == null || pendingBgEnd == null) {
             revertBgBoomerangToggle();
             return;
@@ -524,10 +480,8 @@ public class BackgroundEditorController {
         long eMs = (long) pendingBgEnd.toMillis();
 
         if (boomerangBaker.isCached(pendingBgPath, sMs, eMs)) {
-            // Cache hit: load baked file directly
             pendingBakedPath = boomerangBaker.cacheKeyPath(pendingBgPath, sMs, eMs).toString();
             disposePreviewPlayerOnly();
-            // Disable mark buttons while boomerang ON (palindrome marks are meaningless)
             btnBgMarkStart.setDisable(true);
             btnBgMarkEnd.setDisable(true);
             btnBgClearSegment.setDisable(true);
@@ -535,14 +489,12 @@ public class BackgroundEditorController {
             return;
         }
 
-        // Cache miss: bake asynchronously
         bgBakeGuardSrc   = pendingBgPath;
         bgBakeGuardStart = sMs;
         bgBakeGuardEnd   = eMs;
         final String src = pendingBgPath;
         bgPreviewSpinner.setVisible(true);
         btnBgBoomerang.setDisable(true);
-        // Apply would read the half-written cache file or start a second ffmpeg on it
         btnApplyBackground.setDisable(true);
         lblBgBoomerangHint.setText("Baking boomerang...");
         boomerangBaker.bakeAsync(src, sMs, eMs,
@@ -552,7 +504,6 @@ public class BackgroundEditorController {
 
     private void onBgBakeSuccess(Path out, String srcPath, long sMs, long eMs) {
         btnApplyBackground.setDisable(false);
-        // Stale-bake guard: check the pending* snapshot (the preview is ephemeral)
         boolean stillValid = pendingBoomerangOn
                 && pendingBgPath != null && pendingBgPath.equals(srcPath)
                 && pendingBgStart != null && (long) pendingBgStart.toMillis() == sMs
@@ -569,9 +520,7 @@ public class BackgroundEditorController {
         pendingBakedPath = out.toString();
         bgPreviewSpinner.setVisible(false);
         lblBgBoomerangHint.setText("");
-        // Dispose current preview and load baked palindrome
         disposePreviewPlayerOnly();
-        // Disable mark buttons (boomerang ON state)
         btnBgMarkStart.setDisable(true);
         btnBgMarkEnd.setDisable(true);
         btnBgClearSegment.setDisable(true);
@@ -594,7 +543,6 @@ public class BackgroundEditorController {
     @FXML
     private void onApplyBackground() {
         if (pendingBgPath == null) return;
-        // 1. Persist into the active scene (ONE save)
         SessionConfig session = host.session();
         session.setBackgroundImagePath(pendingBgPath);
         session.setLastImageFolderPath(new File(pendingBgPath).getParent());
@@ -603,9 +551,7 @@ public class BackgroundEditorController {
         session.setVideoPlaybackRate(pendingBgRate);
         session.setBoomerangEnabled(pendingBoomerangOn);
         host.saveSession();
-        // 2. Live ambiance (segment, rate, boomerang cache hit/bake) is applied by the host
         host.applyBackground();
-        // 3. Update labels, dispose the preview and clear the pending state
         updateBackgroundLabel(session.getBackgroundImagePath());
         onCancelBackground();
     }
@@ -615,9 +561,7 @@ public class BackgroundEditorController {
         SessionConfig session = host.session();
         String applied = session.getBackgroundImagePath();
         if (applied == null || !new File(applied).exists()) return;
-        // Edit replaces any active preview: release the previous player first
         disposeBgPreview();
-        // Preload pending* from the applied state
         pendingBgPath = applied;
         Long sMs = session.getVideoSegmentStartMs();
         Long eMs = session.getVideoSegmentEndMs();
@@ -627,31 +571,23 @@ public class BackgroundEditorController {
         pendingBgRate  = savedRate != 0 ? savedRate : 1.0;
         boolean boomOn = Boolean.TRUE.equals(session.getBoomerangEnabled());
         pendingBoomerangOn = boomOn;
-        // Cache hit check for the boomerang baked path
         if (boomOn && sMs != null && eMs != null
                 && boomerangBaker.isCached(applied, sMs, eMs)) {
             pendingBakedPath = boomerangBaker.cacheKeyPath(applied, sMs, eMs).toString();
         } else {
             pendingBakedPath = null;
-            pendingBoomerangOn = false; // cannot restore boomerang if not cached; user re-toggles
+            pendingBoomerangOn = false;
         }
-        // Load preview (no setBackground on the ambiance)
         String previewSource = (pendingBakedPath != null && pendingBoomerangOn)
                 ? pendingBakedPath : applied;
         loadBgPreview(previewSource);
-        // Restore controls under the refreshingUI guard
         resetPendingControls();
-        // Re-enable Mark End if a start mark was restored: loadBgPreview disables it initially
-        // and setOnReady does not re-enable it
         if (pendingBgStart != null) {
             btnBgMarkEnd.setDisable(false);
         }
         updateBgSegmentLabel();
     }
 
-    // --- File labels ---
-
-    /** Updates the background file labels and the Edit button state. */
     private void updateBackgroundLabel(String path) {
         if (path == null || !new File(path).exists()) {
             lblBackgroundFile.setText("No background set");
@@ -664,7 +600,6 @@ public class BackgroundEditorController {
         }
     }
 
-    /** Infers the media type from the extension: "Image", "GIF", "Video" or "" if unknown. */
     public static String mediaType(String path) {
         if (path == null) return "";
         String lower = path.toLowerCase();
@@ -678,7 +613,6 @@ public class BackgroundEditorController {
         };
     }
 
-    /** Formats a Duration as m:ss ("0:12", "1:05"). Null-safe: returns "0:00". */
     private static String formatSegmentTime(Duration d) {
         if (d == null) return "0:00";
         int totalSeconds = (int) d.toSeconds();

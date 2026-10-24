@@ -12,7 +12,6 @@
         <Insets top="12" right="12" bottom="12" left="12"/>
     </padding>
 
-    <!-- Current background -->
     <Label text="BACKGROUND" styleClass="lbl-session-title"/>
     <Label fx:id="lblBackgroundFile" text="No background set" styleClass="lbl-preview-track" maxWidth="Infinity"/>
     <Label fx:id="lblBackgroundType" text="" styleClass="lbl-session-title" maxWidth="Infinity"/>
@@ -27,7 +26,6 @@
         <ComboBox fx:id="cmbFitMode" HBox.hgrow="ALWAYS" maxWidth="Infinity" onAction="#onSelectFitMode"/>
     </HBox>
 
-    <!-- Preview panel: shown only while a background is being edited (pendingBgPath != null) -->
     <VBox fx:id="bgPreviewPanel" spacing="6" visible="false" managed="false">
         <StackPane fx:id="bgPreviewStack" prefHeight="190" minHeight="190">
             <MediaView fx:id="bgPreviewMediaView" fitWidth="320" fitHeight="180" preserveRatio="true"/>
@@ -37,20 +35,17 @@
                                maxWidth="48" maxHeight="48"/>
             <Label fx:id="lblBgPreviewPlaceholder" text="No preview" styleClass="lbl-preview-track"/>
         </StackPane>
-        <!-- Marks band: visual A-B range over the scrub timeline -->
         <HBox spacing="4" alignment="CENTER_LEFT">
             <Region minWidth="35" maxWidth="35"/>
             <Pane fx:id="bgMarkBand" HBox.hgrow="ALWAYS" prefHeight="6" minHeight="6" maxHeight="6"/>
             <Region minWidth="35" maxWidth="35"/>
         </HBox>
-        <!-- Scrub row -->
         <HBox spacing="4" alignment="CENTER_LEFT">
             <Label fx:id="lblBgPreviewCurrentTime" text="0:00" styleClass="lbl-time" minWidth="35"/>
             <Slider fx:id="bgPreviewSlider" HBox.hgrow="ALWAYS" min="0" max="100" value="0"
                     styleClass="spotify-slider"/>
             <Label fx:id="lblBgPreviewTotalTime" text="0:00" styleClass="lbl-time" minWidth="35"/>
         </HBox>
-        <!-- Mark row -->
         <HBox spacing="6">
             <Button fx:id="btnBgMarkStart" text="Mark start" onAction="#onBgMarkStart"
                     HBox.hgrow="ALWAYS" maxWidth="Infinity" styleClass="btn-secondary" disable="true"/>
@@ -63,7 +58,6 @@
             <Button fx:id="btnBgClearSegment" text="Clear" onAction="#onBgClearSegment"
                     styleClass="btn-secondary" disable="true"/>
         </HBox>
-        <!-- Boomerang + speed row -->
         <HBox spacing="6" alignment="CENTER_LEFT">
             <Label text="Speed:" styleClass="lbl-session-title" minWidth="45"/>
             <ComboBox fx:id="cmbBgVideoSpeed" HBox.hgrow="ALWAYS" maxWidth="Infinity"
@@ -72,7 +66,6 @@
                           HBox.hgrow="ALWAYS" maxWidth="Infinity" styleClass="btn-secondary" disable="true"/>
             <Label fx:id="lblBgBoomerangHint" text="" styleClass="lbl-preview-track" minWidth="90"/>
         </HBox>
-        <!-- Apply / Cancel row -->
         <HBox spacing="6">
             <Button fx:id="btnApplyBackground" text="Apply" onAction="#onApplyBackground"
                     HBox.hgrow="ALWAYS" maxWidth="Infinity" styleClass="btn-primary"/>

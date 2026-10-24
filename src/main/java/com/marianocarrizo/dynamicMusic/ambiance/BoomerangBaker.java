@@ -1,5 +1,7 @@
 package com.marianocarrizo.dynamicMusic.ambiance;
 
+import com.marianocarrizo.dynamicMusic.service.FfmpegLocator;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -32,12 +34,11 @@ public final class BoomerangBaker {
     // --- Sondeo estático de ffmpeg ---
 
     /**
-     * Verifica si ffmpeg está disponible en el PATH.
      * Sondeo de un solo disparo con timeout de 3 segundos.
      */
     public static boolean isFfmpegAvailable() {
         try {
-            Process p = new ProcessBuilder("ffmpeg", "-version")
+            Process p = new ProcessBuilder(FfmpegLocator.executable(), "-version")
                     .redirectErrorStream(true)
                     .start();
             // Drenar salida para evitar bloqueo en el buffer del proceso
@@ -141,7 +142,7 @@ public final class BoomerangBaker {
         String endSec   = String.format(Locale.ROOT, "%.3f", endMs   / 1000.0);
 
         List<String> cmd = List.of(
-                "ffmpeg", "-y",
+                FfmpegLocator.executable(), "-y",
                 "-ss", startSec,
                 "-to", endSec,
                 "-i", srcAbsPath,
