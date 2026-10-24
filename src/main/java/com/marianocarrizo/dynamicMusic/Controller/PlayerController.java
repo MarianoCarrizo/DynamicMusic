@@ -1719,6 +1719,8 @@ public class PlayerController {
 
     public void applySession(SessionConfig cfg) {
         if (cfg == null) return;
+        // Keep the loaded scenes (ids, auras); the restores below write through the active scene
+        sessionConfig.adoptScenesFrom(cfg);
         cfg.getAssignments().forEach((type, path) -> {
             File file = new File(path);
             if (file.exists()) {

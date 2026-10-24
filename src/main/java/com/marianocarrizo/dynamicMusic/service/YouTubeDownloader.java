@@ -202,11 +202,21 @@ public final class YouTubeDownloader {
 
     // --- Cache directory ---
 
-    private Path cacheDir() throws IOException {
+    /** App data root: %APPDATA%/DynamicMusic (falls back to user.home/DynamicMusic). */
+    static Path appDir() {
         String appdata = System.getenv("APPDATA");
-        Path dir = (appdata != null && !appdata.isBlank())
-                ? Paths.get(appdata, "DynamicMusic", "yt-cache")
-                : Paths.get(System.getProperty("user.home"), "DynamicMusic", "yt-cache");
+        return (appdata != null && !appdata.isBlank())
+                ? Paths.get(appdata, "DynamicMusic")
+                : Paths.get(System.getProperty("user.home"), "DynamicMusic");
+    }
+
+    /** Resolves the yt-cache directory path without creating it. */
+    static Path cacheDirPath() {
+        return appDir().resolve("yt-cache");
+    }
+
+    private Path cacheDir() throws IOException {
+        Path dir = cacheDirPath();
         Files.createDirectories(dir);
         return dir;
     }
