@@ -22,10 +22,23 @@ public class SessionConfigManager {
 
     private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
 
+    // Test seam: when set, replaces the APPDATA-based session file location
+    private final Path pathOverride;
+
+    public SessionConfigManager() {
+        this.pathOverride = null;
+    }
+
+    /** Test seam: uses {@code sessionFile} instead of %APPDATA%/DynamicMusic/session.json. */
+    SessionConfigManager(Path sessionFile) {
+        this.pathOverride = sessionFile;
+    }
+
     /**
      * Resuelve la ruta canónica del archivo de sesión según las variables de entorno.
      */
     private Path configPath() {
+        if (pathOverride != null) return pathOverride;
         String appdata = System.getenv("APPDATA");
         if (appdata == null || appdata.isEmpty()) {
             appdata = System.getProperty("user.home") + "/AppData/Roaming";

@@ -24,13 +24,18 @@ public final class TrackLibrary {
      * Otherwise returns {@code path} unchanged. Never throws; on failure returns the original.
      */
     public static String pin(String path) {
+        return pin(path, YouTubeDownloader.cacheDirPath(), libraryDir());
+    }
+
+    /** Test seam: same as {@link #pin(String)} with explicit cache and library directories. */
+    static String pin(String path, Path cacheDir, Path libraryDir) {
         if (path == null || path.isBlank()) return path;
         try {
             Path src = Path.of(path).toAbsolutePath().normalize();
-            Path cache = YouTubeDownloader.cacheDirPath().toAbsolutePath().normalize();
+            Path cache = cacheDir.toAbsolutePath().normalize();
             if (!src.startsWith(cache) || !Files.isRegularFile(src)) return path;
 
-            Path dir = libraryDir();
+            Path dir = libraryDir;
             Files.createDirectories(dir);
             Path target = dir.resolve(src.getFileName().toString());
             if (!(Files.exists(target) && Files.size(target) == Files.size(src))) {

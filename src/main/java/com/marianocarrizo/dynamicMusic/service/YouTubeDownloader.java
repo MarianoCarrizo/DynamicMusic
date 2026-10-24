@@ -266,14 +266,7 @@ public final class YouTubeDownloader {
         final Path outFinal = out;
         CompletableFuture.runAsync(() -> {
             try {
-                YtDlpManager.ProcResult r = runYtDlp(List.of(
-                        "-x",
-                        "--audio-format", "mp3",
-                        "--no-playlist",
-                        "-o", outFinal.toString(),
-                        "--", // end of options: a pasted string can never be parsed as a yt-dlp flag
-                        url
-                ), DOWNLOAD_TIMEOUT_SECONDS);
+                YtDlpManager.ProcResult r = runYtDlp(downloadArgs(outFinal, url), DOWNLOAD_TIMEOUT_SECONDS);
 
                 if (r.timedOut()) {
                     deletePartial(outFinal);
@@ -311,6 +304,23 @@ public final class YouTubeDownloader {
         });
     }
 
+    /** yt-dlp arguments for an audio download; the URL goes after "--" so it can never be parsed as a flag. */
+    static List<String> downloadArgs(Path out, String url) {
+        return List.of(
+                "-x",
+                "--audio-format", "mp3",
+                "--no-playlist",
+                "-o", out.toString(),
+                "--", // end of options: a pasted string can never be parsed as a yt-dlp flag
+                url
+        );
+    }
+
+    /** yt-dlp arguments for a title lookup; the URL goes after "--". */
+    static List<String> titleArgs(String url) {
+        return List.of("--get-title", "--no-playlist", "--", url);
+    }
+
     /** Removes a possibly truncated output (and yt-dlp's .part leftover) so it is never read as a cache hit. */
     private static void deletePartial(Path out) {
         try { Files.deleteIfExists(out); } catch (IOException ignored) {}
@@ -322,8 +332,7 @@ public final class YouTubeDownloader {
     /** Runs {@code yt-dlp --get-title} and returns the trimmed output, or null on any failure. */
     private String fetchTitle(String url) {
         try {
-            YtDlpManager.ProcResult r = runYtDlp(
-                    List.of("--get-title", "--no-playlist", "--", url), TITLE_TIMEOUT_SECONDS);
+            YtDlpManager.ProcResult r = runYtDlp(titleArgs(url), TITLE_TIMEOUT_SECONDS);
             if (r.timedOut() || r.exitCode() != 0) return null;
             String title = r.stdout().trim();
             return title.isBlank() ? null : title;

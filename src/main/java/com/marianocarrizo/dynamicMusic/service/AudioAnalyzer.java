@@ -99,7 +99,16 @@ public final class AudioAnalyzer {
 
     private volatile AudioFeatures snapshot = AudioFeatures.SILENT;
 
+    // Time source in nanoseconds; replaceable in tests for deterministic refractory/staleness handling
+    private final java.util.function.LongSupplier clock;
+
     public AudioAnalyzer() {
+        this(System::nanoTime);
+    }
+
+    /** Test seam: injects the nanosecond clock. */
+    AudioAnalyzer(java.util.function.LongSupplier clock) {
+        this.clock = clock;
         reset();
     }
 
@@ -115,7 +124,7 @@ public final class AudioAnalyzer {
         snareHit = 0;
         beatStrength = 0;
         warmup = WARMUP_TICKS;
-        lastTickNs = System.nanoTime();
+        lastTickNs = clock.getAsLong();
         publish();
     }
 
@@ -127,7 +136,7 @@ public final class AudioAnalyzer {
     /** Feeds one spectrum frame with its media timestamp (seconds), kept for diagnostics. */
     public synchronized AudioFeatures process(float[] magnitudes, double mediaTime) {
         lastMediaTime = mediaTime;
-        long now = System.nanoTime();
+        long now = clock.getAsLong();
         lastTickNs = now;
 
         double[] raw = new double[3];
@@ -162,7 +171,7 @@ public final class AudioAnalyzer {
      * levels are decayed here so the visuals fade out instead of freezing.
      */
     public synchronized AudioFeatures current() {
-        long now = System.nanoTime();
+        long now = clock.getAsLong();
         if (now - lastTickNs > STALE_NS) {
             long ticks = Math.min(40, (now - lastTickNs) / TICK_NS);
             for (long t = 0; t < ticks; t++) {
