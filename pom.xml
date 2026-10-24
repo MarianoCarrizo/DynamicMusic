@@ -20,6 +20,8 @@
             Sobreescribir con: mvn package -Djavafx.jmods=C:/ruta/a/javafx-jmods-21.0.2
         -->
         <javafx.jmods>C:/javafx-jmods-21.0.2</javafx.jmods>
+        <!-- Offline corpus evaluation (AudioAnalyzerCorpusTest) is opt-in: -Dgroups=corpus -DexcludedGroups=none -->
+        <excludedGroups>corpus</excludedGroups>
     </properties>
 
     <repositories>
