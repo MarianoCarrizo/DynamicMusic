@@ -20,9 +20,15 @@ Proyecto personal, sin fines comerciales.
 
 ## Requisitos
 
-- **JDK 21+**
-- **ffmpeg**: lo usan la descarga de audio de YouTube y el boomerang de video. El instalador de Windows ya lo incluye; al correr desde el código fuente tiene que estar en el PATH.
-- Opcional: **Node.js** o **Deno**. yt-dlp los usa para extraer de YouTube de forma confiable.
+### Para usar la app (instalador de Windows)
+
+Nada. El instalador trae su propio Java recortado a medida (jlink) y ffmpeg, así que no hace falta instalar Java, JDK ni JRE. Opcional: **Node.js** o **Deno** para que yt-dlp extraiga de YouTube de forma más confiable.
+
+### Para desarrollar (correr desde el código fuente)
+
+- **JDK 21+**: solo para compilar y correr con `mvnw`.
+- **ffmpeg** en el PATH: lo usan la descarga de audio de YouTube y el boomerang de video.
+- Opcional: **Node.js** o **Deno**, por el mismo motivo que arriba.
 
 En Windows, yt-dlp no hace falta instalarlo: la app descarga su propia copia en la primera ejecución. En Linux y macOS hay que tener `yt-dlp` en el PATH.
 
