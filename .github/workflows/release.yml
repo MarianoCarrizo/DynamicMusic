@@ -85,6 +85,7 @@ jobs:
             --icon icon.ico `
             --module-path $modulePath `
             --module com.marianocarrizo.dynamicMusic/com.marianocarrizo.dynamicMusic.MusicServiceStarter `
+            --add-modules jdk.crypto.ec `
             --java-options '--enable-native-access=javafx.graphics' `
             --java-options "-Ddynamicmusic.version=$env:APP_VERSION" `
             --dest target/app-image
@@ -101,7 +102,7 @@ jobs:
           if (-not $line) { throw 'Runtime image has no MODULES entry in its release file' }
           $modules = $line.Line.Substring('MODULES='.Length).Trim('"').Split(' ')
           Write-Host "Runtime modules: $($modules -join ', ')"
-          foreach ($m in 'javafx.media', 'javafx.fxml', 'java.net.http', 'com.google.gson') {
+          foreach ($m in 'javafx.media', 'javafx.fxml', 'java.net.http', 'jdk.crypto.ec', 'com.google.gson') {
             if ($modules -notcontains $m) { throw "Runtime image lacks module $m" }
           }
 
