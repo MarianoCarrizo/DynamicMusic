@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/logo/dynamicmusic.svg" width="128" alt="DynamicMusic logo"></p>
+
 # DynamicMusic
 
 Reproductor de música y ambientación para sesiones de rol de mesa. Cada **escena** agrupa cuatro moods (PAUSED, NORMAL, RAGED, ADVANTAGE) con su track, un fondo de imagen o video y un **aura** visual que reacciona a la música. Durante la partida se cambia de mood con el teclado y la música y el aura acompañan el momento.
@@ -122,6 +124,12 @@ Para probar el script del instalador a mano hace falta Inno Setup 6.3 o superior
 ## Aviso sobre YouTube
 
 La descarga de audio de YouTube es para uso personal. Respetar los derechos de autor y los términos de servicio de YouTube es responsabilidad de quien usa la app.
+
+## Apoyar el proyecto
+
+DynamicMusic es gratis y open source. Si te sirve en tus partidas, podés invitarme un cafecito:
+
+[![Invitame un café en cafecito.app](https://cdn.cafecito.app/imgs/buttons/button_5.svg)](https://cafecito.app/duhonha)
 
 ## Licencia
 
