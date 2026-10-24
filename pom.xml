@@ -20,6 +20,8 @@
             Sobreescribir con: mvn package -Djavafx.jmods=C:/ruta/a/javafx-jmods-21.0.2
         -->
         <javafx.jmods>C:/javafx-jmods-21.0.2</javafx.jmods>
+        <!-- Offline corpus evaluation (AudioAnalyzerCorpusTest) is opt-in: -Dgroups=corpus -DexcludedGroups=none -->
+        <excludedGroups>corpus</excludedGroups>
     </properties>
 
     <repositories>
@@ -74,6 +76,13 @@
             <artifactId>gson</artifactId>
             <version>2.11.0</version>
         </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>5.12.2</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -92,6 +101,16 @@
                         el annotation processing para evitar la carga del LombokProcessor.
                     -->
                     <proc>none</proc>
+                </configuration>
+            </plugin>
+
+            <!-- Unit tests run on the classpath (no module path) so tests can reach package-private code -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.5.3</version>
+                <configuration>
+                    <useModulePath>false</useModulePath>
                 </configuration>
             </plugin>
 

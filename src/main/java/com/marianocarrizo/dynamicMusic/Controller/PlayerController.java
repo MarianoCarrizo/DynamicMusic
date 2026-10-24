@@ -911,7 +911,7 @@ public class PlayerController implements SceneHost {
             if (path != null && new File(path).isFile()) {
                 if (!path.equals(loadedPaths.get(t))) {
                     loadedPaths.put(t, path);
-                    musicService.loadTrack(t, new File(path), () -> onTrackLoaded(t));
+                    musicService.loadTrack(t, new File(path), () -> onTrackLoaded(t), () -> onTrackLoadFailed(t, path));
                 }
             } else {
                 loadedPaths.remove(t);
@@ -944,6 +944,19 @@ public class PlayerController implements SceneHost {
         if (progressSlider != null) progressSlider.setValue(0);
         if (lblCurrentTime != null) lblCurrentTime.setText("0:00");
         if (lblTotalTime != null) lblTotalTime.setText("0:00");
+    }
+
+    /**
+     * A mood track could not be loaded: forget it so the next scene apply retries, and drop the
+     * slot's previous player so a track from another scene never keeps playing under this one.
+     */
+    private void onTrackLoadFailed(TrackType type, String path) {
+        if (!path.equals(loadedPaths.get(type))) return; // a newer load replaced this one
+        loadedPaths.remove(type);
+        musicService.unloadTrack(type);
+        refreshCards();
+        updateButtons();
+        updatePlayPauseButton();
     }
 
     /** Called on the FX thread when a mood track finished loading. */
@@ -1008,7 +1021,7 @@ public class PlayerController implements SceneHost {
                 manager.save(sessionConfig);
                 if (target == sessionConfig.getActiveScene()) {
                     loadedPaths.put(type, path);
-                    musicService.loadTrack(type, new File(path), () -> onTrackLoaded(type));
+                    musicService.loadTrack(type, new File(path), () -> onTrackLoaded(type), () -> onTrackLoadFailed(type, path));
                     refreshCards();
                     if (sceneEditor != null) sceneEditor.refreshTracks();
                 }
@@ -1434,12 +1447,7 @@ public class PlayerController implements SceneHost {
             return;
         }
 
-        if (!YouTubeDownloader.isYtDlpAvailable()) {
-            new Alert(Alert.AlertType.ERROR,
-                    "yt-dlp not found on PATH. Install it to use this feature.").showAndWait();
-            return;
-        }
-
+        // yt-dlp availability (and the first-run download wait) is handled off the FX thread by downloadAsync.
         final String capturedUrl = url;
         final String capturedVid = vid.get();
         final String placeholderText = "⬇ Downloading... (" + capturedVid + ")";
@@ -1479,11 +1487,6 @@ public class PlayerController implements SceneHost {
             showYoutubeError("Not a valid YouTube URL.");
             return;
         }
-        if (!YouTubeDownloader.isYtDlpAvailable()) {
-            new Alert(Alert.AlertType.ERROR,
-                    "yt-dlp not found on PATH. Install it to use this feature.").showAndWait();
-            return;
-        }
         if (btnPlayYoutube != null) btnPlayYoutube.setDisable(true);
         showYtDlpStatus("Downloading track...");
         youTubeDownloader.downloadAsync(url, vid.get(),
@@ -1502,11 +1505,7 @@ public class PlayerController implements SceneHost {
 
     @FXML
     private void onBrowseYouTube() {
-        if (!YouTubeDownloader.isYtDlpAvailable()) {
-            new Alert(Alert.AlertType.ERROR,
-                    "yt-dlp not found on PATH. Install it to use this feature.").showAndWait();
-            return;
-        }
+        // searchAsync waits for the yt-dlp setup off the FX thread and reports failures in the picker.
         Stage owner = (Stage) btnBrowseYoutube.getScene().getWindow();
         YoutubePicker.show(owner, youTubeDownloader, result -> {
             playYoutubeNow(result.url());

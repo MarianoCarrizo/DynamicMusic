@@ -279,6 +279,14 @@ public class MusicService {
      * track and was playing, the new one starts playing in its place.
      */
     public void loadTrack(TrackType type, File file, Runnable onLoaded) {
+        loadTrack(type, file, onLoaded, null);
+    }
+
+    /**
+     * Same as {@link #loadTrack(TrackType, File, Runnable)}; {@code onFailed} runs on the FX
+     * thread when this (still current) load cannot produce a playable player.
+     */
+    public void loadTrack(TrackType type, File file, Runnable onLoaded, Runnable onFailed) {
         if (file == null || !file.exists()) return;
 
         final String trackDisplayName = file.getName();
@@ -298,13 +306,27 @@ public class MusicService {
                 Platform.runLater(() -> {
                     if (loadSeq.getOrDefault(type, 0) != seq) return; // superseded or unloaded
                     String sourceUrl = finalFile.toURI().toString();
-                    Media media = new Media(sourceUrl);
-                    MediaPlayer player = new MediaPlayer(media);
+                    final MediaPlayer player;
+                    try {
+                        player = new MediaPlayer(new Media(sourceUrl));
+                    } catch (RuntimeException ex) {
+                        System.err.println("No se pudo abrir la pista " + type + ": " + ex.getMessage());
+                        if (onFailed != null) onFailed.run();
+                        return;
+                    }
 
                     player.setVolume(effectiveGain(gain));
 
-                    player.setOnError(() ->
-                            System.err.println("Error en pista " + type + ": " + player.getError()));
+                    player.setOnError(() -> {
+                        System.err.println("Error en pista " + type + ": " + player.getError());
+                        Platform.runLater(() -> {
+                            // Failed before it was installed: report it so the caller can retry later
+                            if (players.get(type) != player && loadSeq.getOrDefault(type, 0) == seq) {
+                                player.dispose();
+                                if (onFailed != null) onFailed.run();
+                            }
+                        });
+                    });
 
                     // T-08: el loop del mood no debe dispararse mientras estemos en modo PLAYLIST
                     player.setOnEndOfMedia(() -> {
@@ -365,6 +387,11 @@ public class MusicService {
             } catch (Exception e) {
                 System.err.println("No se pudo cargar la pista " + type + ": " + e.getMessage());
                 e.printStackTrace();
+                if (onFailed != null) {
+                    Platform.runLater(() -> {
+                        if (loadSeq.getOrDefault(type, 0) == seq) onFailed.run();
+                    });
+                }
             }
         });
     }
@@ -766,7 +793,10 @@ public class MusicService {
                     player.setOnError(() -> {
                         System.err.println("Error en pista de playlist: " + player.getError());
                         Platform.runLater(() -> {
-                            if (onPlaylistEnd != null) onPlaylistEnd.run();
+                            // Skip the bad track only if this playlist player is still the audible source
+                            if (mode == PlaybackMode.PLAYLIST && player == playlistPlayer && onPlaylistEnd != null) {
+                                onPlaylistEnd.run();
+                            }
                         });
                     });
 

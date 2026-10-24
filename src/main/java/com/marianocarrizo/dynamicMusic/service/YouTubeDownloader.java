@@ -13,8 +13,15 @@ import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -84,26 +91,70 @@ public final class YouTubeDownloader {
     private static volatile boolean availableCached;
     private static volatile long    unavailableUntilMs;
 
+    // Covers the first setup's checksum (30 s) and binary (120 s) request timeouts plus margin
+    private static final long SETUP_WAIT_SECONDS = 180;
+
+    /** Daemon pool for YouTube work; tasks may block for minutes (setup wait, subprocess), so not the common pool. */
+    private static final ExecutorService EXECUTOR = Executors.newCachedThreadPool(r -> {
+        Thread t = new Thread(r, "youtube-task");
+        t.setDaemon(true);
+        return t;
+    });
+
     /**
-     * True when the managed yt-dlp exists or yt-dlp on PATH runs. A positive result is cached for the
-     * session; a negative one for 30 s, so repeated clicks on the FX thread never re-spawn a probe.
+     * True when the managed yt-dlp exists or yt-dlp on PATH runs. Blocks for up to 3 s on a probe, so keep
+     * it off the FX thread. A positive result is cached for the session; a negative one for 30 s, but never
+     * while the managed download is in progress (the binary is about to appear).
      */
     public static boolean isYtDlpAvailable() {
-        if (availableCached || YtDlpManager.get().hasManagedBinary()) return true;
+        YtDlpManager mgr = YtDlpManager.get();
+        if (availableCached || mgr.hasManagedBinary()) return true;
         if (System.currentTimeMillis() < unavailableUntilMs) return false;
-        boolean ok = false;
-        try {
-            YtDlpManager.ProcResult r = YtDlpManager.run(List.of("yt-dlp", "--version"), 3);
-            ok = !r.timedOut() && r.exitCode() == 0;
-        } catch (IOException e) {
-            ok = false;
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
+        boolean ok = probePath();
         if (ok) availableCached = true;
-        else unavailableUntilMs = System.currentTimeMillis() + 30_000;
+        else if (!mgr.isSetupRunning()) unavailableUntilMs = System.currentTimeMillis() + 30_000;
         return ok;
     }
+
+    private static boolean probePath() {
+        try {
+            YtDlpManager.ProcResult r = YtDlpManager.run(List.of("yt-dlp", "--version"), 3);
+            return !r.timedOut() && r.exitCode() == 0;
+        } catch (IOException e) {
+            return false;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+    }
+
+    /**
+     * Like {@link #isYtDlpAvailable()} but, when no yt-dlp is usable, starts (or joins) the managed setup and
+     * waits up to {@value #SETUP_WAIT_SECONDS} s for it. Blocking: never call on the FX thread.
+     */
+    static boolean awaitYtDlp() {
+        if (isYtDlpAvailable()) return true;
+        YtDlpManager mgr = YtDlpManager.get();
+        mgr.ensureReadyAsync(); // no-op while running; retries if an earlier attempt failed
+        if (mgr.isSetupRunning()) {
+            mgr.announce("Downloading yt-dlp...");
+            try {
+                mgr.readiness().get(SETUP_WAIT_SECONDS, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            } catch (ExecutionException | TimeoutException e) {
+                // fall through to the final check
+            }
+        }
+        if (mgr.hasManagedBinary()) return true;
+        boolean ok = probePath();
+        if (ok) availableCached = true;
+        return ok;
+    }
+
+    private static final String NOT_FOUND_MESSAGE =
+            "yt-dlp is not available. Check your internet connection and try again.";
 
     // --- Command execution with update-and-retry ---
 
@@ -143,8 +194,8 @@ public final class YouTubeDownloader {
                             Consumer<String> onError) {
         CompletableFuture.runAsync(() -> {
             try {
-                if (!isYtDlpAvailable()) {
-                    Platform.runLater(() -> onError.accept("yt-dlp not found."));
+                if (!awaitYtDlp()) {
+                    Platform.runLater(() -> onError.accept(NOT_FOUND_MESSAGE));
                     return;
                 }
                 YtDlpManager.ProcResult r = runYtDlp(List.of(
@@ -202,7 +253,7 @@ public final class YouTubeDownloader {
                 final String msg = e.getMessage();
                 Platform.runLater(() -> onError.accept(msg));
             }
-        }).exceptionally(ex -> {
+        }, EXECUTOR).exceptionally(ex -> {
             Platform.runLater(() -> onError.accept(ex.getMessage()));
             return null;
         });
@@ -210,12 +261,16 @@ public final class YouTubeDownloader {
 
     // --- Cache directory ---
 
-    /** App data root: %APPDATA%/DynamicMusic (falls back to user.home/DynamicMusic). */
+    /** App data root: %APPDATA%/DynamicMusic on Windows, user.home/DynamicMusic elsewhere. */
     static Path appDir() {
-        String appdata = System.getenv("APPDATA");
-        return (appdata != null && !appdata.isBlank())
+        return appDir(System.getProperty("os.name", ""), System.getenv("APPDATA"),
+                System.getProperty("user.home"));
+    }
+
+    static Path appDir(String osName, String appdata, String home) {
+        return (YtDlpManager.isWindows(osName) && appdata != null && !appdata.isBlank())
                 ? Paths.get(appdata, "DynamicMusic")
-                : Paths.get(System.getProperty("user.home"), "DynamicMusic");
+                : Paths.get(home, "DynamicMusic");
     }
 
     /** Resolves the yt-cache directory path without creating it. */
@@ -257,64 +312,122 @@ public final class YouTubeDownloader {
             return;
         }
 
+        // A running download of this id may already have created <id>.mp3 while ffmpeg is still
+        // writing it, so join it before trusting the file as a cache hit
+        CompletableFuture<PlaylistItem> inFlight = IN_FLIGHT.get(videoId);
+        if (inFlight != null) {
+            subscribe(inFlight, onSuccess, onFailure);
+            return;
+        }
+
         // Cache hit: no subprocess needed
         if (Files.exists(out)) {
             onSuccess.accept(new PlaylistItem(out.toString(), url, null));
             return;
         }
 
+        // One run per video id: a second request for the same id joins the running download.
+        CompletableFuture<PlaylistItem> mine = new CompletableFuture<>();
+        CompletableFuture<PlaylistItem> running = IN_FLIGHT.putIfAbsent(videoId, mine);
+        if (running != null) {
+            subscribe(running, onSuccess, onFailure);
+            return;
+        }
+        mine.whenComplete((r, ex) -> IN_FLIGHT.remove(videoId, mine));
+        subscribe(mine, onSuccess, onFailure);
+
         final Path outFinal = out;
-        CompletableFuture.runAsync(() -> {
+        EXECUTOR.execute(() -> {
             try {
-                YtDlpManager.ProcResult r = runYtDlp(List.of(
-                        "-x",
-                        "--audio-format", "mp3",
-                        "--no-playlist",
-                        "-o", outFinal.toString(),
-                        "--", // end of options: a pasted string can never be parsed as a yt-dlp flag
-                        url
-                ), DOWNLOAD_TIMEOUT_SECONDS);
-
-                if (r.timedOut()) {
-                    deletePartial(outFinal);
-                    onFailure.accept("Download timed out after " + DOWNLOAD_TIMEOUT_SECONDS + "s");
-                    return;
-                }
-
-                if (r.exitCode() != 0) {
-                    deletePartial(outFinal);
-                    String t = tail(r.combined(), STDERR_TAIL_BYTES);
-                    onFailure.accept(t.isBlank() ? "yt-dlp exited with code " + r.exitCode() : t);
-                    return;
-                }
-
-                if (!Files.exists(outFinal)) {
-                    onFailure.accept("Output file not found after download");
-                    return;
-                }
-
-                // Fetch the video title as a non-fatal secondary step
-                String title = fetchTitle(url);
-
-                evictOldEntries();
-                onSuccess.accept(new PlaylistItem(outFinal.toString(), url, title));
-
-            } catch (IOException | InterruptedException e) {
-                if (e instanceof InterruptedException) Thread.currentThread().interrupt();
-                deletePartial(outFinal);
-                onFailure.accept(e.getMessage());
+                mine.complete(runDownload(url, videoId, outFinal));
+            } catch (Throwable t) {
+                mine.completeExceptionally(t);
             }
-        }).exceptionally(ex -> {
-            deletePartial(outFinal);
-            onFailure.accept(ex.getMessage());
-            return null;
         });
     }
 
-    /** Removes a possibly truncated output (and yt-dlp's .part leftover) so it is never read as a cache hit. */
-    private static void deletePartial(Path out) {
-        try { Files.deleteIfExists(out); } catch (IOException ignored) {}
-        try { Files.deleteIfExists(Paths.get(out + ".part")); } catch (IOException ignored) {}
+    /** Downloads of the same video id currently running; shared by every caller asking for that id. */
+    private static final Map<String, CompletableFuture<PlaylistItem>> IN_FLIGHT = new ConcurrentHashMap<>();
+
+    private static void subscribe(CompletableFuture<PlaylistItem> f,
+                                  Consumer<PlaylistItem> onSuccess, Consumer<String> onFailure) {
+        f.whenComplete((item, ex) -> {
+            if (ex == null) onSuccess.accept(item);
+            else onFailure.accept(ex.getMessage() != null ? ex.getMessage() : ex.toString());
+        });
+    }
+
+    /**
+     * Runs the download and returns the item, or throws an {@link IOException} with a user-facing message.
+     * Leftovers are deleted only when yt-dlp itself failed or timed out in THIS run.
+     */
+    private PlaylistItem runDownload(String url, String videoId, Path out) throws IOException {
+        Path dir = out.getParent();
+        if (!awaitYtDlp()) throw new IOException(NOT_FOUND_MESSAGE);
+
+        YtDlpManager.ProcResult r;
+        try {
+            r = runYtDlp(downloadArgs(out, url), DOWNLOAD_TIMEOUT_SECONDS);
+        } catch (IOException | InterruptedException e) {
+            if (e instanceof InterruptedException) Thread.currentThread().interrupt();
+            cleanupLeftovers(dir, videoId, false);
+            throw new IOException(e.getMessage(), e);
+        }
+
+        if (r.timedOut()) {
+            cleanupLeftovers(dir, videoId, false);
+            throw new IOException("Download timed out after " + DOWNLOAD_TIMEOUT_SECONDS + "s");
+        }
+        if (r.exitCode() != 0) {
+            cleanupLeftovers(dir, videoId, false);
+            String t = tail(r.combined(), STDERR_TAIL_BYTES);
+            throw new IOException(t.isBlank() ? "yt-dlp exited with code " + r.exitCode() : t);
+        }
+        if (!Files.exists(out)) throw new IOException("Output file not found after download");
+
+        String title = fetchTitle(url); // non-fatal secondary step
+        evictOldEntries();
+        return new PlaylistItem(out.toString(), url, title);
+    }
+
+    /**
+     * Deletes yt-dlp's intermediates for {@code videoId} in {@code dir}: every file named {@code <id>.*}
+     * (partial/fragment/temp/.ytdl files, merged streams). The finished {@code <id>.mp3} is kept when
+     * {@code keepFinal} is true. Other ids are never touched. Returns the number of files deleted.
+     */
+    static int cleanupLeftovers(Path dir, String videoId, boolean keepFinal) {
+        int deleted = 0;
+        try (Stream<Path> stream = Files.list(dir)) {
+            for (Path p : stream.collect(Collectors.toList())) {
+                if (isLeftover(p.getFileName().toString(), videoId, keepFinal)) {
+                    try { if (Files.deleteIfExists(p)) deleted++; } catch (IOException ignored) {}
+                }
+            }
+        } catch (IOException ignored) {}
+        return deleted;
+    }
+
+    /** Name match for {@link #cleanupLeftovers}: {@code <id>.<anything>}, minus the final mp3 when kept. */
+    static boolean isLeftover(String fileName, String videoId, boolean keepFinal) {
+        if (!fileName.startsWith(videoId + ".")) return false;
+        return !(keepFinal && fileName.equals(videoId + ".mp3"));
+    }
+
+    /** yt-dlp arguments for an audio download; the URL goes after "--" so it can never be parsed as a flag. */
+    static List<String> downloadArgs(Path out, String url) {
+        return List.of(
+                "-x",
+                "--audio-format", "mp3",
+                "--no-playlist",
+                "-o", out.toString(),
+                "--", // end of options: a pasted string can never be parsed as a yt-dlp flag
+                url
+        );
+    }
+
+    /** yt-dlp arguments for a title lookup; the URL goes after "--". */
+    static List<String> titleArgs(String url) {
+        return List.of("--get-title", "--no-playlist", "--", url);
     }
 
     // --- Title fetch ---
@@ -322,8 +435,7 @@ public final class YouTubeDownloader {
     /** Runs {@code yt-dlp --get-title} and returns the trimmed output, or null on any failure. */
     private String fetchTitle(String url) {
         try {
-            YtDlpManager.ProcResult r = runYtDlp(
-                    List.of("--get-title", "--no-playlist", "--", url), TITLE_TIMEOUT_SECONDS);
+            YtDlpManager.ProcResult r = runYtDlp(titleArgs(url), TITLE_TIMEOUT_SECONDS);
             if (r.timedOut() || r.exitCode() != 0) return null;
             String title = r.stdout().trim();
             return title.isBlank() ? null : title;

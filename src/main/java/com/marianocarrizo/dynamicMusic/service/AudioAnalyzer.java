@@ -31,7 +31,7 @@ public final class AudioAnalyzer {
     private static final int TONAL_START = BASS_END;  // ~260 Hz
     private static final int TONAL_END   = MID_END;   // ~2 kHz (exclusive)
     private static final int HPSS_FRAMES = 9;         // harmonic median over time: ~225 ms
-    private static final int HPSS_HALF_WIDTH = 8;     // percussive median over frequency: 17 bands
+    private static final int HPSS_HALF_WIDTH = 2;     // percussive median over frequency: 5 bands (17 smeared kicks into the neighbours)
     private static final double HPSS_EPS = 1e-12;
     // Per-feature rolling-peak floors (kick, snare, tonal); percussive parts are quiet
     private static final double[] PF_FLOOR = {0.004, 0.0006, 0.002};
@@ -62,12 +62,15 @@ public final class AudioAnalyzer {
     private static final double RELEASE_STALE = 0.10;
 
     // Beat detection
-    private static final int    HISTORY_SIZE   = 40;      // ~1 s of flux values
+    private static final int    HISTORY_SIZE   = 60;      // ~1.5 s of flux values
     private static final double THRESHOLD_K    = 1.25;    // mean + K * stddev
     private static final double MIN_FLUX       = 0.06;    // absolute minimum jump to count as a beat
-    private static final long   REFRACTORY_NS  = 140_000_000L;
+    private static final long   REFRACTORY_NS  = 100_000_000L;  // allows fast double-bass (up to ~10 hits/s)
     private static final double BEAT_DECAY     = 0.905;   // per tick (0.82 per 50 ms)
     private static final int    WARMUP_TICKS   = 12;      // ignore beats right after a reset
+    // An onset must also reach this fraction of the recent strongest flux, so weak events next to
+    // a loud hit (bass notes, ghost notes) do not count as beats
+    private static final double PEAK_FRAC      = 0.4;
 
     // Must match MusicService's spectrum interval
     private static final long TICK_NS  = 25_000_000L;
@@ -99,7 +102,16 @@ public final class AudioAnalyzer {
 
     private volatile AudioFeatures snapshot = AudioFeatures.SILENT;
 
+    // Time source in nanoseconds; replaceable in tests for deterministic refractory/staleness handling
+    private final java.util.function.LongSupplier clock;
+
     public AudioAnalyzer() {
+        this(System::nanoTime);
+    }
+
+    /** Test seam: injects the nanosecond clock. */
+    AudioAnalyzer(java.util.function.LongSupplier clock) {
+        this.clock = clock;
         reset();
     }
 
@@ -115,7 +127,7 @@ public final class AudioAnalyzer {
         snareHit = 0;
         beatStrength = 0;
         warmup = WARMUP_TICKS;
-        lastTickNs = System.nanoTime();
+        lastTickNs = clock.getAsLong();
         publish();
     }
 
@@ -127,7 +139,7 @@ public final class AudioAnalyzer {
     /** Feeds one spectrum frame with its media timestamp (seconds), kept for diagnostics. */
     public synchronized AudioFeatures process(float[] magnitudes, double mediaTime) {
         lastMediaTime = mediaTime;
-        long now = System.nanoTime();
+        long now = clock.getAsLong();
         lastTickNs = now;
 
         double[] raw = new double[3];
@@ -162,7 +174,7 @@ public final class AudioAnalyzer {
      * levels are decayed here so the visuals fade out instead of freezing.
      */
     public synchronized AudioFeatures current() {
-        long now = System.nanoTime();
+        long now = clock.getAsLong();
         if (now - lastTickNs > STALE_NS) {
             long ticks = Math.min(40, (now - lastTickNs) / TICK_NS);
             for (long t = 0; t < ticks; t++) {
@@ -252,12 +264,12 @@ public final class AudioAnalyzer {
         private final double[] history = new double[HISTORY_SIZE];
         private final long refractoryNs;
         private int count, index;
-        private double prev;
+        private double prev, fluxPeak;
         private long lastNs;
 
         Onset(long refractoryNs) { this.refractoryNs = refractoryNs; }
 
-        void reset() { count = 0; index = 0; prev = 0; lastNs = 0; }
+        void reset() { count = 0; index = 0; prev = 0; fluxPeak = 0; lastNs = 0; }
 
         /** Returns the onset strength (0.45..1) or 0 when there is no onset. */
         double check(double level, long now, boolean armed) {
@@ -271,7 +283,8 @@ public final class AudioAnalyzer {
                 var += d * d;
             }
             double std = count > 0 ? Math.sqrt(var / count) : 0.0;
-            double threshold = Math.max(MIN_FLUX, mean + THRESHOLD_K * std);
+            fluxPeak = Math.max(flux, fluxPeak * PEAK_DECAY);
+            double threshold = Math.max(Math.max(MIN_FLUX, mean + THRESHOLD_K * std), PEAK_FRAC * fluxPeak);
             double strength = 0;
             if (armed && flux > threshold && level > MIN_PERC_LEVEL && now - lastNs > refractoryNs) {
                 lastNs = now;

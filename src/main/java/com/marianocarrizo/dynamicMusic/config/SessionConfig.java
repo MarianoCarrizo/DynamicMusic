@@ -195,6 +195,7 @@ public class SessionConfig {
         videoSegmentEndMs = null;
         videoPlaybackRate = null;
         boomerangEnabled = null;
+        moodEffects = null;
     }
 
     // --- Scene-scoped facade (reads/writes the ACTIVE scene) ---
