@@ -69,6 +69,8 @@
                     <Button fx:id="btnEditBackground" text="Edit" onAction="#onEditBackground"
                             styleClass="btn-secondary" disable="true"/>
                 </HBox>
+                <Button fx:id="btnToggleAmbiance" text="Show ambiance" onAction="#onToggleAmbiance"
+                        maxWidth="Infinity" styleClass="btn-secondary"/>
                 <HBox spacing="6" alignment="CENTER_LEFT">
                     <Label text="Fit:" styleClass="lbl-session-title" minWidth="45"/>
                     <ComboBox fx:id="cmbFitMode" HBox.hgrow="ALWAYS" maxWidth="Infinity" onAction="#onSelectFitMode"/>

@@ -123,6 +123,7 @@ public class PlayerController {
     @FXML private Label lblYoutubeError;
     @FXML private ComboBox<EffectType> cmbEffect;
     @FXML private ComboBox<String> cmbScreen;
+    @FXML private Button btnToggleAmbiance;
     @FXML private ComboBox<BackgroundFitMode> cmbFitMode;
     @FXML private Label lblBackgroundFile;
 
@@ -278,6 +279,7 @@ public class PlayerController {
         ambianceStage = new AmbianceStage();
         // El live ambiance ya no expone controles de segmento; no hay setOnVideoReady en la UI
         musicService.setAmplitudeListener(amp -> ambianceStage.setAmplitude(amp));
+        ambianceStage.setOnVisibilityChanged(this::updateAmbianceToggle);
 
         // Callback: el stage de ambiance notifica cuando el usuario suelta una imagen
         ambianceStage.setOnBackgroundDropped(path -> {
@@ -1259,6 +1261,18 @@ public class PlayerController {
      */
     private int screenComboIndexToScreenIndex(int comboIndex) {
         return comboIndex <= 0 ? -1 : comboIndex - 1;
+    }
+
+    @FXML
+    private void onToggleAmbiance() {
+        if (ambianceStage == null) return;
+        if (ambianceStage.isVisible()) ambianceStage.hide();
+        else ambianceStage.show();
+    }
+
+    private void updateAmbianceToggle(boolean showing) {
+        if (btnToggleAmbiance == null) return;
+        btnToggleAmbiance.setText(showing ? "Hide ambiance" : "Show ambiance");
     }
 
     @FXML

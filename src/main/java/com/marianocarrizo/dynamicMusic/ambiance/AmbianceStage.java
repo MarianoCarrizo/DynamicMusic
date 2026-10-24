@@ -104,6 +104,11 @@ public class AmbianceStage {
     private boolean boomerangActive = false;
     private String  bakedVideoPath  = null;
 
+    // Visibilidad elegida por el usuario; false = ventana oculta (partículas detenidas, video pausado)
+    private boolean visible = true;
+    // Callback del controlador: se dispara en el hilo FX cada vez que cambia la visibilidad
+    private Consumer<Boolean> onVisibilityChanged = null;
+
     // Executor de inicialización de media: mueve new Media(uri) fuera del hilo FX
     private final ExecutorService mediaInit = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "media-init");
@@ -169,6 +174,11 @@ public class AmbianceStage {
         root.setBackground(javafx.scene.layout.Background.EMPTY);
         scene.setFill(Color.BLACK);
         stage.setScene(scene);
+        // Cerrar la ventana (X / Alt+F4) solo la oculta; se puede volver a abrir desde el controlador
+        stage.setOnCloseRequest(e -> {
+            e.consume();
+            hide();
+        });
         stage.setTitle("Dynamic Music — Ambiance");
 
         // Handlers de drag-and-drop: adjuntados aquí para que sobrevivan rebuildStage()
@@ -233,6 +243,54 @@ public class AmbianceStage {
 
         setMood(currentMood);
         stage.show();
+        notifyVisibility();
+    }
+
+    // --- Mostrar / ocultar a demanda ---
+
+    /**
+     * Muestra la ventana de ambiance. Si nunca se abrió, delega en open().
+     * Si ya está visible, la trae al frente.
+     */
+    public void show() {
+        visible = true;
+        if (currentStyle == null) {
+            open();
+            return;
+        }
+        if (stage.isShowing()) {
+            stage.toFront();
+            return;
+        }
+        setMood(currentMood);
+        if (currentPlayer != null) currentPlayer.play();
+        stage.show();
+        notifyVisibility();
+    }
+
+    /**
+     * Oculta la ventana sin perder estado (fondo, mood, segmento). Detiene las
+     * partículas y pausa el video para no consumir CPU mientras no se ve.
+     */
+    public void hide() {
+        if (!visible) return;
+        visible = false;
+        stopParticleEffect();
+        if (currentPlayer != null) currentPlayer.pause();
+        stage.hide();
+        notifyVisibility();
+    }
+
+    public boolean isVisible() {
+        return visible && stage.isShowing();
+    }
+
+    public void setOnVisibilityChanged(Consumer<Boolean> callback) {
+        this.onVisibilityChanged = callback;
+    }
+
+    private void notifyVisibility() {
+        if (onVisibilityChanged != null) onVisibilityChanged.accept(isVisible());
     }
 
     // --- Selección de pantalla en vivo ---
@@ -303,8 +361,8 @@ public class AmbianceStage {
         // 7. Re-aplicar estado visual
         applyCurrentStateToNewStage();
 
-        // 8. Mostrar
-        stage.show();
+        // 8. Mostrar (solo si el usuario no la ocultó)
+        if (visible) stage.show();
     }
 
     /**
@@ -757,7 +815,7 @@ public class AmbianceStage {
                     }
                 };
                 player.setOnReady(readyHandler);
-                player.play();
+                if (visible) player.play(); // hidden: show() resumes playback
                 applyFitToMediaView();
                 if (player.getStatus() == MediaPlayer.Status.READY) readyHandler.run();
             });
@@ -771,6 +829,7 @@ public class AmbianceStage {
     }
 
     private void startParticleEffect(EffectType effect) {
+        if (!visible) return; // oculta: show() re-arranca el efecto del mood actual
         currentEffect = new ParticleSystem(particleCanvas, effect, this::getAmplitude);
         currentEffect.start();
     }
