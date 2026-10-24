@@ -78,14 +78,101 @@
     -fx-padding: 7px;
     -fx-prompt-text-fill: #808085;
 }
-.combo-box {
+.combo-box, .menu-button, .split-menu-button, .color-picker {
     -fx-background-color: #3a3a43;
     -fx-background-radius: 0px !important;
     -fx-border-radius: 0px !important;
-    -fx-padding: 4px;
+    -fx-border-color: transparent;
+    -fx-padding: 0;
 }
-.combo-box .label {
-    -fx-text-fill: white;
+.combo-box:hover, .menu-button:hover, .split-menu-button:hover, .color-picker:hover,
+.combo-box:focused, .menu-button:focused, .split-menu-button:focused, .color-picker:focused,
+.combo-box:showing, .menu-button:showing, .split-menu-button:showing, .color-picker:showing {
+    -fx-background-color: #4f4f5c;
+    -fx-border-color: transparent;
+}
+.combo-box > .list-cell, .combo-box .label, .menu-button .label, .split-menu-button .label,
+.color-picker .label {
+    -fx-text-fill: #ffffff;
+    -fx-background-color: transparent;
+}
+/* The combo button cell is a "selected" list cell: beat the per-mood #window-* selected colors */
+.combo-box > .list-cell:filled:selected, .combo-box > .list-cell:filled {
+    -fx-background-color: transparent !important;
+    -fx-text-fill: #ffffff !important;
+}
+.combo-box .arrow-button, .menu-button .arrow-button, .split-menu-button .arrow-button,
+.color-picker .arrow-button {
+    -fx-background-color: transparent;
+    -fx-background-radius: 0;
+}
+.combo-box .arrow, .menu-button .arrow, .split-menu-button .arrow, .color-picker .arrow {
+    -fx-background-color: #b0b0b8;
+}
+.split-menu-button > .label {
+    -fx-padding: 7px 12px;
+    -fx-cursor: hand;
+}
+.menu-button > .label {
+    -fx-padding: 7px 10px;
+}
+.btn-menu {
+    -fx-cursor: hand;
+}
+
+/* Dropdown lists and menus: neutral dark gray */
+.combo-box-popup > .list-view {
+    -fx-background-color: #2a2a32;
+    -fx-border-color: #4f4f5c;
+    -fx-border-width: 1px;
+}
+.combo-box-popup > .list-view .list-cell:filled:hover,
+.combo-box-popup > .list-view .list-cell:filled:selected {
+    -fx-background-color: #4f4f5c;
+    -fx-text-fill: #ffffff;
+}
+.context-menu {
+    -fx-background-color: #2a2a32;
+    -fx-background-radius: 0;
+    -fx-border-color: #4f4f5c;
+    -fx-border-width: 1px;
+    -fx-padding: 2px 0;
+}
+.context-menu .menu-item .label {
+    -fx-text-fill: #e0e0e0;
+}
+.context-menu .menu-item:focused {
+    -fx-background-color: #4f4f5c;
+}
+.context-menu .menu-item:focused .label {
+    -fx-text-fill: #ffffff;
+}
+
+/* Form controls used by the scene editor */
+.check-box {
+    -fx-text-fill: #e0e0e0;
+}
+.check-box .box {
+    -fx-background-color: #3a3a43;
+    -fx-background-radius: 0;
+    -fx-border-color: #5a5a6e;
+    -fx-border-radius: 0;
+}
+.check-box:selected .mark {
+    -fx-background-color: #ffffff;
+}
+.text-field:focused {
+    -fx-border-color: #7a7a8e;
+}
+.editor-scroll, .editor-scroll > .viewport {
+    -fx-background-color: transparent;
+    -fx-background: transparent;
+}
+.editor-scroll {
+    -fx-padding: 0;
+}
+.btn-preset {
+    -fx-padding: 7px 8px;
 }
 
 /* =========================================================================
@@ -142,6 +229,13 @@
     -fx-background-color: #4f4f5c;
 }
 
+/* Scene bar under the window header */
+.scene-bar {
+    -fx-background-color: #1a1a20;
+    -fx-border-color: transparent transparent #2d2d35 transparent;
+    -fx-border-width: 0 0 1px 0;
+}
+
 .btn-phase {
     -fx-background-color: #313139;
     -fx-text-fill: #d0d0d8;
@@ -152,6 +246,37 @@
     -fx-border-radius: 0px !important;
     -fx-border-width: 2px;
     -fx-cursor: hand;
+}
+/* Mood card lines: labels follow the button text color (active card flips it) */
+.btn-phase .label {
+    -fx-text-fill: inherit;
+}
+.btn-phase .card-title {
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+}
+.btn-phase .card-track {
+    -fx-font-size: 14px;
+    -fx-font-weight: normal;
+}
+.btn-phase .card-track-empty {
+    -fx-font-style: italic;
+    -fx-opacity: 0.55;
+}
+.btn-phase .card-aura {
+    -fx-font-size: 11px;
+    -fx-font-weight: normal;
+    -fx-opacity: 0.8;
+}
+/* Empty card: still enabled (it is a drop target), just dimmed */
+.btn-phase-empty {
+    -fx-opacity: 0.6;
+    -fx-border-style: segments(6, 4);
+}
+.btn-phase:drop-target {
+    -fx-background-color: #4a4a5c;
+    -fx-border-color: #ffffff;
+    -fx-opacity: 1;
 }
 .btn-phase:hover {
     -fx-background-color: #3e3e4a;
@@ -277,7 +402,7 @@
 .progress-container { -fx-padding: 2px 0 0 0; }
 .spotify-slider { -fx-cursor: hand; }
 .spotify-slider .track { -fx-background-color: #2c2c30; -fx-background-radius: 0px; -fx-pref-height: 4px; }
-.spotify-slider .range-bar { -fx-background-radius: 0px; }
+.spotify-slider .range-bar { -fx-background-radius: 0px; -fx-background-color: #1db954; }
 /* Thumb siempre visible: indica el valor/posición actual en todos los sliders */
 .spotify-slider .thumb {
     -fx-background-color: #ffffff;
@@ -300,7 +425,7 @@
 #window-paused .slider .thumb { -fx-background-color: #7f8c8d; }
 #window-paused .slider .range-bar { -fx-background-color: #95a5a6; }
 #window-paused .list-cell:filled:selected { -fx-background-color: #4a4a4a; }
-#window-paused .text-field:focused, #window-paused .combo-box:focused { -fx-border-color: #7f8c8d; }
+#window-paused .text-field:focused { -fx-border-color: #7f8c8d; }
 #window-paused .btn-spotify-flat:selected { -fx-text-fill: #95a5a6; }
 
 /* --- 2. RAGED (Rojo Combate) --- */
@@ -311,7 +436,7 @@
 #window-raged .slider .thumb { -fx-background-color: #e74c3c; }
 #window-raged .slider .range-bar { -fx-background-color: #c0392b; }
 #window-raged .list-cell:filled:selected { -fx-background-color: #8a1f1f; }
-#window-raged .text-field:focused, #window-raged .combo-box:focused { -fx-border-color: #e74c3c; }
+#window-raged .text-field:focused { -fx-border-color: #e74c3c; }
 #window-raged .btn-spotify-flat:selected { -fx-text-fill: #e74c3c; }
 
 /* --- 3. NORMAL (Verde Exploración) --- */
@@ -322,7 +447,7 @@
 #window-normal .slider .thumb { -fx-background-color: #2ecc71; }
 #window-normal .slider .range-bar { -fx-background-color: #27ae60; }
 #window-normal .list-cell:filled:selected { -fx-background-color: #1e4a2b; }
-#window-normal .text-field:focused, #window-normal .combo-box:focused { -fx-border-color: #2ecc71; }
+#window-normal .text-field:focused { -fx-border-color: #2ecc71; }
 #window-normal .btn-spotify-flat:selected { -fx-text-fill: #2ecc71; }
 
 /* --- 4. ADVANTAGE (Azul) --- */
@@ -333,7 +458,7 @@
 #window-advantage .slider .thumb { -fx-background-color: #3498db; }
 #window-advantage .slider .range-bar { -fx-background-color: #2980b9; }
 #window-advantage .list-cell:filled:selected { -fx-background-color: #1e354a; }
-#window-advantage .text-field:focused, #window-advantage .combo-box:focused { -fx-border-color: #3498db; }
+#window-advantage .text-field:focused { -fx-border-color: #3498db; }
 #window-advantage .btn-spotify-flat:selected { -fx-text-fill: #3498db; }
 
 /* =========================================================================
@@ -369,15 +494,6 @@
 #window-advantage .btn-phase-active {
     -fx-background-color: #2980b9;
     -fx-border-color: #3498db;
-}
-
-/* Bloqueo estricto para deshabilitados */
-.btn-phase:disabled {
-    -fx-opacity: 0.15 !important;
-    -fx-background-color: #2a2a32 !important;
-    -fx-text-fill: #b0b0b5 !important;
-    -fx-border-color: #3a3a45 !important;
-    -fx-cursor: default;
 }
 
 /* =========================================================================
@@ -438,8 +554,8 @@
 
 /* Estado ON del toggle de boomerang */
 .btn-secondary:selected {
-    -fx-background-color: #1db954;
-    -fx-text-fill: #0d0d0d;
+    -fx-background-color: #6a6a80;
+    -fx-text-fill: #ffffff;
 }
 
 /* =========================================================================
@@ -448,7 +564,7 @@
 
 /* Primary action button — used by Apply in the preview panel */
 .btn-primary {
-    -fx-background-color: #1db954;
+    -fx-background-color: #d0d0d8;
     -fx-text-fill: #0d0d0d;
     -fx-font-weight: bold;
     -fx-background-radius: 0px !important;
@@ -456,7 +572,7 @@
     -fx-cursor: hand;
 }
 .btn-primary:hover {
-    -fx-background-color: #1ed760;
+    -fx-background-color: #ffffff;
 }
 .btn-primary:disabled {
     -fx-opacity: 0.35;

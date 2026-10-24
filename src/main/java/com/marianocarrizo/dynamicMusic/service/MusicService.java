@@ -49,6 +49,9 @@ public class MusicService {
     // Volumen RMS calculado por pista — necesario para restaurar al hacer fade-in
     private final Map<TrackType, Double> trackGains;
 
+    // Per-slot load generation: lets unloadTrack/loadTrack discard stale in-flight loads (FX thread only)
+    private final Map<TrackType, Integer> loadSeq = new EnumMap<>(TrackType.class);
+
     // Timeline de fade activo (mood o playlist) — se cancela si el usuario actúa antes
     private Timeline activeFade;
 
@@ -257,9 +260,21 @@ public class MusicService {
      * hilo FX vía Platform.runLater.
      */
     public void loadTrack(TrackType type, File file) {
+        loadTrack(type, file, null);
+    }
+
+    /**
+     * Same as {@link #loadTrack(TrackType, File)}, with a callback run on the FX thread once
+     * the new player is ready and installed. A load superseded by a newer load or by
+     * {@link #unloadTrack(TrackType)} for the same slot is dropped and never calls back.
+     * If the slot already had a player it is disposed; when that player was the current
+     * track and was playing, the new one starts playing in its place.
+     */
+    public void loadTrack(TrackType type, File file, Runnable onLoaded) {
         if (file == null || !file.exists()) return;
 
         final String trackDisplayName = file.getName();
+        final int seq = loadSeq.merge(type, 1, Integer::sum);
 
         audioPrep.submit(() -> {
             try {
@@ -273,6 +288,7 @@ public class MusicService {
                 final double gain = ConversorUtils.calculateGainForRMS(finalFile);
 
                 Platform.runLater(() -> {
+                    if (loadSeq.getOrDefault(type, 0) != seq) return; // superseded or unloaded
                     String sourceUrl = finalFile.toURI().toString();
                     Media media = new Media(sourceUrl);
                     MediaPlayer player = new MediaPlayer(media);
@@ -301,13 +317,32 @@ public class MusicService {
                     });
 
                     player.setOnReady(() -> {
-                        players.put(type, player);
+                        if (loadSeq.getOrDefault(type, 0) != seq) {
+                            player.dispose(); // superseded while preparing
+                            return;
+                        }
+                        boolean resumePlayback = false;
+                        MediaPlayer replaced = players.put(type, player);
+                        if (replaced != null) {
+                            if (type == currentTrack) {
+                                cancelActiveFade();
+                                resumePlayback = replaced.getStatus() == MediaPlayer.Status.PLAYING;
+                            }
+                            replaced.setAudioSpectrumListener(null);
+                            replaced.stop();
+                            replaced.dispose();
+                        }
                         trackNames.put(type, trackDisplayName);
                         trackGains.put(type, gain);
                         attachSpectrumListener(player);
                         if (currentTrack == null) {
                             currentTrack = type;
                         }
+                        if (type == currentTrack && replaced != null) {
+                            nowPlaying.set(trackDisplayName); // swapped in place: keep the label in sync
+                            if (resumePlayback) player.play();
+                        }
+                        if (onLoaded != null) onLoaded.run();
                         if (progressListener != null) {
                             Platform.runLater(() -> {
                                 Duration total = player.getTotalDuration();
@@ -324,6 +359,51 @@ public class MusicService {
                 e.printStackTrace();
             }
         });
+    }
+
+    /**
+     * Releases the player of a mood slot. If it was the current track, playback stops and
+     * there is no current track until another one is selected or loaded.
+     * Pending loads for the slot are cancelled. Must be called on the FX thread.
+     */
+    public void unloadTrack(TrackType type) {
+        if (type == null) return;
+        loadSeq.merge(type, 1, Integer::sum); // invalidate in-flight loads
+        MediaPlayer removed = players.remove(type);
+        trackNames.remove(type);
+        trackGains.remove(type);
+        if (removed == null) return;
+        if (type == currentTrack) {
+            cancelActiveFade();
+            currentTrack = null;
+            nowPlaying.set("—");
+        }
+        removed.setAudioSpectrumListener(null);
+        removed.stop();
+        removed.dispose();
+    }
+
+    /** Current mood slot, or null when nothing is selected. */
+    public TrackType getCurrentTrack() {
+        return currentTrack;
+    }
+
+    /**
+     * Makes a loaded slot the current track WITHOUT starting playback (the previous
+     * current player is paused). No-op if the slot is not loaded or already current.
+     */
+    public void selectTrack(TrackType type) {
+        if (mode != PlaybackMode.MOOD) return;
+        if (type == null || type == currentTrack || !players.containsKey(type)) return;
+        cancelActiveFade();
+        if (currentTrack != null && players.containsKey(currentTrack)) {
+            MediaPlayer old = players.get(currentTrack);
+            old.pause();
+            old.setAudioSpectrumListener(null);
+        }
+        currentTrack = type;
+        attachSpectrumListener(players.get(type));
+        nowPlaying.set(trackNames.getOrDefault(type, type.name()));
     }
 
     // =========================================================================
