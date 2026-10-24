@@ -1,9 +1,16 @@
 package com.marianocarrizo.dynamicMusic.ambiance;
 
 import com.marianocarrizo.dynamicMusic.model.AuraConfig;
+import com.marianocarrizo.dynamicMusic.model.AuraPreset;
 import com.marianocarrizo.dynamicMusic.model.AuraSlot;
 import com.marianocarrizo.dynamicMusic.service.AudioFeatures;
+import javafx.animation.Interpolator;
+import javafx.animation.KeyFrame;
+import javafx.animation.KeyValue;
+import javafx.animation.Timeline;
 import javafx.application.Platform;
+import javafx.beans.value.ChangeListener;
+import javafx.beans.value.ObservableValue;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;
@@ -52,6 +59,8 @@ public class AmbianceStage {
     private StackPane root;
     private Scene     scene;
     private ImageView imageView;
+    private ImageView defaultBase;
+    private ImageView defaultTop;
     private MediaView mediaView;
     private Canvas             auraCanvas;
     private ProgressIndicator  loadingIndicator;
@@ -62,6 +71,13 @@ public class AmbianceStage {
     private final Map<AuraSlot, AuraConfig> auras = new EnumMap<>(AuraSlot.class);
     private AuraSlot activeSlot = AuraSlot.NORMAL;
     private final ColorAdjust pulseAdjust = new ColorAdjust();
+
+    private boolean    userBackgroundActive = false;
+    private AuraPreset targetPreset = null;
+    private AuraPreset shownPreset  = null;
+    private AuraPreset topPreset    = null;
+    private Timeline   defaultFade  = null;
+    private int        defaultGeneration = 0;
 
     // Estado de decoración actual (null = ventana no abierta todavía)
     private StageStyle currentStyle = null;
@@ -120,10 +136,12 @@ public class AmbianceStage {
         root          = new StackPane();
         scene         = new Scene(root);
         imageView     = new ImageView();
+        defaultBase   = new ImageView();
+        defaultTop    = new ImageView();
         mediaView     = new MediaView();
         auraCanvas    = new Canvas();
 
-        root.getChildren().addAll(imageView, mediaView);
+        root.getChildren().addAll(defaultBase, defaultTop, imageView, mediaView);
 
         imageView.setPreserveRatio(false);
         imageView.fitWidthProperty().bind(scene.widthProperty());
@@ -134,6 +152,12 @@ public class AmbianceStage {
 
         imageView.setVisible(false);
         mediaView.setVisible(false);
+        defaultBase.setVisible(false);
+        defaultTop.setVisible(false);
+        userBackgroundActive = false;
+        targetPreset = null;
+        shownPreset  = null;
+        topPreset    = null;
 
         auraCanvas.setMouseTransparent(true);
         auraCanvas.widthProperty().bind(scene.widthProperty());
@@ -207,6 +231,8 @@ public class AmbianceStage {
         // Listener de redimensionado: recomputa el viewport FILL si está activo
         scene.widthProperty().addListener((obs, o, n) -> recomputeFillViewportIfActive());
         scene.heightProperty().addListener((obs, o, n) -> recomputeFillViewportIfActive());
+
+        refreshDefaultBackground();
     }
 
     // --- Apertura del stage ---
@@ -307,6 +333,9 @@ public class AmbianceStage {
         auraRenderer.stop();
         imageView.setEffect(null);
         mediaView.setEffect(null);
+        defaultBase.setEffect(null);
+        defaultTop.setEffect(null);
+        stopDefaultFade();
         disposePlayer();
 
         // 2. Desligar bindings del scene graph viejo
@@ -314,6 +343,10 @@ public class AmbianceStage {
         imageView.fitHeightProperty().unbind();
         mediaView.fitWidthProperty().unbind();
         mediaView.fitHeightProperty().unbind();
+        defaultBase.fitWidthProperty().unbind();
+        defaultBase.fitHeightProperty().unbind();
+        defaultTop.fitWidthProperty().unbind();
+        defaultTop.fitHeightProperty().unbind();
         auraCanvas.widthProperty().unbind();
         auraCanvas.heightProperty().unbind();
 
@@ -476,18 +509,23 @@ public class AmbianceStage {
         auras.clear();
         if (newAuras != null) auras.putAll(newAuras);
         showActiveAura(true);
+        refreshDefaultBackground();
     }
 
     public void setAura(AuraSlot slot, AuraConfig aura) {
         if (slot == null || aura == null) return;
         auras.put(slot, aura);
-        if (slot == activeSlot) showActiveAura(false);
+        if (slot == activeSlot) {
+            showActiveAura(false);
+            refreshDefaultBackground();
+        }
     }
 
     public void setActiveSlot(AuraSlot slot) {
         if (slot == null) return;
         activeSlot = slot;
         showActiveAura(true);
+        refreshDefaultBackground();
     }
 
     public AuraSlot getActiveSlot() {
@@ -504,14 +542,112 @@ public class AmbianceStage {
         imageView.setScaleY(scale);
         mediaView.setScaleX(scale);
         mediaView.setScaleY(scale);
+        defaultBase.setScaleX(scale);
+        defaultBase.setScaleY(scale);
+        defaultTop.setScaleX(scale);
+        defaultTop.setScaleY(scale);
         if (brightness > 0.002) {
             pulseAdjust.setBrightness(brightness);
             if (imageView.getEffect() != pulseAdjust) imageView.setEffect(pulseAdjust);
             if (mediaView.getEffect() != pulseAdjust) mediaView.setEffect(pulseAdjust);
+            if (defaultBase.getEffect() != pulseAdjust) defaultBase.setEffect(pulseAdjust);
+            if (defaultTop.getEffect() != pulseAdjust) defaultTop.setEffect(pulseAdjust);
         } else {
             if (imageView.getEffect() != null) imageView.setEffect(null);
             if (mediaView.getEffect() != null) mediaView.setEffect(null);
+            if (defaultBase.getEffect() != null) defaultBase.setEffect(null);
+            if (defaultTop.getEffect() != null) defaultTop.setEffect(null);
         }
+    }
+
+    private void refreshDefaultBackground() {
+        AuraPreset wanted = null;
+        if (!userBackgroundActive) {
+            AuraConfig aura = auras.get(activeSlot);
+            if (aura != null) wanted = aura.getPreset();
+        }
+        if (wanted == targetPreset) return;
+        targetPreset = wanted;
+        final int gen = ++defaultGeneration;
+        stopDefaultFade();
+
+        Image img = wanted != null ? DefaultBackgrounds.image(wanted) : null;
+        if (img == null) {
+            defaultBase.setVisible(false);
+            defaultBase.setImage(null);
+            shownPreset = null;
+            return;
+        }
+        final AuraPreset preset = wanted;
+        whenLoaded(img, () -> {
+            if (gen == defaultGeneration) showDefault(preset, img);
+        });
+    }
+
+    private void showDefault(AuraPreset preset, Image img) {
+        if (preset == shownPreset) return;
+        if (shownPreset == null) {
+            defaultBase.setImage(img);
+            defaultBase.setOpacity(1.0);
+            defaultBase.setVisible(true);
+            applyFitToImageView(defaultBase);
+            shownPreset = preset;
+            return;
+        }
+        topPreset = preset;
+        defaultTop.setImage(img);
+        defaultTop.setOpacity(0.0);
+        defaultTop.setVisible(true);
+        applyFitToImageView(defaultTop);
+        defaultFade = new Timeline(new KeyFrame(Duration.seconds(AuraRenderer.LONG_BLEND_SEC),
+                new KeyValue(defaultTop.opacityProperty(), 1.0, Interpolator.EASE_BOTH)));
+        defaultFade.setOnFinished(e -> {
+            defaultFade = null;
+            promoteTopToBase();
+        });
+        defaultFade.play();
+    }
+
+    private void promoteTopToBase() {
+        if (topPreset != null && defaultTop.getImage() != null) {
+            defaultBase.setImage(defaultTop.getImage());
+            applyFitToImageView(defaultBase);
+            shownPreset = topPreset;
+        }
+        topPreset = null;
+        defaultTop.setVisible(false);
+        defaultTop.setImage(null);
+    }
+
+    private void stopDefaultFade() {
+        if (defaultFade != null) {
+            defaultFade.stop();
+            defaultFade = null;
+            if (defaultTop.getOpacity() >= 0.5) {
+                promoteTopToBase();
+                return;
+            }
+        }
+        topPreset = null;
+        defaultTop.setVisible(false);
+        defaultTop.setImage(null);
+    }
+
+    private static void whenLoaded(Image img, Runnable action) {
+        if (img.isError()) return;
+        if (img.getProgress() >= 1.0) {
+            action.run();
+            return;
+        }
+        img.progressProperty().addListener(new ChangeListener<Number>() {
+            @Override
+            public void changed(ObservableValue<? extends Number> obs, Number o, Number n) {
+                if (n.doubleValue() >= 1.0) {
+                    img.progressProperty().removeListener(this);
+                    if (!img.isError()) action.run();
+                }
+            }
+        });
     }
 
     // --- Fit mode (public API) ---
@@ -533,17 +669,22 @@ public class AmbianceStage {
      */
     private void applyFitModeToCurrentView() {
         if (imageView.isVisible() && imageView.getImage() != null) {
-            applyFitToImageView();
+            applyFitToImageView(imageView);
         } else if (mediaView.isVisible() && currentPlayer != null) {
             applyFitToMediaView();
         }
+        applyFitToDefaultViews();
+    }
+
+    private void applyFitToDefaultViews() {
+        if (defaultBase.isVisible() && defaultBase.getImage() != null) applyFitToImageView(defaultBase);
+        if (defaultTop.isVisible() && defaultTop.getImage() != null) applyFitToImageView(defaultTop);
     }
 
     /**
-     * Aplica {@code currentFitMode} al ImageView.
      * Siempre desvincula fitWidth/fitHeight antes de reasignar (regla unbind-first).
      */
-    private void applyFitToImageView() {
+    private void applyFitToImageView(ImageView imageView) {
         imageView.fitWidthProperty().unbind();
         imageView.fitHeightProperty().unbind();
 
@@ -651,10 +792,11 @@ public class AmbianceStage {
     private void recomputeFillViewportIfActive() {
         if (currentFitMode != BackgroundFitMode.FILL) return;
         if (imageView.isVisible() && imageView.getImage() != null) {
-            applyFitToImageView();
+            applyFitToImageView(imageView);
         } else if (mediaView.isVisible() && currentPlayer != null) {
             applyFitToMediaView();
         }
+        applyFitToDefaultViews();
     }
 
     // --- Internal helpers ---
@@ -674,6 +816,8 @@ public class AmbianceStage {
         imageView.setImage(null);
         imageView.setVisible(false);
         mediaView.setVisible(false);
+        userBackgroundActive = false;
+        refreshDefaultBackground();
     }
 
     private void setImage(File f) {
@@ -684,9 +828,11 @@ public class AmbianceStage {
         Image img = new Image(f.toURI().toString(), true);
         imageView.setImage(img);
         imageView.setVisible(true);
+        userBackgroundActive = true;
+        refreshDefaultBackground();
         // Aplicar modo de ajuste de inmediato; para FILL con imagen async las dimensiones
         // pueden ser 0 todavía — el listener de width las aplica cuando estén disponibles.
-        applyFitToImageView();
+        applyFitToImageView(imageView);
         if (currentFitMode == BackgroundFitMode.FILL) {
             // Listener de un solo disparo: aplica el viewport FILL cuando la imagen termine de cargar
             javafx.beans.value.ChangeListener<Number>[] listenerRef = new javafx.beans.value.ChangeListener[1];
@@ -716,6 +862,8 @@ public class AmbianceStage {
         imageView.setImage(null);
         disposePlayer();                   // descartar el player anterior de forma síncrona
         mediaView.setVisible(true);
+        userBackgroundActive = true;
+        refreshDefaultBackground();
         loadingIndicator.setVisible(true); // spinner PRIMERO — pinta antes de cualquier llamada nativa
 
         final String uri = toPlay.toURI().toString();
@@ -895,6 +1043,7 @@ public class AmbianceStage {
 
     public void dispose() {
         auraRenderer.stop();
+        stopDefaultFade();
         mediaInit.shutdownNow();
         disposePlayer();
         stage.close();

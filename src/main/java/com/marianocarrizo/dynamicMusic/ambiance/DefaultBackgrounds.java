@@ -1,0 +1,31 @@
+package com.marianocarrizo.dynamicMusic.ambiance;
+
+import com.marianocarrizo.dynamicMusic.model.AuraPreset;
+import javafx.scene.image.Image;
+
+import java.net.URL;
+import java.util.EnumMap;
+import java.util.Map;
+
+final class DefaultBackgrounds {
+
+    private static final Map<AuraPreset, Image> CACHE = new EnumMap<>(AuraPreset.class);
+
+    private DefaultBackgrounds() {}
+
+    static String resourcePath(AuraPreset preset) {
+        AuraPreset p = preset != null ? preset : AuraPreset.NEUTRAL;
+        return "/backgrounds/" + p.name().toLowerCase() + ".png";
+    }
+
+    static Image image(AuraPreset preset) {
+        AuraPreset p = preset != null ? preset : AuraPreset.NEUTRAL;
+        Image cached = CACHE.get(p);
+        if (cached != null && !cached.isError()) return cached;
+        URL url = DefaultBackgrounds.class.getResource(resourcePath(p));
+        if (url == null) return null;
+        Image loaded = new Image(url.toExternalForm(), true);
+        CACHE.put(p, loaded);
+        return loaded;
+    }
+}
