@@ -614,3 +614,17 @@
     -fx-text-fill: #e07040;
     -fx-font-size: 11px;
 }
+
+.link-support {
+    -fx-text-fill: #c8a24a;
+    -fx-border-color: transparent;
+    -fx-padding: 0 8 0 8;
+}
+
+.link-support:hover {
+    -fx-text-fill: #ffd27a;
+}
+
+.link-support:visited {
+    -fx-text-fill: #c8a24a;
+}
