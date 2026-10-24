@@ -79,7 +79,6 @@ class SessionConfigManagerTest {
         assertFalse(onDisk.has("backgroundImagePath"));
         assertFalse(onDisk.has("moodEffects"));
 
-        // second load: already migrated, same scene id, backup untouched
         SessionConfig second = mgr.load();
         assertEquals(1, second.getScenes().size());
         assertEquals(first.getActiveSceneId(), second.getActiveSceneId());

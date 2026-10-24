@@ -23,13 +23,9 @@ import java.util.UUID;
  */
 public class SessionConfig {
 
-    // Scenes: each one packages assignments + background + auras. activeSceneId selects the current one.
     private List<Scene> scenes;
     private String activeSceneId;
 
-    // --- LEGACY, migration-only fields (pre-scenes session.json) ---
-    // Kept ONLY so old files deserialize. SceneMigration moves them into the "Default"
-    // scene and nulls them, so they are never written again. Do not read them elsewhere.
     private Map<String, String> assignments;
     private String backgroundImagePath;
     private String backgroundFitMode;
@@ -37,7 +33,6 @@ public class SessionConfig {
     private Long videoSegmentEndMs;
     private Double videoPlaybackRate;
     private Boolean boomerangEnabled;
-    // --- end legacy ---
 
     // Último directorio usado en el FileChooser de imagen de fondo (independiente de lastFolderPath)
     private String lastImageFolderPath;
@@ -45,7 +40,6 @@ public class SessionConfig {
     // Índice (0-based) de la pantalla elegida para el stage de ambiance; -1 = auto
     private int ambianceScreenIndex = -1;
 
-    // LEGACY (pre-scenes) per-mood effect name: TrackType.name() → old effect name; read only by SceneMigration
     private Map<String, String> moodEffects;
 
     // Last folder opened with "Open Folder" — null if never used
@@ -68,29 +62,18 @@ public class SessionConfig {
 
     public SessionConfig() {}
 
-    // --- Scenes ---
-
-    /** Unmodifiable view of the scenes (never null). */
     public List<Scene> getScenes() {
         return (scenes != null) ? Collections.unmodifiableList(scenes) : List.of();
     }
 
     public String getActiveSceneId() { return activeSceneId; }
 
-    /**
-     * Takes over the scene list and active scene of a loaded config, so the scene
-     * facade below writes into the persisted scenes instead of a fresh "Default".
-     */
     public void adoptScenesFrom(SessionConfig other) {
         if (other == null || other.scenes == null || other.scenes.isEmpty()) return;
         this.scenes = new ArrayList<>(other.scenes);
         this.activeSceneId = other.activeSceneId;
     }
 
-    /**
-     * Returns the active scene, never null. Falls back to the first scene when the id is
-     * missing or invalid, and creates a "Default" scene when there are none.
-     */
     public Scene getActiveScene() {
         if (scenes == null) scenes = new ArrayList<>();
         scenes.removeIf(s -> s == null);
@@ -107,7 +90,6 @@ public class SessionConfig {
         return found;
     }
 
-    /** Activates the scene with the given id; ignored if no such scene exists. */
     public void setActiveScene(String id) {
         Scene s = findScene(id);
         if (s != null) activeSceneId = s.getId();
@@ -121,7 +103,6 @@ public class SessionConfig {
         return s;
     }
 
-    /** Deep-copies a scene under a new id and name. Returns null if the source id is unknown. */
     public Scene duplicateScene(String id, String newName) {
         Scene src = findScene(id);
         if (src == null) return null;
@@ -137,9 +118,8 @@ public class SessionConfig {
         if (s != null && name != null && !name.isBlank()) s.setName(name);
     }
 
-    /** Deletes a scene. Refuses (returns false) to delete the last one. */
     public boolean deleteScene(String id) {
-        String activeId = getActiveScene().getId(); // also strips null entries
+        String activeId = getActiveScene().getId();
         Scene s = findScene(id);
         if (s == null || scenes.size() <= 1) return false;
         boolean wasActive = s.getId().equals(activeId);
@@ -156,11 +136,8 @@ public class SessionConfig {
         return null;
     }
 
-    // --- Legacy migration hooks (used by SceneMigration only) ---
-
     boolean hasScenes() { return scenes != null && !scenes.isEmpty(); }
 
-    /** Builds a scene from the legacy scene-scoped fields. Does not modify them. */
     Scene buildSceneFromLegacy(String name) {
         Scene s = new Scene(name);
         if (assignments != null) {
@@ -169,7 +146,6 @@ public class SessionConfig {
                 try {
                     s.setAssignment(TrackType.valueOf(key), value);
                 } catch (IllegalArgumentException ignored) {
-                    // Unknown enum key: skipped
                 }
             });
         }
@@ -183,7 +159,6 @@ public class SessionConfig {
         return s;
     }
 
-    /** Installs the migrated scene as the only/active one and nulls the legacy fields. */
     void installMigratedScene(Scene s) {
         scenes = new ArrayList<>();
         scenes.add(s);
@@ -198,8 +173,6 @@ public class SessionConfig {
         moodEffects = null;
     }
 
-    // --- Scene-scoped facade (reads/writes the ACTIVE scene) ---
-
     /**
      * Returns the active scene's assignments as a type-safe EnumMap.
      * Entries with unknown enum keys are silently skipped.
@@ -208,10 +181,6 @@ public class SessionConfig {
         return getActiveScene().getAssignments();
     }
 
-    /**
-     * Adds or replaces the track assignment for the given mood in the active scene.
-     * YouTube-cache paths are pinned to the library by Scene.setAssignment.
-     */
     public void put(TrackType type, String absolutePath) {
         getActiveScene().setAssignment(type, absolutePath);
     }
@@ -248,10 +217,6 @@ public class SessionConfig {
 
     // --- Mood effects ---
 
-    /**
-     * LEGACY: the name of the pre-scenes particle effect stored for the given mood (e.g. "FIRE",
-     * "AURORA"), or the old built-in default when absent. Only used to migrate old session files.
-     */
     public String getLegacyMoodEffectName(TrackType type) {
         if (moodEffects != null && type != null) {
             String stored = moodEffects.get(type.name());

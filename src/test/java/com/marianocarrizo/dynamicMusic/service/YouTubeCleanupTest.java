@@ -32,7 +32,7 @@ class YouTubeCleanupTest {
     @Test
     void doesNotMatchOtherIdsOrPrefixCollisions() {
         assertFalse(YouTubeDownloader.isLeftover(OTHER + ".mp3", ID, false));
-        assertFalse(YouTubeDownloader.isLeftover(ID + "X.mp3", ID, false)); // needs the '.' boundary
+        assertFalse(YouTubeDownloader.isLeftover(ID + "X.mp3", ID, false));
         assertFalse(YouTubeDownloader.isLeftover("notes.txt", ID, false));
     }
 

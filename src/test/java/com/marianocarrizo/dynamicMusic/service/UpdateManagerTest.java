@@ -71,8 +71,6 @@ class UpdateManagerTest {
                 .connectTimeout(Duration.ofSeconds(5)).build();
     }
 
-    // --- pure helpers ---
-
     @Test
     void checksOnlyOnceEveryTwentyFourHours() {
         long now = 10_000_000_000L;
@@ -105,8 +103,6 @@ class UpdateManagerTest {
                 UpdateManager.INSTALLER_ARGS);
     }
 
-    // --- download + verify ---
-
     @Test
     void downloadsVerifiesAndMovesTheInstaller(@TempDir Path dir) throws Exception {
         String hex = sha(PAYLOAD, dir);
@@ -122,7 +118,6 @@ class UpdateManagerTest {
         assertFalse(Files.exists(updates.resolve(NAME + ".part")));
         assertTrue(UpdateManager.verifyOnDisk(installer));
 
-        // a later session finds it again, but not once the running version has caught up
         UpdateManager.ReadyUpdate pending = UpdateManager.cleanAndFindPending(updates, new Version(1, 0, 0));
         assertNotNull(pending);
         assertEquals(new Version(2, 0, 0), pending.version());

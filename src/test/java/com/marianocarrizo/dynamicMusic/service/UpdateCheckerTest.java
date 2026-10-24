@@ -47,7 +47,7 @@ class UpdateCheckerTest {
         assertTrue(v("1.0.1").isNewerThan(v("1.0.0")));
         assertFalse(v("1.0.0").isNewerThan(v("1.0.0")));
         assertFalse(v("0.9.0").isNewerThan(v("1.0.0")));
-        assertTrue(v("1.0.0").isNewerThan(v("0.0.42"))); // CI builds are 0.0.<run>
+        assertTrue(v("1.0.0").isNewerThan(v("0.0.42")));
     }
 
     @Test
@@ -70,7 +70,6 @@ class UpdateCheckerTest {
     void ignoresReleasesWithoutBothAssets() throws IOException {
         String noChecksum = fixture().replace("DynamicMusic-Setup-1.4.2.exe.sha256\",", "other.txt\",");
         assertTrue(UpdateChecker.parseRelease(noChecksum).isEmpty());
-        // an installer built for another version never matches the tag
         String wrongInstaller = fixture().replace("\"name\": \"DynamicMusic-Setup-1.4.2.exe\"", "\"name\": \"DynamicMusic-Setup-9.9.9.exe\"");
         assertTrue(UpdateChecker.parseRelease(wrongInstaller).isEmpty());
     }

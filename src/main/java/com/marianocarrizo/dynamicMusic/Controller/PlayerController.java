@@ -83,16 +83,13 @@ public class PlayerController implements SceneHost {
     @FXML private VBox mainRoot;
     @FXML private Button btnMaximize;
 
-    // Scene bar
     @FXML private ComboBox<Scene> cmbScene;
-    // Main action toggles the ambiance window; its menu lists the screens
     @FXML private SplitMenuButton btnToggleAmbiance;
 
     // Slider y label del volumen maestro global
     @FXML private Slider sldMasterVolume;
     @FXML private Label  lblMasterVolume;
 
-    // Botones (tarjetas) de mood
     @FXML private Button btnPaused;
     @FXML private Button btnNormal;
     @FXML private Button btnRaged;
@@ -105,7 +102,6 @@ public class PlayerController implements SceneHost {
     @FXML private Label lblCurrentTime;
     @FXML private Label lblTotalTime;
 
-    // Panel de preescucha (visible solo mientras hay una preescucha activa)
     @FXML private VBox previewPanel;
     @FXML private ToggleButton btnPreviewLoop;
     @FXML private Button btnPreviewPlayPause;
@@ -114,7 +110,6 @@ public class PlayerController implements SceneHost {
     @FXML private Label lblPreviewTotalTime;
     @FXML private Label lblPreviewTrack;
 
-    // On-demand player (visible only while an on-demand track is loaded)
     @FXML private VBox onDemandPanel;
     @FXML private Label lblOnDemandTrack;
     @FXML private ToggleButton btnOnDemandLoop;
@@ -124,7 +119,6 @@ public class PlayerController implements SceneHost {
     @FXML private Label lblOnDemandTotalTime;
     private boolean isDraggingOnDemandSlider = false;
 
-    // Caption + nombre de la pista del mood activo
     @FXML private Label lblNowPlayingMood;
     @FXML private Label lblNowPlaying;
 
@@ -155,14 +149,12 @@ public class PlayerController implements SceneHost {
     @FXML private TextField txtSearch;
     @FXML private TreeView<File> treeFiles;
 
-    // YouTube URL input
     @FXML private TextField txtYoutubeUrl;
     @FXML private Button btnAddYoutube;
     @FXML private Button btnPlayYoutube;
     @FXML private Button btnBrowseYoutube;
     @FXML private Label lblYoutubeError;
 
-    // App update notice (shown only when a verified installer is ready)
     @FXML private HBox   updateBar;
     @FXML private Label  lblUpdate;
     @FXML private Button btnUpdateNow;
@@ -178,7 +170,7 @@ public class PlayerController implements SceneHost {
     private final SessionConfig sessionConfig = new SessionConfig();
     private final YouTubeDownloader youTubeDownloader = new YouTubeDownloader();
     private AmbianceStage ambianceStage;
-    private SceneEditorController sceneEditor; // created lazily, single instance
+    private SceneEditorController sceneEditor;
 
     private boolean isDraggingSlider = false;
     private boolean isDraggingPreviewSlider = false;
@@ -187,7 +179,6 @@ public class PlayerController implements SceneHost {
     private boolean refreshingUI = false;
     private TrackType currentActiveType = TrackType.NORMAL;
 
-    // Live aura strip: quick edits to the active mood's aura during play
     @FXML private Label  lblLiveAura;
     @FXML private HBox   livePresetBox;
     @FXML private Slider sldLiveIntensity;
@@ -205,20 +196,16 @@ public class PlayerController implements SceneHost {
     private long   bakeGuardStart;
     private long   bakeGuardEnd;
 
-    // File IO off the FX thread (pinning yt-cache tracks into the library)
     private final ExecutorService ioExecutor = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "track-io");
         t.setDaemon(true);
         return t;
     });
 
-    // Debounces saves coming from sliders and color pickers in the scene editor
     private final PauseTransition saveDebounce = new PauseTransition(Duration.millis(400));
 
-    // Path requested for each mood slot of the active scene; avoids reloading an unchanged track on scene switch
     private final Map<TrackType, String> loadedPaths = new EnumMap<>(TrackType.class);
 
-    // Mood card widgets (the card buttons keep their fx:ids, handlers and shortcuts)
     private final Map<TrackType, Button> moodButtons = new EnumMap<>(TrackType.class);
     private final Map<TrackType, MoodCard> moodCards = new EnumMap<>(TrackType.class);
 
@@ -228,7 +215,6 @@ public class PlayerController implements SceneHost {
         final Label preset = new Label();
     }
 
-    // Screen menu (inside btnToggleAmbiance): item 0 = Auto, item N = screen N-1
     private final ToggleGroup screenGroup = new ToggleGroup();
 
     private PlaylistManager playlistManager;
@@ -313,7 +299,6 @@ public class PlayerController implements SceneHost {
                 updatePreviewPlayPauseButton();
             }));
 
-        // On-demand player
         musicService.setOnDemandProgressListener((current, total) ->
             Platform.runLater(() -> {
                 if (!isDraggingOnDemandSlider && total != null && !total.isUnknown() && total.toMillis() > 0) {
@@ -325,7 +310,7 @@ public class PlayerController implements SceneHost {
             }));
         musicService.setOnDemandStateListener(() -> {
             if (!isDraggingOnDemandSlider && !musicService.isOnDemandPlaying()) {
-                onDemandSlider.setValue(0); // ended: back to the start, ready to replay
+                onDemandSlider.setValue(0);
                 lblOnDemandCurrentTime.setText("0:00");
             }
             updateOnDemandPlayPauseButton();
@@ -365,13 +350,10 @@ public class PlayerController implements SceneHost {
         ambianceStage.setAudioSource(musicService::getAudioFeatures);
         ambianceStage.setOnVisibilityChanged(this::updateAmbianceToggle);
 
-        // Callback: el stage de ambiance notifica cuando el usuario suelta una imagen.
-        // The drop replaces the background of the ACTIVE scene.
         ambianceStage.setOnBackgroundDropped(path -> {
             BackgroundConfig bg = sessionConfig.getActiveScene().getBackground();
             bg.setPath(path);
             sessionConfig.setLastImageFolderPath(new File(path).getParent());
-            // DnD only accepts images/GIFs; clear any saved video state from a prior background
             bg.setSegmentStartMs(null);
             bg.setSegmentEndMs(null);
             bg.setBoomerangEnabled(false);
@@ -381,11 +363,9 @@ public class PlayerController implements SceneHost {
             });
         });
 
-        // Menú de selección de pantalla (dentro del botón de ambiance)
         populateScreenMenu();
         Screen.getScreens().addListener((ListChangeListener<Screen>) change -> {
             populateScreenMenu();
-            // Re-resolver desde la intención guardada, no desde el menú clampado.
             // Si el monitor recordado volvió a conectarse, la ambiance se mueve de vuelta
             // a él de inmediato; si sigue ausente, resolveScreen() aplica auto-fallback.
             int savedIntent = sessionConfig.getAmbianceScreenIndex();
@@ -473,7 +453,6 @@ public class PlayerController implements SceneHost {
         if (modeTabPane != null) {
             modeTabPane.getSelectionModel().selectedItemProperty().addListener((obs, oldTab, newTab) -> {
                 if (applyingSession || newTab == null) return;
-                // Tabs are only views: they never change what is playing
                 boolean isPlaylist = newTab == playlistsTab;
                 sessionConfig.setActiveMode(isPlaylist ? "playlist" : "mood");
                 manager.save(sessionConfig);
@@ -487,8 +466,6 @@ public class PlayerController implements SceneHost {
         });
     }
 
-    // --- Tarjetas de mood ---
-
     private void buildMoodCards() {
         bindCard(TrackType.PAUSED,    btnPaused,    1);
         bindCard(TrackType.NORMAL,    btnNormal,    2);
@@ -496,7 +473,6 @@ public class PlayerController implements SceneHost {
         bindCard(TrackType.ADVANTAGE, btnAdvantage, 4);
     }
 
-    /** Turns a mood button into a three-line card and makes it a drop target for tracks. */
     private void bindCard(TrackType type, Button button, int number) {
         if (button == null) return;
         MoodCard card = new MoodCard();
@@ -536,7 +512,6 @@ public class PlayerController implements SceneHost {
         moodCards.put(type, card);
     }
 
-    /** First supported audio file carried by the dragboard (tree drag or external drop), or null. */
     private File audioFileIn(Dragboard db) {
         if (db == null || !db.hasFiles()) return null;
         for (File f : db.getFiles()) {
@@ -545,7 +520,6 @@ public class PlayerController implements SceneHost {
         return null;
     }
 
-    /** Refreshes track name and aura preset/dot of every card from the active scene. */
     private void refreshCards() {
         Scene scene = sessionConfig.getActiveScene();
         Map<TrackType, String> assignments = scene.getAssignments();
@@ -568,8 +542,6 @@ public class PlayerController implements SceneHost {
         refreshLiveAura();
     }
 
-    // --- Live aura strip ---
-
     private void buildLiveAura() {
         if (livePresetBox == null) return;
         for (AuraPreset p : AuraPreset.values()) {
@@ -577,7 +549,7 @@ public class PlayerController implements SceneHost {
             tb.getStyleClass().addAll("btn-secondary", "btn-preset");
             tb.setToggleGroup(livePresetGroup);
             tb.setOnAction(e -> {
-                if (!tb.isSelected()) tb.setSelected(true); // a preset is always selected
+                if (!tb.isSelected()) tb.setSelected(true);
                 if (!updatingLiveAura) pickLivePreset(p);
             });
             livePresetButtons.put(p, tb);
@@ -593,7 +565,6 @@ public class PlayerController implements SceneHost {
         });
     }
 
-    /** Shows the active mood's aura in the strip without triggering edits. */
     private void refreshLiveAura() {
         if (livePresetBox == null) return;
         AuraConfig aura = sessionConfig.getActiveScene().getAura(liveSlot());
@@ -609,12 +580,11 @@ public class PlayerController implements SceneHost {
         }
     }
 
-    /** Swaps the preset look but keeps the levels the user is playing with. */
     private void pickLivePreset(AuraPreset preset) {
         AuraSlot slot = liveSlot();
         Scene scene = sessionConfig.getActiveScene();
         AuraConfig old = scene.getAura(slot);
-        if (old.getPreset() == preset) return; // re-clicking must not wipe custom colors
+        if (old.getPreset() == preset) return;
         AuraConfig fresh = preset.defaults();
         fresh.setIntensity(old.getIntensity());
         fresh.setReactivity(old.getReactivity());
@@ -649,12 +619,12 @@ public class PlayerController implements SceneHost {
         if (type == null || !musicService.isLoaded(type)) return;
         boolean fromOtherSource = musicService.getPlaybackMode() != MusicService.PlaybackMode.MOOD;
         if (!fromOtherSource && type == currentActiveType && musicService.getCurrentTrack() == type) return;
-        enterMode(MusicService.PlaybackMode.MOOD); // explicit: playlist/on-demand audio stops here
+        enterMode(MusicService.PlaybackMode.MOOD);
         musicService.switchTrack(type);
         this.currentActiveType = type;
         updateWindowMood(type);
         updateNowPlayingCaption();
-        if (ambianceStage != null) ambianceStage.setActiveSlot(AuraSlot.of(type)); // long crossfade
+        if (ambianceStage != null) ambianceStage.setActiveSlot(AuraSlot.of(type));
         refreshLiveAura();
         updateButtons();
         setMoodButtonIcon("⏸"); // siempre arranca reproduciendo
@@ -669,7 +639,7 @@ public class PlayerController implements SceneHost {
             musicService.fadeOutAndPause(null);
         } else {
             setMoodButtonIcon("⏸");
-            enterMode(MusicService.PlaybackMode.MOOD); // explicit: replaces playlist/on-demand audio
+            enterMode(MusicService.PlaybackMode.MOOD);
             musicService.fadeInAndPlay();
         }
     }
@@ -690,20 +660,15 @@ public class PlayerController implements SceneHost {
             btnPlayPause.setText(musicService.isPlaying() ? "⏸" : "▶");
     }
 
-    // --- Playback source (mood / playlist / on-demand) ---
-
-    /** Music outside the moods (on-demand tracks and playlists) shares the scene's on-demand aura. */
     private boolean usesOnDemandAura() {
         MusicService.PlaybackMode mode = musicService.getPlaybackMode();
         return mode == MusicService.PlaybackMode.ON_DEMAND || mode == MusicService.PlaybackMode.PLAYLIST;
     }
 
-    /** Aura slot shown by the ambiance and edited by the live strip: the on-demand aura outside moods, else the mood's. */
     private AuraSlot liveSlot() {
         return usesOnDemandAura() ? AuraSlot.ON_DEMAND : AuraSlot.of(currentActiveType);
     }
 
-    /** Explicitly changes the audible source (never called from tab changes) and syncs the UI around it. */
     private void enterMode(MusicService.PlaybackMode target) {
         musicService.setPlaybackMode(target);
         syncSourceUi();
@@ -721,9 +686,6 @@ public class PlayerController implements SceneHost {
         updatePlayPauseButton();
     }
 
-    // --- On-demand player ---
-
-    /** Plays {@code file} immediately, replacing whatever plays (mood or playlist). Title may be null. */
     private void playNow(File file, String title) {
         if (file == null || !file.isFile()) return;
         String label = title != null && !title.isBlank() ? title : stripExtension(file.getName());
@@ -732,7 +694,6 @@ public class PlayerController implements SceneHost {
         if (lblOnDemandCurrentTime != null) lblOnDemandCurrentTime.setText("0:00");
         if (lblOnDemandTotalTime != null) lblOnDemandTotalTime.setText("0:00");
         musicService.playOnDemand(file, label, () -> {
-            // The service switched to ON_DEMAND once the track was prepared
             showOnDemandPanel(true);
             if (ambianceStage != null) ambianceStage.setActiveSlot(AuraSlot.ON_DEMAND);
             refreshLiveAura();
@@ -761,7 +722,6 @@ public class PlayerController implements SceneHost {
         updateOnDemandPlayPauseButton();
     }
 
-    /** Stops and rewinds; the player stays visible so the track can be replayed. */
     @FXML
     private void onOnDemandStop() {
         musicService.onDemandPause();
@@ -771,7 +731,6 @@ public class PlayerController implements SceneHost {
         updateOnDemandPlayPauseButton();
     }
 
-    /** Closes the player: audio stops and the ambiance goes back to the current mood. Nothing resumes. */
     @FXML
     private void onOnDemandClose() {
         enterMode(MusicService.PlaybackMode.MOOD);
@@ -793,7 +752,7 @@ public class PlayerController implements SceneHost {
         musicService.previewTrack(file);
         updatePreviewPanel(true);
         updatePreviewPlayPauseButton();
-        updateOnDemandPlayPauseButton(); // the service pauses a playing on-demand track
+        updateOnDemandPlayPauseButton();
     }
 
     @FXML
@@ -824,7 +783,6 @@ public class PlayerController implements SceneHost {
             btnPreviewPlayPause.setText(musicService.isPreviewPlaying() ? "⏸" : "▶");
     }
 
-    /** The preview strip is only shown (and takes space) while a preview is active. */
     private void updatePreviewPanel(boolean active) {
         if (previewPanel != null) {
             previewPanel.setVisible(active);
@@ -849,7 +807,6 @@ public class PlayerController implements SceneHost {
         for (TrackType t : TrackType.values()) {
             Button b = moodButtons.get(t);
             if (b == null) continue;
-            // Empty cards stay enabled so they can receive drops; the click is a no-op (switchTrack guards)
             b.getStyleClass().remove("btn-phase-empty");
             b.getStyleClass().remove("btn-phase-active");
             if (!musicService.isLoaded(t)) b.getStyleClass().add("btn-phase-empty");
@@ -871,8 +828,6 @@ public class PlayerController implements SceneHost {
         });
     }
 
-    // --- Escenas ---
-
     private void refreshSceneCombo() {
         if (cmbScene == null) return;
         refreshingUI = true;
@@ -885,7 +840,6 @@ public class PlayerController implements SceneHost {
         }
     }
 
-    /** Makes {@code target} the active scene: persists, loads its tracks/background/auras, syncs the editor. */
     private void switchScene(Scene target) {
         sessionConfig.setActiveScene(target.getId());
         manager.save(sessionConfig);
@@ -904,10 +858,6 @@ public class PlayerController implements SceneHost {
             switchScene(sessionConfig.addScene(name)));
     }
 
-    /**
-     * Saves the current setup (tracks, background, all auras including live tweaks) as a new
-     * named scene and switches to it; the original scene stays as it was.
-     */
     @FXML
     private void onSaveSceneAs() {
         Scene active = sessionConfig.getActiveScene();
@@ -929,14 +879,7 @@ public class PlayerController implements SceneHost {
         sceneEditor.show();
     }
 
-    /**
-     * Applies everything scene-specific: the four mood tracks (a slot without a usable file is
-     * unloaded, which stops it if it was playing), background, fit, segment, rate, boomerang
-     * and auras. The current mood is kept; a track that was playing keeps playing with the
-     * new scene's file (MusicService swaps the player in place).
-     */
     private void applyScene(Scene scene) {
-        // 1. Tracks
         Map<TrackType, String> assignments = scene.getAssignments();
         for (TrackType t : TrackType.values()) {
             String path = assignments.get(t);
@@ -947,15 +890,13 @@ public class PlayerController implements SceneHost {
                 }
             } else {
                 loadedPaths.remove(t);
-                musicService.unloadTrack(t); // missing file or no assignment
+                musicService.unloadTrack(t);
             }
         }
 
-        // 2. Background + fit mode
         applyBackgroundToAmbiance();
         applyFitMode();
 
-        // 3. Auras: hand the scene's auras to the stage and crossfade to the current mood's
         if (ambianceStage != null) {
             Map<AuraSlot, AuraConfig> auras = new EnumMap<>(AuraSlot.class);
             for (AuraSlot slot : AuraSlot.values()) auras.put(slot, scene.getAura(slot));
@@ -963,14 +904,12 @@ public class PlayerController implements SceneHost {
             ambianceStage.setActiveSlot(liveSlot());
         }
 
-        // 4. UI
         refreshCards();
         updateButtons();
         updatePlayPauseButton();
         resetMoodProgressIfEmpty();
     }
 
-    /** Clears the mood progress bar when the selected mood has no track loaded (stale times otherwise). */
     private void resetMoodProgressIfEmpty() {
         if (musicService.isLoaded(currentActiveType)) return;
         if (progressSlider != null) progressSlider.setValue(0);
@@ -978,12 +917,8 @@ public class PlayerController implements SceneHost {
         if (lblTotalTime != null) lblTotalTime.setText("0:00");
     }
 
-    /**
-     * A mood track could not be loaded: forget it so the next scene apply retries, and drop the
-     * slot's previous player so a track from another scene never keeps playing under this one.
-     */
     private void onTrackLoadFailed(TrackType type, String path) {
-        if (!path.equals(loadedPaths.get(type))) return; // a newer load replaced this one
+        if (!path.equals(loadedPaths.get(type))) return;
         loadedPaths.remove(type);
         musicService.unloadTrack(type);
         refreshCards();
@@ -991,9 +926,7 @@ public class PlayerController implements SceneHost {
         updatePlayPauseButton();
     }
 
-    /** Called on the FX thread when a mood track finished loading. */
     private void onTrackLoaded(TrackType type) {
-        // Make the selected mood the current one when nothing is playing, so Play uses it
         if (type == currentActiveType && !musicService.isPlaying()
                 && musicService.getCurrentTrack() != type) {
             musicService.selectTrack(type);
@@ -1002,8 +935,6 @@ public class PlayerController implements SceneHost {
         updateButtons();
         updatePlayPauseButton();
     }
-
-    // --- SceneHost ---
 
     @Override public SessionConfig session() { return sessionConfig; }
 
@@ -1029,17 +960,11 @@ public class PlayerController implements SceneHost {
     @Override
     public void onAuraEdited(AuraSlot slot) {
         if (slot == null) return;
-        // Always stored; the stage blends quickly only when the edited slot is the visible one
         if (ambianceStage != null) ambianceStage.setAura(slot, sessionConfig.getActiveScene().getAura(slot));
         refreshCards();
         saveDebounce.playFromStart();
     }
 
-    /**
-     * Assigns a track to a mood of the active scene. Pinning (a file copy when the track
-     * lives in the YouTube cache) runs off the FX thread; the scene is then updated and the
-     * track loaded on the FX thread.
-     */
     @Override
     public void assignTrack(TrackType type, File file) {
         if (type == null || file == null || !file.isFile() || !isAudioFile(file)) return;
@@ -1048,7 +973,6 @@ public class PlayerController implements SceneHost {
         CompletableFuture.supplyAsync(() -> TrackLibrary.pin(source), ioExecutor)
             .whenComplete((pinned, err) -> Platform.runLater(() -> {
                 String path = (err == null && pinned != null) ? pinned : source;
-                // Already pinned: setAssignment's own pin is a no-op here (no IO on the FX thread)
                 target.setAssignment(type, path);
                 manager.save(sessionConfig);
                 if (target == sessionConfig.getActiveScene()) {
@@ -1060,10 +984,6 @@ public class PlayerController implements SceneHost {
             }));
     }
 
-    /**
-     * Removes the track of a mood. The player is released through MusicService.unloadTrack,
-     * which stops it if that mood was playing.
-     */
     @Override
     public void clearTrack(TrackType type) {
         if (type == null) return;
@@ -1089,17 +1009,10 @@ public class PlayerController implements SceneHost {
         ambianceStage.setBackgroundFitMode(BackgroundFitMode.fromString(sessionConfig.getBackgroundFitMode()));
     }
 
-    /**
-     * Pushes the active scene's background to the ambiance: sanitizes the stored path,
-     * sets segment and rate BEFORE the background (so the video picks them up on READY),
-     * then restores the boomerang from the cache or bakes it.
-     */
     private void applyBackgroundToAmbiance() {
         if (ambianceStage == null) return;
         BackgroundConfig bg = sessionConfig.getActiveScene().getBackground();
         String bgPath = bg.getPath();
-        // Sanear sesiones corruptas: un archivo de la caché de boomerang jamás es
-        // identidad válida de fondo (estado derivado; puede ser purgado en cualquier momento)
         if (bgPath != null && boomerangBaker.isCachePath(bgPath)) {
             bgPath = null;
             bg.setPath(null);
@@ -1107,8 +1020,6 @@ public class PlayerController implements SceneHost {
             bg.setSegmentEndMs(null);
             bg.setBoomerangEnabled(false);
         } else if (bgPath != null && !new File(bgPath).exists()) {
-            // La ruta fue guardada pero el archivo ya no existe: limpiar para evitar
-            // que session.json vuelva a persistir un path roto en la próxima sesión.
             bgPath = null;
             bg.setPath(null);
         }
@@ -1117,8 +1028,6 @@ public class PlayerController implements SceneHost {
         Long segEnd   = bg.getSegmentEndMs();
         double rate = sessionConfig.getVideoPlaybackRate();
 
-        // Drop any boomerang/segment left by the previous background before the new one loads:
-        // the video branch of setBackground trusts the state set by the caller.
         ambianceStage.resetBoomerang();
 
         if (bgPath == null) {
@@ -1129,21 +1038,17 @@ public class PlayerController implements SceneHost {
 
         boolean isVideo = "Video".equals(BackgroundEditorController.mediaType(bgPath));
         if (isVideo && segStart != null && segEnd != null) {
-            // Establecer el segmento ANTES de setBackground para que setVideo() lo reciba en READY
             ambianceStage.setVideoSegment(Duration.millis(segStart), Duration.millis(segEnd));
         } else {
-            // Also guards against a stale segment left from a previous background type
             if (!isVideo) {
                 bg.setSegmentStartMs(null);
                 bg.setSegmentEndMs(null);
             }
             ambianceStage.clearVideoSegment();
         }
-        // Establecer la velocidad ANTES de setBackground para que setVideo() la lea al crear el player
         ambianceStage.setVideoRate(rate);
         ambianceStage.setBackground(bgPath);
 
-        // Boomerang restore: applied state to the live ambiance
         boolean wantBoomerang = Boolean.TRUE.equals(bg.getBoomerangEnabled());
         if (wantBoomerang && isVideo && segStart != null && segEnd != null && ffmpegAvailable) {
             if (boomerangBaker.isCached(bgPath, segStart, segEnd)) {
@@ -1157,8 +1062,6 @@ public class PlayerController implements SceneHost {
         }
     }
 
-    // --- Live ambiance boomerang state (used when a scene background is applied) ---
-
     /**
      * Injects the ffmpeg availability result before applySession.
      */
@@ -1166,9 +1069,6 @@ public class PlayerController implements SceneHost {
         this.ffmpegAvailable = available;
     }
 
-    /**
-     * Starts an async bake for the live ambiance.
-     */
     private void startBake(String src, long s, long e) {
         bakeGuardSrc   = src;
         bakeGuardStart = s;
@@ -1178,7 +1078,6 @@ public class PlayerController implements SceneHost {
                 err     -> Platform.runLater(() -> onBakeFailure(err, src, s, e)));
     }
 
-    /** True while the active scene still wants exactly this background and segment. */
     private boolean isBakeStillWanted(String src, long s, long e) {
         return
                 src.equals(sessionConfig.getBackgroundImagePath())
@@ -1198,14 +1097,11 @@ public class PlayerController implements SceneHost {
 
     private void onBakeFailure(String stderrTail, String src, long s, long e) {
         System.err.println(stderrTail);
-        // A failed bake for a scene the user already left must not clear the new scene's flag
         if (!isBakeStillWanted(src, s, e)) return;
         if (ambianceStage != null) ambianceStage.deactivateBoomerang();
         sessionConfig.setBoomerangEnabled(false);
         manager.save(sessionConfig);
     }
-
-    // --- Ambiance y selección de pantalla ---
 
     @FXML
     private void onToggleAmbiance() {
@@ -1219,10 +1115,6 @@ public class PlayerController implements SceneHost {
         btnToggleAmbiance.setText(showing ? "Hide ambiance" : "Show ambiance");
     }
 
-    /**
-     * Repopula el menú de pantallas sin disparar la selección.
-     * Conserva la selección previa si el índice sigue siendo válido.
-     */
     private void populateScreenMenu() {
         if (btnToggleAmbiance == null) return;
         int previousIndex = selectedScreenItem();
@@ -1239,7 +1131,6 @@ public class PlayerController implements SceneHost {
             addScreenItem("Screen " + (i + 1) + " — " + w + "x" + h + tag, i + 1);
         }
 
-        // Restaurar selección previa si sigue siendo válida; si no, seleccionar "Auto"
         selectScreenItem(previousIndex >= 0 && previousIndex < screenItemCount() ? previousIndex : 0);
     }
 
@@ -1265,7 +1156,6 @@ public class PlayerController implements SceneHost {
         ((RadioMenuItem) btnToggleAmbiance.getItems().get(index)).setSelected(true);
     }
 
-    /** Menu index 0 → Auto (-1); index N → screen N-1. */
     private void onScreenSelected(int menuIndex) {
         if (refreshingUI) return;
         int resolvedIndex = menuIndex <= 0 ? -1 : menuIndex - 1;
@@ -1315,9 +1205,6 @@ public class PlayerController implements SceneHost {
         });
     }
 
-    // --- Biblioteca: celdas del árbol (drag + menú contextual) ---
-
-    /** Tree cell for the library: drag a track onto a mood card, or use the "Assign to" context menu. */
     private final class LibraryCell extends TreeCell<File> {
         private final ContextMenu menu = new ContextMenu();
 
@@ -1479,7 +1366,6 @@ public class PlayerController implements SceneHost {
             return;
         }
 
-        // yt-dlp availability (and the first-run download wait) is handled off the FX thread by downloadAsync.
         final String capturedUrl = url;
         final String capturedVid = vid.get();
         final String placeholderText = "⬇ Downloading... (" + capturedVid + ")";
@@ -1505,7 +1391,6 @@ public class PlayerController implements SceneHost {
         );
     }
 
-    /** Downloads the pasted YouTube URL (a cache hit skips yt-dlp) and plays it on demand. */
     @FXML
     private void onPlayYoutubeUrl() {
         if (lblYoutubeError != null) { lblYoutubeError.setText(""); lblYoutubeError.setVisible(false); lblYoutubeError.setManaged(false); }
@@ -1537,7 +1422,6 @@ public class PlayerController implements SceneHost {
 
     @FXML
     private void onBrowseYouTube() {
-        // searchAsync waits for the yt-dlp setup off the FX thread and reports failures in the picker.
         Stage owner = (Stage) btnBrowseYoutube.getScene().getWindow();
         YoutubePicker.show(owner, youTubeDownloader, result -> {
             playYoutubeNow(result.url());
@@ -1546,7 +1430,6 @@ public class PlayerController implements SceneHost {
 
     private final PauseTransition ytDlpStatusClear = new PauseTransition(javafx.util.Duration.seconds(5));
 
-    /** Starts the managed yt-dlp download/update in the background and mirrors its status in the YouTube label. */
     private void startYtDlpManager() {
         ytDlpStatusClear.setOnFinished(e -> {
             if (lblYoutubeError != null) {
@@ -1574,9 +1457,6 @@ public class PlayerController implements SceneHost {
         }
     }
 
-    // --- App updates ---
-
-    /** Starts the background update check (installed Windows builds only); the notice never interrupts playback. */
     private void startUpdateCheck() {
         UpdateManager.get().checkAsync(update -> Platform.runLater(() -> showUpdateNotice(update)));
     }
@@ -1598,7 +1478,6 @@ public class PlayerController implements SceneHost {
         UpdateManager.ReadyUpdate update = readyUpdate;
         if (update == null) return;
         btnUpdateNow.setDisable(true);
-        // Re-hashing a large installer stays off the FX thread
         CompletableFuture.supplyAsync(() -> UpdateManager.get().verify(update)).thenAccept(ok -> Platform.runLater(() -> {
             if (!ok) {
                 lblUpdate.setText("The downloaded update is damaged. It will be downloaded again on the next start.");
@@ -1608,12 +1487,11 @@ public class PlayerController implements SceneHost {
             }
             UpdateManager.get().installOnClose(update);
             if (!UpdateManager.get().launchPendingInstaller()) {
-                // Keep the app open: closing without updating would only lose the user's place
                 lblUpdate.setText("The installer could not be started. Try again or install it on close.");
                 btnUpdateNow.setDisable(false);
                 return;
             }
-            shutdownApp(); // saves the session and exits; the installer is already running
+            shutdownApp();
         })).exceptionally(ex -> {
             Platform.runLater(() -> {
                 lblUpdate.setText("The update could not be checked: " + ex.getMessage());
@@ -1709,7 +1587,6 @@ public class PlayerController implements SceneHost {
         if (current != null && cmbPlaylist.getItems().contains(current))
             cmbPlaylist.setValue(current);
 
-        // Repopulate track ListView with display names (title for YouTube tracks, filename otherwise)
         if (lstPlaylistTracks != null) {
             lstPlaylistTracks.getItems().setAll(
                 playlistManager.getActiveItems().stream()
@@ -1735,8 +1612,6 @@ public class PlayerController implements SceneHost {
 
     public void applySession(SessionConfig cfg) {
         if (cfg == null) return;
-        // Keep the loaded scenes (ids, assignments, backgrounds, auras); scene-specific state is
-        // restored by applyScene below. Only session-wide settings are restored here.
         sessionConfig.adoptScenesFrom(cfg);
 
         String lastImgDir = cfg.getLastImageFolderPath();
@@ -1749,10 +1624,7 @@ public class PlayerController implements SceneHost {
         sessionConfig.setAmbianceScreenIndex(screenIdx);
         Platform.runLater(() -> {
             populateScreenMenu();
-            // Seleccionar el ítem correcto en el menú (índice -1 → posición 0 "Auto")
             int menuPos = screenIdx < 0 ? 0 : screenIdx + 1;
-            // Si el índice recordado está fuera del rango disponible, mostrar "Auto"
-            // sin sobrescribir el índice guardado — la intención se conserva.
             selectScreenItem(menuPos < screenItemCount() ? menuPos : 0);
             if (ambianceStage != null) {
                 ambianceStage.applyScreen(screenIdx);
@@ -1771,7 +1643,6 @@ public class PlayerController implements SceneHost {
 
         // T-15: Restore playlists
         playlistManager.setPlaylists(cfg.getPlaylists());
-        // Carry the global playlist state over, or the next save would drop it from session.json
         sessionConfig.setPlaylists(cfg.getPlaylists());
         sessionConfig.setActiveMode(cfg.getActiveMode());
         sessionConfig.setActivePlaylistName(cfg.getActivePlaylistName());
@@ -1801,7 +1672,6 @@ public class PlayerController implements SceneHost {
             if (lblMasterVolume != null)
                 lblMasterVolume.setText(Math.round(mv * 100) + "%");
 
-            // Scene part: tracks, background, auras. Runs after the ambiance stage has opened.
             refreshSceneCombo();
             applyScene(sessionConfig.getActiveScene());
         });
@@ -1886,14 +1756,13 @@ public class PlayerController implements SceneHost {
         shutdownApp();
     }
 
-    /** Single exit path: flushes pending state, runs a requested update installer, then quits. */
     private void shutdownApp() {
-        if (sceneEditor != null) sceneEditor.dispose(); // releases the background preview player
+        if (sceneEditor != null) sceneEditor.dispose();
         if (saveDebounce.getStatus() == Animation.Status.RUNNING) {
             saveDebounce.stop();
-            manager.save(sessionConfig); // flush a pending editor save
+            manager.save(sessionConfig);
         }
-        UpdateManager.get().launchPendingInstaller(); // no-op unless the user chose to install the update
+        UpdateManager.get().launchPendingInstaller();
         Platform.exit();
         System.exit(0);
     }

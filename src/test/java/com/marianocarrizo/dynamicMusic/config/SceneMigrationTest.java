@@ -87,7 +87,6 @@ class SceneMigrationTest {
         assertEquals(1.5, scene.getBackground().getPlaybackRate());
         assertEquals(Boolean.TRUE, scene.getBackground().getBoomerangEnabled());
 
-        // the facade reads the same values from the active scene
         assertEquals("C:/bg/video.mp4", cfg.getBackgroundImagePath());
         assertEquals("STRETCH", cfg.getBackgroundFitMode());
         assertEquals(1.5, cfg.getVideoPlaybackRate());
@@ -99,10 +98,10 @@ class SceneMigrationTest {
         SceneMigration.migrate(cfg, dir.resolve("session.json"));
         Scene scene = cfg.getActiveScene();
 
-        assertEquals(AuraPreset.FIRE, scene.getAura(AuraSlot.RAGED).getPreset());         // BLOOD_RAIN
-        assertEquals(AuraPreset.HOLY, scene.getAura(AuraSlot.NORMAL).getPreset());        // AURORA
-        assertEquals(AuraPreset.ELECTRIC, scene.getAura(AuraSlot.ADVANTAGE).getPreset()); // SHOCKWAVE
-        assertEquals(AuraPreset.NEUTRAL, scene.getAura(AuraSlot.PAUSED).getPreset());     // unknown
+        assertEquals(AuraPreset.FIRE, scene.getAura(AuraSlot.RAGED).getPreset());
+        assertEquals(AuraPreset.HOLY, scene.getAura(AuraSlot.NORMAL).getPreset());
+        assertEquals(AuraPreset.ELECTRIC, scene.getAura(AuraSlot.ADVANTAGE).getPreset());
+        assertEquals(AuraPreset.NEUTRAL, scene.getAura(AuraSlot.PAUSED).getPreset());
         assertEquals(AuraPreset.NEUTRAL, scene.getAura(AuraSlot.ON_DEMAND).getPreset());
     }
 
@@ -132,10 +131,10 @@ class SceneMigrationTest {
         SceneMigration.migrate(cfg, dir.resolve("session.json"));
         Scene scene = cfg.getActiveScene();
 
-        assertEquals(1.0, scene.getAura(AuraSlot.RAGED).getReactivity(), 1e-9);      // 4 / 4
-        assertEquals(0.25, scene.getAura(AuraSlot.NORMAL).getReactivity(), 1e-9);    // 1 / 4
-        assertEquals(1.0, scene.getAura(AuraSlot.ADVANTAGE).getReactivity(), 1e-9);  // 8 / 4 clamped
-        assertEquals(0.5, scene.getAura(AuraSlot.PAUSED).getReactivity(), 1e-9);     // default 2 / 4
+        assertEquals(1.0, scene.getAura(AuraSlot.RAGED).getReactivity(), 1e-9);
+        assertEquals(0.25, scene.getAura(AuraSlot.NORMAL).getReactivity(), 1e-9);
+        assertEquals(1.0, scene.getAura(AuraSlot.ADVANTAGE).getReactivity(), 1e-9);
+        assertEquals(0.5, scene.getAura(AuraSlot.PAUSED).getReactivity(), 1e-9);
     }
 
     @Test
@@ -163,7 +162,7 @@ class SceneMigrationTest {
         assertEquals("original", Files.readString(bak));
 
         Files.writeString(file, "changed later");
-        SceneMigration.migrate(legacy(), file); // another legacy migration must not touch the backup
+        SceneMigration.migrate(legacy(), file);
         assertEquals("original", Files.readString(bak));
     }
 

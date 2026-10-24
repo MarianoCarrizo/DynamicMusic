@@ -1,6 +1,5 @@
 package com.marianocarrizo.dynamicMusic.model;
 
-/** Built-in aura looks. Each carries default colors used to seed an {@link AuraConfig}. */
 public enum AuraPreset {
     FIRE("#FF5A1F", "#7A1100"),
     SHADOW("#8B6CFF", "#0B0614"),
@@ -19,7 +18,6 @@ public enum AuraPreset {
     public String defaultPrimary()   { return primary; }
     public String defaultSecondary() { return secondary; }
 
-    /** Builds a fresh AuraConfig with this preset's defaults. */
     public AuraConfig defaults() {
         AuraConfig c = new AuraConfig();
         c.setPreset(this);

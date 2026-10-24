@@ -20,26 +20,18 @@ import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Non-modal "Edit scene" window: rename/delete the active scene, one tab per mood plus
- * On demand (track + aura) and a Background tab. All edits go straight into the active scene
- * through the {@link SceneHost}; the editor holds no scene state of its own.
- * A single instance lives for the whole app run: closing the window only hides it.
- */
 public class SceneEditorController {
 
     @FXML private TextField txtSceneName;
     @FXML private Button btnDeleteScene;
     @FXML private TabPane tabPane;
     @FXML private Tab tabBackground;
-    // Injected by fx:include (fx:id "backgroundEditor" + "Controller")
     @FXML private BackgroundEditorController backgroundEditorController;
 
     private SceneHost host;
     private Stage stage;
     private final List<MoodTabContent> moodTabs = new ArrayList<>();
 
-    /** Loads the editor window (hidden) owned by {@code owner}. */
     static SceneEditorController create(Window owner, SceneHost host) {
         try {
             FXMLLoader loader = new FXMLLoader(
@@ -56,7 +48,6 @@ public class SceneEditorController {
     private void init(Parent root, Window owner, SceneHost host) {
         this.host = host;
 
-        // One tab per mood + On demand, in front of the Background tab
         int index = 0;
         for (AuraSlot slot : new AuraSlot[]{AuraSlot.PAUSED, AuraSlot.NORMAL, AuraSlot.RAGED,
                 AuraSlot.ADVANTAGE, AuraSlot.ON_DEMAND}) {
@@ -68,7 +59,6 @@ public class SceneEditorController {
         }
         tabPane.getSelectionModel().select(0);
 
-        // Rename on Enter or when the field loses focus
         txtSceneName.setOnAction(e -> commitName());
         txtSceneName.focusedProperty().addListener((o, had, has) -> {
             if (had && !has) commitName();
@@ -89,13 +79,9 @@ public class SceneEditorController {
         stage.setScene(scene);
         stage.setMinWidth(520);
         stage.setMinHeight(520);
-        // Closing discards any unapplied background preview and releases its player
         stage.setOnHidden(e -> backgroundEditorController.dispose());
     }
 
-    // --- Window API used by the host ---
-
-    /** Shows the editor reflecting the current scene, or brings it to front if already open. */
     void show() {
         if (stage.isShowing()) {
             stage.toFront();
@@ -104,16 +90,14 @@ public class SceneEditorController {
         }
         refresh();
         stage.show();
-        tabPane.requestFocus(); // do not start with the name field focused and selected
+        tabPane.requestFocus();
     }
 
-    /** Releases resources (preview player). Called when the app exits. */
     void dispose() {
         backgroundEditorController.dispose();
         if (stage != null) stage.hide();
     }
 
-    /** Full reload from the active scene (scene switched, renamed or deleted). Drops any pending background edit. */
     void refresh() {
         Scene scene = host.session().getActiveScene();
         stage.setTitle("Edit scene - " + scene.getName());
@@ -123,30 +107,25 @@ public class SceneEditorController {
         backgroundEditorController.refresh();
     }
 
-    /** Reloads the aura controls of every tab (an aura was edited from the main window). */
     void refreshAuras() {
         Scene scene = host.session().getActiveScene();
         for (MoodTabContent tab : moodTabs) tab.refresh(scene);
     }
 
-    /** Refreshes the track labels only (a track was assigned or cleared). */
     void refreshTracks() {
         Scene scene = host.session().getActiveScene();
         for (MoodTabContent tab : moodTabs) tab.refreshTrack(scene);
     }
 
-    /** Refreshes the background file labels only (background changed from outside). */
     void refreshBackground() {
         backgroundEditorController.refreshLabel();
     }
-
-    // --- Handlers ---
 
     private void commitName() {
         Scene scene = host.session().getActiveScene();
         String name = txtSceneName.getText() == null ? "" : txtSceneName.getText().trim();
         if (name.isEmpty() || name.equals(scene.getName())) {
-            txtSceneName.setText(scene.getName()); // blank or unchanged: restore
+            txtSceneName.setText(scene.getName());
             return;
         }
         host.session().renameScene(scene.getId(), name);
@@ -164,7 +143,6 @@ public class SceneEditorController {
         confirm.initOwner(stage);
         confirm.setHeaderText(null);
         if (confirm.showAndWait().filter(b -> b == ButtonType.OK).isEmpty()) return;
-        // The host switches to another scene and calls back refresh()
         host.deleteActiveScene();
     }
 

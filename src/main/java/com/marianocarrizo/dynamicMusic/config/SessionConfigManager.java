@@ -25,14 +25,12 @@ public class SessionConfigManager {
 
     private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
 
-    // Test seam: when set, replaces the APPDATA-based session file location
     private final Path pathOverride;
 
     public SessionConfigManager() {
         this.pathOverride = null;
     }
 
-    /** Test seam: uses {@code sessionFile} instead of %APPDATA%/DynamicMusic/session.json. */
     SessionConfigManager(Path sessionFile) {
         this.pathOverride = sessionFile;
     }
@@ -61,7 +59,7 @@ public class SessionConfigManager {
         if (!Files.exists(path)) {
             System.out.println("No session config found — starting fresh");
             SessionConfig fresh = new SessionConfig();
-            fresh.getActiveScene(); // single empty "Default" scene
+            fresh.getActiveScene();
             return fresh;
         }
         try {
@@ -70,8 +68,6 @@ public class SessionConfigManager {
                 cfg = gson.fromJson(reader, SessionConfig.class);
             }
             if (cfg == null) cfg = new SessionConfig();
-            // Legacy (pre-scenes) files are converted to one "Default" scene and saved right away.
-            // Done after the reader is closed: Windows cannot replace a file that is still open.
             if (SceneMigration.migrate(cfg, path)) save(cfg);
             return cfg;
         } catch (Exception e) {

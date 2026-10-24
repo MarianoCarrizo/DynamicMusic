@@ -59,7 +59,6 @@ class SessionConfigTest {
         assertEquals("C:/music/raged.mp3", copy.getAssignments().get(TrackType.RAGED));
         assertEquals(0.9, copy.getAura(AuraSlot.RAGED).getIntensity(), 1e-9);
 
-        // mutating the copy must not leak into the original
         copy.getBackground().setPath("C:/other.png");
         copy.getAura(AuraSlot.RAGED).setIntensity(0.1);
         copy.setAssignment(TrackType.RAGED, "C:/music/other.mp3");
@@ -152,7 +151,7 @@ class SessionConfigTest {
         loaded.setActiveScene(second.getId());
 
         SessionConfig target = new SessionConfig();
-        target.getActiveScene(); // fresh "Default" that must be replaced
+        target.getActiveScene();
         target.adoptScenesFrom(loaded);
 
         assertEquals(2, target.getScenes().size());

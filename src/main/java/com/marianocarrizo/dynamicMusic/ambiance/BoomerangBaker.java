@@ -34,7 +34,6 @@ public final class BoomerangBaker {
     // --- Sondeo estático de ffmpeg ---
 
     /**
-     * Verifica si ffmpeg está disponible (el empaquetado con la app o, si no hay, el del PATH).
      * Sondeo de un solo disparo con timeout de 3 segundos.
      */
     public static boolean isFfmpegAvailable() {

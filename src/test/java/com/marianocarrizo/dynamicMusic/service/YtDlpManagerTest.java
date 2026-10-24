@@ -61,8 +61,8 @@ class YtDlpManagerTest {
 
     @Test
     void parseChecksumRejectsMissingOrMalformed() {
-        assertTrue(YtDlpManager.parseChecksum(SUMS, "yt-dlp_macos").isEmpty());   // hash too short
-        assertTrue(YtDlpManager.parseChecksum(SUMS, "yt-dlp").isEmpty());         // no prefix matching
+        assertTrue(YtDlpManager.parseChecksum(SUMS, "yt-dlp_macos").isEmpty());
+        assertTrue(YtDlpManager.parseChecksum(SUMS, "yt-dlp").isEmpty());
         assertTrue(YtDlpManager.parseChecksum("", "yt-dlp.exe").isEmpty());
         assertTrue(YtDlpManager.parseChecksum(null, "yt-dlp.exe").isEmpty());
     }

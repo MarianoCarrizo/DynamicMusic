@@ -24,22 +24,15 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
-/**
- * Checks GitHub for a newer installer, downloads and verifies it in the background, and launches it on request.
- * Active only for installed Windows builds: the jpackage launcher sets {@code -Ddynamicmusic.version}, dev runs do not.
- * No JavaFX imports: callbacks fire on a background thread, callers must marshal to the FX thread.
- */
 public final class UpdateManager {
 
     static final String VERSION_PROPERTY = "dynamicmusic.version";
     private static final long CHECK_INTERVAL_MS = TimeUnit.HOURS.toMillis(24);
     private static final Pattern INSTALLER_FILE = Pattern.compile("^DynamicMusic-Setup-(\\d+\\.\\d+\\.\\d+)\\.exe$");
 
-    /** Inno Setup switches: silent install that closes the running app; the installer relaunches it. */
     static final List<String> INSTALLER_ARGS =
             List.of("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CLOSEAPPLICATIONS");
 
-    /** A verified installer on disk, ready to run. */
     public record ReadyUpdate(Version version, Path installer) {}
 
     private static final UpdateManager INSTANCE = new UpdateManager(YouTubeDownloader::appDir,
@@ -58,7 +51,6 @@ public final class UpdateManager {
     private final AtomicBoolean hookRegistered = new AtomicBoolean();
     private volatile ReadyUpdate installOnClose;
 
-    /** Package-private so tests can point the manager at a temp dir, a fake version and a local server. */
     UpdateManager(Supplier<Path> appDirSupplier, Optional<Version> current, String osName, URI api) {
         this.appDirSupplier = appDirSupplier;
         this.current = current;
@@ -66,36 +58,22 @@ public final class UpdateManager {
         this.api = api;
     }
 
-    /** True for an installed Windows build (version property present and valid). */
     public boolean isEnabled() {
         return current.isPresent() && YtDlpManager.isWindows(osName);
     }
 
-    // --- Paths ---
-
     private Path updatesDir()    { return appDirSupplier.get().resolve("updates"); }
     private Path lastCheckPath() { return appDirSupplier.get().resolve("update.lastcheck"); }
 
-    // --- Pure helpers ---
-
-    /** True when the last check is older than the interval (or in the future, e.g. after a clock change). */
     static boolean shouldCheck(long lastCheckMs, long nowMs) {
         return lastCheckMs > nowMs || nowMs - lastCheckMs > CHECK_INTERVAL_MS;
     }
 
-    /** Version of a file named {@code DynamicMusic-Setup-X.Y.Z.exe}; empty for any other name. */
     static Optional<Version> installerVersion(String fileName) {
         Matcher m = INSTALLER_FILE.matcher(fileName);
         return m.matches() ? Version.parse(m.group(1)) : Optional.empty();
     }
 
-    // --- Background check ---
-
-    /**
-     * Starts the check on a daemon thread, at most once per process. {@code onReady} receives each verified
-     * installer newer than the running version: first one left from an earlier session, then a fresh download.
-     * Failures are logged and otherwise silent.
-     */
     public void checkAsync(Consumer<ReadyUpdate> onReady) {
         if (!isEnabled() || !started.compareAndSet(false, true)) return;
         Thread t = new Thread(() -> {
@@ -113,7 +91,7 @@ public final class UpdateManager {
 
     private static HttpClient newClient() {
         return HttpClient.newBuilder()
-                .followRedirects(HttpClient.Redirect.NORMAL) // never downgrade https to http
+                .followRedirects(HttpClient.Redirect.NORMAL)
                 .connectTimeout(Duration.ofSeconds(15))
                 .build();
     }
@@ -131,28 +109,23 @@ public final class UpdateManager {
         try {
             lookup = UpdateChecker.fetchLatest(client, api);
         } catch (IOException e) {
-            return; // offline: try again on the next start
+            return;
         }
         Optional<ReleaseInfo> found = lookup.release();
         boolean nothingToDownload = found.isEmpty()
                 || !found.get().version().isNewerThan(running)
                 || (pending != null && !found.get().version().isNewerThan(pending.version()));
         if (nothingToDownload) {
-            if (lookup.answered()) writeLastCheck(); // includes rate limits: do not hammer the API
+            if (lookup.answered()) writeLastCheck();
             return;
         }
 
         ReleaseInfo rel = found.get();
         Path installer = downloadAndVerify(client, rel, dir);
-        writeLastCheck(); // only after a successful download, so a failed one is retried on the next start
+        writeLastCheck();
         onReady.accept(new ReadyUpdate(rel.version(), installer));
     }
 
-    /**
-     * Downloads the checksum and the installer, verifies SHA-256 and moves the installer into place atomically.
-     * A mismatch deletes the download and throws. The checksum is kept as {@code <installer>.sha256} so a later
-     * session can re-verify the file without the network.
-     */
     static Path downloadAndVerify(HttpClient client, ReleaseInfo rel, Path dir) throws IOException, InterruptedException {
         Files.createDirectories(dir);
         Path target = dir.resolve(rel.installerName());
@@ -185,10 +158,6 @@ public final class UpdateManager {
         }
     }
 
-    /**
-     * Deletes partial downloads and installers that are not newer than {@code running}, then returns the newest
-     * leftover installer whose hash still matches its checksum file (a bad one is deleted).
-     */
     static ReadyUpdate cleanAndFindPending(Path dir, Version running) {
         List<Path> files = new ArrayList<>();
         try (Stream<Path> s = Files.list(dir)) {
@@ -212,7 +181,6 @@ public final class UpdateManager {
         return best;
     }
 
-    /** Re-verifies an installer against the checksum file stored next to it. */
     static boolean verifyOnDisk(Path installer) {
         try {
             String name = installer.getFileName().toString();
@@ -223,7 +191,6 @@ public final class UpdateManager {
         }
     }
 
-    /** Re-hashes the installer before it runs; a damaged file is deleted so the next start fetches it again. */
     public boolean verify(ReadyUpdate update) {
         if (verifyOnDisk(update.installer())) return true;
         deleteQuietly(update.installer());
@@ -231,12 +198,6 @@ public final class UpdateManager {
         return false;
     }
 
-    // --- Launching the installer ---
-
-    /**
-     * Marks {@code update} to be installed when the JVM exits (explicit shutdown path or any other exit), via
-     * {@link #launchPendingInstaller()}. The user decides each time; nothing is scheduled until this is called.
-     */
     public void installOnClose(ReadyUpdate update) {
         installOnClose = update;
         if (hookRegistered.compareAndSet(false, true)) {
@@ -244,11 +205,9 @@ public final class UpdateManager {
         }
     }
 
-    /** Runs the requested installer once (silent, relaunches the app). Returns false if none or it failed to start. */
     public boolean launchPendingInstaller() {
         ReadyUpdate u = installOnClose;
         if (u == null || !launched.compareAndSet(false, true)) return false;
-        // Re-hash right before running: the file may have sat in a user-writable folder for hours
         if (!verifyOnDisk(u.installer())) {
             System.err.println("[update] installer failed verification, not starting it: " + u.installer());
             launched.set(false);
@@ -266,8 +225,6 @@ public final class UpdateManager {
             return false;
         }
     }
-
-    // --- Last-check bookkeeping ---
 
     private long readLastCheck() {
         try {

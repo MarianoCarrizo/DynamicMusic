@@ -76,7 +76,6 @@ class AuraLookTest {
             assertTrue(calm[AuraLook.EDGE_LINE] <= normal[AuraLook.EDGE_LINE], p + " EDGE_LINE");
             assertEquals(0.0, calm[AuraLook.EDGE_LINE], p + " edge line is off when calm");
 
-            // colors and layer weights are not affected by calm
             assertEquals(normal[AuraLook.PR], calm[AuraLook.PR]);
             assertEquals(normal[AuraLook.W_GLOW], calm[AuraLook.W_GLOW]);
         }

@@ -2,25 +2,20 @@ package com.marianocarrizo.dynamicMusic.model;
 
 import java.util.regex.Pattern;
 
-/**
- * Visual aura settings for one slot of a scene.
- * Getters are null-safe so partial or hand-edited JSON never yields NPEs.
- */
 public class AuraConfig {
 
     private static final Pattern HEX = Pattern.compile("#[0-9A-Fa-f]{6}");
 
     private AuraPreset preset;
-    private String primaryColor;    // "#RRGGBB"
-    private String secondaryColor;  // "#RRGGBB"
-    private double intensity = 0.5;   // 0..1
-    private double reactivity = 0.5;  // 0..1
+    private String primaryColor;
+    private String secondaryColor;
+    private double intensity = 0.5;
+    private double reactivity = 0.5;
     private boolean vignette = true;
     private boolean edgeGlow = true;
     private boolean embers = true;
     private boolean backgroundPulse = true;
 
-    /** No-arg constructor required by Gson. */
     public AuraConfig() {}
 
     public AuraPreset getPreset() { return preset != null ? preset : AuraPreset.NEUTRAL; }

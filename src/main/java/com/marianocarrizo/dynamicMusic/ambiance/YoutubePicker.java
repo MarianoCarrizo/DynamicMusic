@@ -33,7 +33,6 @@ public final class YoutubePicker {
         stage.setWidth(500);
         stage.setHeight(480);
 
-        // --- Search row ---
         TextField txtQuery = new TextField();
         txtQuery.setPromptText("Search YouTube...");
         HBox.setHgrow(txtQuery, Priority.ALWAYS);
@@ -43,26 +42,22 @@ public final class YoutubePicker {
         HBox searchRow = new HBox(8, txtQuery, btnSearch);
         searchRow.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
 
-        // --- Inline error ---
         Label lblError = new Label();
         lblError.setVisible(false);
         lblError.setManaged(false);
         lblError.setWrapText(true);
         lblError.setStyle("-fx-text-fill: #e55; -fx-font-size: 11;");
 
-        // --- Progress indicator ---
         ProgressIndicator progress = new ProgressIndicator();
         progress.setVisible(false);
         progress.setManaged(false);
         progress.setMaxSize(24, 24);
 
-        // --- Results list ---
         ListView<SearchResult> listView = new ListView<>();
         listView.setPrefHeight(350);
         VBox.setVgrow(listView, Priority.ALWAYS);
         listView.setCellFactory(lv -> new SearchResultCell());
 
-        // --- Add button row ---
         Button btnAdd = new Button("Add");
         btnAdd.setDisable(true);
         btnAdd.disableProperty().bind(
@@ -72,14 +67,12 @@ public final class YoutubePicker {
         HBox addRow = new HBox(btnAdd);
         addRow.setAlignment(Pos.CENTER_RIGHT);
 
-        // --- Root layout ---
         VBox root = new VBox(10, searchRow, lblError, progress, listView, addRow);
         root.setPadding(new Insets(10));
 
         stage.setScene(new Scene(root));
         stage.setOnShown(e -> txtQuery.requestFocus());
 
-        // --- Search action ---
         Runnable doSearch = () -> {
             String query = txtQuery.getText().trim();
             if (query.isBlank()) return;
@@ -113,7 +106,6 @@ public final class YoutubePicker {
             if (e.getCode() == KeyCode.ENTER) doSearch.run();
         });
 
-        // --- Pick action ---
         Consumer<SearchResult> pick = result -> {
             stage.close();
             onPick.accept(result);
@@ -133,8 +125,6 @@ public final class YoutubePicker {
 
         stage.showAndWait();
     }
-
-    // --- Custom cell ---
 
     private static final class SearchResultCell extends ListCell<SearchResult> {
 
