@@ -123,6 +123,12 @@ public class SceneEditorController {
         backgroundEditorController.refresh();
     }
 
+    /** Reloads the aura controls of every tab (an aura was edited from the main window). */
+    void refreshAuras() {
+        Scene scene = host.session().getActiveScene();
+        for (MoodTabContent tab : moodTabs) tab.refresh(scene);
+    }
+
     /** Refreshes the track labels only (a track was assigned or cleared). */
     void refreshTracks() {
         Scene scene = host.session().getActiveScene();

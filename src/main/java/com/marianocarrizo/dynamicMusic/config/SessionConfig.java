@@ -1,7 +1,6 @@
 package com.marianocarrizo.dynamicMusic.config;
 
 import com.marianocarrizo.dynamicMusic.Enums.TrackType;
-import com.marianocarrizo.dynamicMusic.ambiance.EffectType;
 import com.marianocarrizo.dynamicMusic.model.BackgroundConfig;
 import com.marianocarrizo.dynamicMusic.model.Playlist;
 import com.marianocarrizo.dynamicMusic.model.Scene;
@@ -46,7 +45,7 @@ public class SessionConfig {
     // Índice (0-based) de la pantalla elegida para el stage de ambiance; -1 = auto
     private int ambianceScreenIndex = -1;
 
-    // Per-mood effect type: TrackType.name() → EffectType.name()
+    // LEGACY (pre-scenes) per-mood effect name: TrackType.name() → old effect name; read only by SceneMigration
     private Map<String, String> moodEffects;
 
     // Last folder opened with "Open Folder" — null if never used
@@ -249,36 +248,24 @@ public class SessionConfig {
     // --- Mood effects ---
 
     /**
-     * Returns the EffectType for the given mood, or a built-in default if
-     * the stored value is absent or refers to an unknown EffectType.
+     * LEGACY: the name of the pre-scenes particle effect stored for the given mood (e.g. "FIRE",
+     * "AURORA"), or the old built-in default when absent. Only used to migrate old session files.
      */
-    public EffectType getMoodEffect(TrackType type) {
-        if (moodEffects == null || type == null) return defaultEffect(type);
-        String stored = moodEffects.get(type.name());
-        if (stored == null) return defaultEffect(type);
-        try {
-            return EffectType.valueOf(stored);
-        } catch (IllegalArgumentException e) {
-            return defaultEffect(type);
+    public String getLegacyMoodEffectName(TrackType type) {
+        if (moodEffects != null && type != null) {
+            String stored = moodEffects.get(type.name());
+            if (stored != null) return stored;
         }
+        return defaultLegacyEffectName(type);
     }
 
-    /**
-     * Saves the effect preference for the given mood.
-     */
-    public void setMoodEffect(TrackType type, EffectType effect) {
-        if (type == null || effect == null) return;
-        if (moodEffects == null) moodEffects = new LinkedHashMap<>();
-        moodEffects.put(type.name(), effect.name());
-    }
-
-    private static EffectType defaultEffect(TrackType type) {
-        if (type == null) return EffectType.AURORA;
+    private static String defaultLegacyEffectName(TrackType type) {
+        if (type == null) return "AURORA";
         return switch (type) {
-            case RAGED     -> EffectType.FIRE;
-            case NORMAL    -> EffectType.AURORA;
-            case ADVANTAGE -> EffectType.ELECTRIC;
-            case PAUSED    -> EffectType.VOID;
+            case RAGED     -> "FIRE";
+            case NORMAL    -> "AURORA";
+            case ADVANTAGE -> "ELECTRIC";
+            case PAUSED    -> "VOID";
         };
     }
 

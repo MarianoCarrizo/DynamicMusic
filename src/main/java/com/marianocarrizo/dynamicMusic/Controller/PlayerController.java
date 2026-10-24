@@ -2,13 +2,13 @@ package com.marianocarrizo.dynamicMusic.Controller;
 
 import com.marianocarrizo.dynamicMusic.Enums.TrackType;
 import com.marianocarrizo.dynamicMusic.ambiance.AmbianceStage;
-import com.marianocarrizo.dynamicMusic.ambiance.AuraBridge;
 import com.marianocarrizo.dynamicMusic.ambiance.BackgroundFitMode;
 import com.marianocarrizo.dynamicMusic.ambiance.BoomerangBaker;
 import com.marianocarrizo.dynamicMusic.ambiance.YoutubePicker;
 import com.marianocarrizo.dynamicMusic.config.SessionConfig;
 import com.marianocarrizo.dynamicMusic.config.SessionConfigManager;
 import com.marianocarrizo.dynamicMusic.model.AuraConfig;
+import com.marianocarrizo.dynamicMusic.model.AuraPreset;
 import com.marianocarrizo.dynamicMusic.model.AuraSlot;
 import com.marianocarrizo.dynamicMusic.model.BackgroundConfig;
 import com.marianocarrizo.dynamicMusic.model.PlaylistItem;
@@ -17,6 +17,7 @@ import com.marianocarrizo.dynamicMusic.service.MusicService;
 import com.marianocarrizo.dynamicMusic.service.PlaylistManager;
 import com.marianocarrizo.dynamicMusic.service.TrackLibrary;
 import com.marianocarrizo.dynamicMusic.service.YouTubeDownloader;
+import com.marianocarrizo.dynamicMusic.service.YtDlpManager;
 import javafx.animation.Animation;
 import javafx.animation.PauseTransition;
 import javafx.application.Platform;
@@ -28,6 +29,7 @@ import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.*;
 import javafx.scene.input.ClipboardContent;
+import javafx.scene.input.KeyCode;
 import javafx.scene.input.Dragboard;
 import javafx.scene.input.TransferMode;
 import javafx.scene.layout.HBox;
@@ -88,6 +90,16 @@ public class PlayerController implements SceneHost {
     @FXML private Label lblPreviewTotalTime;
     @FXML private Label lblPreviewTrack;
 
+    // On-demand player (visible only while an on-demand track is loaded)
+    @FXML private VBox onDemandPanel;
+    @FXML private Label lblOnDemandTrack;
+    @FXML private ToggleButton btnOnDemandLoop;
+    @FXML private Button btnOnDemandPlayPause;
+    @FXML private Slider onDemandSlider;
+    @FXML private Label lblOnDemandCurrentTime;
+    @FXML private Label lblOnDemandTotalTime;
+    private boolean isDraggingOnDemandSlider = false;
+
     // Caption + nombre de la pista del mood activo
     @FXML private Label lblNowPlayingMood;
     @FXML private Label lblNowPlaying;
@@ -122,6 +134,7 @@ public class PlayerController implements SceneHost {
     // YouTube URL input
     @FXML private TextField txtYoutubeUrl;
     @FXML private Button btnAddYoutube;
+    @FXML private Button btnPlayYoutube;
     @FXML private Button btnBrowseYoutube;
     @FXML private Label lblYoutubeError;
 
@@ -142,6 +155,17 @@ public class PlayerController implements SceneHost {
     private boolean applyingSession = false;
     private boolean refreshingUI = false;
     private TrackType currentActiveType = TrackType.NORMAL;
+
+    // Live aura strip: quick edits to the active mood's aura during play
+    @FXML private Label  lblLiveAura;
+    @FXML private HBox   livePresetBox;
+    @FXML private Slider sldLiveIntensity;
+    @FXML private Slider sldLiveReactivity;
+    @FXML private Label  lblLiveIntensity;
+    @FXML private Label  lblLiveReactivity;
+    private final Map<AuraPreset, ToggleButton> livePresetButtons = new EnumMap<>(AuraPreset.class);
+    private final ToggleGroup livePresetGroup = new ToggleGroup();
+    private boolean updatingLiveAura = false;
 
     // Boomerang state (live ambiance)
     private final BoomerangBaker boomerangBaker = new BoomerangBaker();
@@ -180,7 +204,9 @@ public class PlayerController implements SceneHost {
 
     @FXML
     public void initialize() {
+        startYtDlpManager();
         buildMoodCards();
+        buildLiveAura();
         refreshCards();
         updateButtons();
         updateNowPlayingCaption();
@@ -207,6 +233,15 @@ public class PlayerController implements SceneHost {
 
         if (treeFiles != null) {
             treeFiles.setCellFactory(tv -> new LibraryCell());
+            treeFiles.setOnKeyPressed(e -> {
+                if (e.getCode() == KeyCode.ENTER) {
+                    TreeItem<File> selected = treeFiles.getSelectionModel().getSelectedItem();
+                    if (selected != null && selected.getValue() != null && selected.getValue().isFile()) {
+                        playNow(selected.getValue(), null);
+                        e.consume();
+                    }
+                }
+            });
             treeFiles.setOnMouseClicked(e -> {
                 if (e.getClickCount() == 2) {
                     TreeItem<File> selected = treeFiles.getSelectionModel().getSelectedItem();
@@ -246,6 +281,32 @@ public class PlayerController implements SceneHost {
                 updatePreviewPlayPauseButton();
             }));
 
+        // On-demand player
+        musicService.setOnDemandProgressListener((current, total) ->
+            Platform.runLater(() -> {
+                if (!isDraggingOnDemandSlider && total != null && !total.isUnknown() && total.toMillis() > 0) {
+                    onDemandSlider.setValue(current.toMillis() / total.toMillis() * 100);
+                    lblOnDemandCurrentTime.setText(formatDuration(current));
+                    lblOnDemandTotalTime.setText(formatDuration(total));
+                }
+                updateOnDemandPlayPauseButton();
+            }));
+        musicService.setOnDemandStateListener(() -> {
+            if (!isDraggingOnDemandSlider && !musicService.isOnDemandPlaying()) {
+                onDemandSlider.setValue(0); // ended: back to the start, ready to replay
+                lblOnDemandCurrentTime.setText("0:00");
+            }
+            updateOnDemandPlayPauseButton();
+        });
+        if (onDemandSlider != null) {
+            onDemandSlider.setOnMousePressed(e -> isDraggingOnDemandSlider = true);
+            onDemandSlider.setOnMouseReleased(e -> {
+                isDraggingOnDemandSlider = false;
+                musicService.seekOnDemand(onDemandSlider.getValue() / 100.0);
+            });
+        }
+        showOnDemandPanel(false);
+
         if (progressSlider != null) {
             progressSlider.setOnMousePressed(e -> isDraggingSlider = true);
             progressSlider.setOnMouseReleased(e -> {
@@ -269,7 +330,7 @@ public class PlayerController implements SceneHost {
         updatePreviewPanel(false);
         ambianceStage = new AmbianceStage();
         // El live ambiance ya no expone controles de segmento; no hay setOnVideoReady en la UI
-        musicService.setAmplitudeListener(amp -> ambianceStage.setAmplitude(amp));
+        ambianceStage.setAudioSource(musicService::getAudioFeatures);
         ambianceStage.setOnVisibilityChanged(this::updateAmbianceToggle);
 
         // Callback: el stage de ambiance notifica cuando el usuario suelta una imagen.
@@ -367,6 +428,7 @@ public class PlayerController implements SceneHost {
                     int idx = lstPlaylistTracks.getSelectionModel().getSelectedIndex();
                     if (idx >= 0) {
                         playlistManager.startAt(idx).ifPresent(f -> {
+                            enterMode(MusicService.PlaybackMode.PLAYLIST);
                             musicService.playPlaylistTrack(f);
                             if (btnPlaylistPlayPause != null) btnPlaylistPlayPause.setText("⏸");
                             refreshPlaylistUI();
@@ -379,10 +441,8 @@ public class PlayerController implements SceneHost {
         if (modeTabPane != null) {
             modeTabPane.getSelectionModel().selectedItemProperty().addListener((obs, oldTab, newTab) -> {
                 if (applyingSession || newTab == null) return;
+                // Tabs are only views: they never change what is playing
                 boolean isPlaylist = newTab == playlistsTab;
-                musicService.setPlaybackMode(isPlaylist
-                    ? MusicService.PlaybackMode.PLAYLIST
-                    : MusicService.PlaybackMode.MOOD);
                 sessionConfig.setActiveMode(isPlaylist ? "playlist" : "mood");
                 manager.save(sessionConfig);
                 if (isPlaylist) refreshPlaylistUI();
@@ -473,6 +533,72 @@ public class PlayerController implements SceneHost {
             card.dot.setFill(Color.web(aura.getPrimaryColor()));
             card.preset.setText(capitalize(aura.getPreset().name()));
         }
+        refreshLiveAura();
+    }
+
+    // --- Live aura strip ---
+
+    private void buildLiveAura() {
+        if (livePresetBox == null) return;
+        for (AuraPreset p : AuraPreset.values()) {
+            ToggleButton tb = new ToggleButton(capitalize(p.name()));
+            tb.getStyleClass().addAll("btn-secondary", "btn-preset");
+            tb.setToggleGroup(livePresetGroup);
+            tb.setOnAction(e -> {
+                if (!tb.isSelected()) tb.setSelected(true); // a preset is always selected
+                if (!updatingLiveAura) pickLivePreset(p);
+            });
+            livePresetButtons.put(p, tb);
+            livePresetBox.getChildren().add(tb);
+        }
+        sldLiveIntensity.valueProperty().addListener((obs, o, nv) -> {
+            lblLiveIntensity.setText(Math.round(nv.doubleValue() * 100) + "%");
+            if (!updatingLiveAura) editLiveAura(a -> a.setIntensity(nv.doubleValue()));
+        });
+        sldLiveReactivity.valueProperty().addListener((obs, o, nv) -> {
+            lblLiveReactivity.setText(Math.round(nv.doubleValue() * 100) + "%");
+            if (!updatingLiveAura) editLiveAura(a -> a.setReactivity(nv.doubleValue()));
+        });
+    }
+
+    /** Shows the active mood's aura in the strip without triggering edits. */
+    private void refreshLiveAura() {
+        if (livePresetBox == null) return;
+        AuraConfig aura = sessionConfig.getActiveScene().getAura(liveSlot());
+        updatingLiveAura = true;
+        try {
+            lblLiveAura.setText("LIVE AURA · " + (onDemandActive() ? "ON DEMAND" : currentActiveType.name()));
+            ToggleButton tb = livePresetButtons.get(aura.getPreset());
+            if (tb != null) tb.setSelected(true);
+            sldLiveIntensity.setValue(aura.getIntensity());
+            sldLiveReactivity.setValue(aura.getReactivity());
+        } finally {
+            updatingLiveAura = false;
+        }
+    }
+
+    /** Swaps the preset look but keeps the levels the user is playing with. */
+    private void pickLivePreset(AuraPreset preset) {
+        AuraSlot slot = liveSlot();
+        Scene scene = sessionConfig.getActiveScene();
+        AuraConfig old = scene.getAura(slot);
+        if (old.getPreset() == preset) return; // re-clicking must not wipe custom colors
+        AuraConfig fresh = preset.defaults();
+        fresh.setIntensity(old.getIntensity());
+        fresh.setReactivity(old.getReactivity());
+        scene.setAura(slot, fresh);
+        onLiveAuraEdited(slot);
+    }
+
+    private void editLiveAura(java.util.function.Consumer<AuraConfig> change) {
+        AuraSlot slot = liveSlot();
+        change.accept(sessionConfig.getActiveScene().getAura(slot));
+        onLiveAuraEdited(slot);
+    }
+
+    private void onLiveAuraEdited(AuraSlot slot) {
+        onAuraEdited(slot);
+        if (sceneEditor != null) sceneEditor.refreshAuras();
     }
 
     private void updateNowPlayingCaption() {
@@ -489,17 +615,15 @@ public class PlayerController implements SceneHost {
 
     public void switchTrack(TrackType type) {
         if (type == null || !musicService.isLoaded(type)) return;
-        if (type == currentActiveType && musicService.getCurrentTrack() == type) return;
+        boolean fromOtherSource = musicService.getPlaybackMode() != MusicService.PlaybackMode.MOOD;
+        if (!fromOtherSource && type == currentActiveType && musicService.getCurrentTrack() == type) return;
+        enterMode(MusicService.PlaybackMode.MOOD); // explicit: playlist/on-demand audio stops here
         musicService.switchTrack(type);
         this.currentActiveType = type;
         updateWindowMood(type);
         updateNowPlayingCaption();
-        if (ambianceStage != null) {
-            ambianceStage.setMood(type);
-            // The stage has ONE sensitivity: take the one of the mood we are entering
-            AuraConfig aura = sessionConfig.getActiveScene().getAura(AuraSlot.of(type));
-            ambianceStage.setSensitivity(AuraBridge.sensitivityFor(aura));
-        }
+        if (ambianceStage != null) ambianceStage.setActiveSlot(AuraSlot.of(type)); // long crossfade
+        refreshLiveAura();
         updateButtons();
         setMoodButtonIcon("⏸"); // siempre arranca reproduciendo
         updatePreviewPanel(false);
@@ -513,6 +637,7 @@ public class PlayerController implements SceneHost {
             musicService.fadeOutAndPause(null);
         } else {
             setMoodButtonIcon("⏸");
+            enterMode(MusicService.PlaybackMode.MOOD); // explicit: replaces playlist/on-demand audio
             musicService.fadeInAndPlay();
         }
     }
@@ -533,6 +658,97 @@ public class PlayerController implements SceneHost {
             btnPlayPause.setText(musicService.isPlaying() ? "⏸" : "▶");
     }
 
+    // --- Playback source (mood / playlist / on-demand) ---
+
+    private boolean onDemandActive() {
+        return musicService.getPlaybackMode() == MusicService.PlaybackMode.ON_DEMAND;
+    }
+
+    /** Aura slot shown by the ambiance and edited by the live strip: the on-demand aura while it plays, else the mood's. */
+    private AuraSlot liveSlot() {
+        return onDemandActive() ? AuraSlot.ON_DEMAND : AuraSlot.of(currentActiveType);
+    }
+
+    /** Explicitly changes the audible source (never called from tab changes) and syncs the UI around it. */
+    private void enterMode(MusicService.PlaybackMode target) {
+        musicService.setPlaybackMode(target);
+        syncSourceUi();
+    }
+
+    private void syncSourceUi() {
+        MusicService.PlaybackMode mode = musicService.getPlaybackMode();
+        if (mode != MusicService.PlaybackMode.ON_DEMAND) showOnDemandPanel(false);
+        if (mode != MusicService.PlaybackMode.PLAYLIST) {
+            if (btnPlaylistPlayPause != null) btnPlaylistPlayPause.setText("▶");
+            if (lstPlaylistTracks != null) lstPlaylistTracks.refresh();
+        }
+        if (ambianceStage != null) ambianceStage.setActiveSlot(liveSlot());
+        refreshLiveAura();
+        updatePlayPauseButton();
+    }
+
+    // --- On-demand player ---
+
+    /** Plays {@code file} immediately, replacing whatever plays (mood or playlist). Title may be null. */
+    private void playNow(File file, String title) {
+        if (file == null || !file.isFile()) return;
+        String label = title != null && !title.isBlank() ? title : stripExtension(file.getName());
+        if (lblOnDemandTrack != null) lblOnDemandTrack.setText(label);
+        if (onDemandSlider != null) onDemandSlider.setValue(0);
+        if (lblOnDemandCurrentTime != null) lblOnDemandCurrentTime.setText("0:00");
+        if (lblOnDemandTotalTime != null) lblOnDemandTotalTime.setText("0:00");
+        musicService.playOnDemand(file, label, () -> {
+            // The service switched to ON_DEMAND once the track was prepared
+            showOnDemandPanel(true);
+            if (ambianceStage != null) ambianceStage.setActiveSlot(AuraSlot.ON_DEMAND);
+            refreshLiveAura();
+            setMoodButtonIcon("▶");
+            if (btnPlaylistPlayPause != null) btnPlaylistPlayPause.setText("▶");
+            if (lstPlaylistTracks != null) lstPlaylistTracks.refresh();
+            updateOnDemandPlayPauseButton();
+        });
+    }
+
+    private void showOnDemandPanel(boolean show) {
+        if (onDemandPanel == null) return;
+        onDemandPanel.setVisible(show);
+        onDemandPanel.setManaged(show);
+    }
+
+    private void updateOnDemandPlayPauseButton() {
+        if (btnOnDemandPlayPause != null)
+            btnOnDemandPlayPause.setText(musicService.isOnDemandPlaying() ? "⏸" : "▶");
+    }
+
+    @FXML
+    private void onToggleOnDemandPlayPause() {
+        if (musicService.isOnDemandPlaying()) musicService.onDemandPause();
+        else musicService.onDemandPlay();
+        updateOnDemandPlayPauseButton();
+    }
+
+    /** Stops and rewinds; the player stays visible so the track can be replayed. */
+    @FXML
+    private void onOnDemandStop() {
+        musicService.onDemandPause();
+        musicService.seekOnDemand(0);
+        if (onDemandSlider != null) onDemandSlider.setValue(0);
+        if (lblOnDemandCurrentTime != null) lblOnDemandCurrentTime.setText("0:00");
+        updateOnDemandPlayPauseButton();
+    }
+
+    /** Closes the player: audio stops and the ambiance goes back to the current mood. Nothing resumes. */
+    @FXML
+    private void onOnDemandClose() {
+        enterMode(MusicService.PlaybackMode.MOOD);
+        setMoodButtonIcon("▶");
+    }
+
+    @FXML
+    private void onToggleOnDemandLoop() {
+        if (btnOnDemandLoop != null) musicService.setOnDemandLoop(btnOnDemandLoop.isSelected());
+    }
+
     // --- Controles de preescucha ---
 
     private void startPreview(File file) {
@@ -543,6 +759,7 @@ public class PlayerController implements SceneHost {
         musicService.previewTrack(file);
         updatePreviewPanel(true);
         updatePreviewPlayPauseButton();
+        updateOnDemandPlayPauseButton(); // the service pauses a playing on-demand track
     }
 
     @FXML
@@ -694,8 +911,13 @@ public class PlayerController implements SceneHost {
         applyBackgroundToAmbiance();
         applyFitMode();
 
-        // 3. Auras (legacy bridge until the aura engine exists)
-        if (ambianceStage != null) AuraBridge.applyAll(ambianceStage, scene, currentActiveType);
+        // 3. Auras: hand the scene's auras to the stage and crossfade to the current mood's
+        if (ambianceStage != null) {
+            Map<AuraSlot, AuraConfig> auras = new EnumMap<>(AuraSlot.class);
+            for (AuraSlot slot : AuraSlot.values()) auras.put(slot, scene.getAura(slot));
+            ambianceStage.setAuras(auras);
+            ambianceStage.setActiveSlot(liveSlot());
+        }
 
         // 4. UI
         refreshCards();
@@ -750,10 +972,8 @@ public class PlayerController implements SceneHost {
     @Override
     public void onAuraEdited(AuraSlot slot) {
         if (slot == null) return;
-        if (ambianceStage != null && slot != AuraSlot.ON_DEMAND) {
-            TrackType mood = TrackType.valueOf(slot.name());
-            AuraBridge.applyMood(ambianceStage, sessionConfig.getActiveScene(), mood, mood == currentActiveType);
-        }
+        // Always stored; the stage blends quickly only when the edited slot is the visible one
+        if (ambianceStage != null) ambianceStage.setAura(slot, sessionConfig.getActiveScene().getAura(slot));
         refreshCards();
         saveDebounce.playFromStart();
     }
@@ -1051,7 +1271,12 @@ public class PlayerController implements SceneHost {
                     assignItem("Normal", TrackType.NORMAL),
                     assignItem("Raged", TrackType.RAGED),
                     assignItem("Advantage", TrackType.ADVANTAGE));
-            menu.getItems().add(assign);
+            MenuItem playNow = new MenuItem("Play now");
+            playNow.setOnAction(e -> {
+                File f = getItem();
+                if (f != null && f.isFile()) playNow(f, null);
+            });
+            menu.getItems().addAll(playNow, assign);
 
             setOnDragDetected(e -> {
                 File f = getItem();
@@ -1228,6 +1453,41 @@ public class PlayerController implements SceneHost {
         );
     }
 
+    /** Downloads the pasted YouTube URL (a cache hit skips yt-dlp) and plays it on demand. */
+    @FXML
+    private void onPlayYoutubeUrl() {
+        if (lblYoutubeError != null) { lblYoutubeError.setText(""); lblYoutubeError.setVisible(false); lblYoutubeError.setManaged(false); }
+        String url = txtYoutubeUrl != null ? txtYoutubeUrl.getText().trim() : "";
+        playYoutubeNow(url);
+    }
+
+    private void playYoutubeNow(String url) {
+        Optional<String> vid = YouTubeDownloader.extractVideoId(url);
+        if (vid.isEmpty()) {
+            showYoutubeError("Not a valid YouTube URL.");
+            return;
+        }
+        if (!YouTubeDownloader.isYtDlpAvailable()) {
+            new Alert(Alert.AlertType.ERROR,
+                    "yt-dlp not found on PATH. Install it to use this feature.").showAndWait();
+            return;
+        }
+        if (btnPlayYoutube != null) btnPlayYoutube.setDisable(true);
+        showYtDlpStatus("Downloading track...");
+        youTubeDownloader.downloadAsync(url, vid.get(),
+                result -> Platform.runLater(() -> {
+                    if (btnPlayYoutube != null) btnPlayYoutube.setDisable(false);
+                    ytDlpStatusClear.playFromStart();
+                    if (txtYoutubeUrl != null) txtYoutubeUrl.clear();
+                    playNow(new File(result.getPath()), result.displayName());
+                }),
+                err -> Platform.runLater(() -> {
+                    if (btnPlayYoutube != null) btnPlayYoutube.setDisable(false);
+                    showYoutubeError("Download failed: " + err);
+                })
+        );
+    }
+
     @FXML
     private void onBrowseYouTube() {
         if (!YouTubeDownloader.isYtDlpAvailable()) {
@@ -1237,13 +1497,44 @@ public class PlayerController implements SceneHost {
         }
         Stage owner = (Stage) btnBrowseYoutube.getScene().getWindow();
         YoutubePicker.show(owner, youTubeDownloader, result -> {
-            txtYoutubeUrl.setText(result.url());
-            onAddYoutubeUrl();
+            playYoutubeNow(result.url());
         });
+    }
+
+    private final PauseTransition ytDlpStatusClear = new PauseTransition(javafx.util.Duration.seconds(5));
+
+    /** Starts the managed yt-dlp download/update in the background and mirrors its status in the YouTube label. */
+    private void startYtDlpManager() {
+        ytDlpStatusClear.setOnFinished(e -> {
+            if (lblYoutubeError != null) {
+                lblYoutubeError.setText("");
+                lblYoutubeError.setVisible(false);
+                lblYoutubeError.setManaged(false);
+            }
+        });
+        YtDlpManager mgr = YtDlpManager.get();
+        mgr.setStatusListener(msg -> Platform.runLater(() -> showYtDlpStatus(msg)));
+        mgr.ensureReadyAsync();
+    }
+
+    private void showYtDlpStatus(String message) {
+        if (lblYoutubeError == null) return;
+        boolean error = message.startsWith("Could not");
+        lblYoutubeError.setText(message);
+        lblYoutubeError.setStyle(error ? "" : "-fx-text-fill: #8a8f98;");
+        lblYoutubeError.setVisible(true);
+        lblYoutubeError.setManaged(true);
+        ytDlpStatusClear.stop();
+        if (!message.endsWith("...")) {
+            ytDlpStatusClear.setDuration(javafx.util.Duration.seconds(error ? 10 : 4));
+            ytDlpStatusClear.playFromStart();
+        }
     }
 
     private void showYoutubeError(String message) {
         if (lblYoutubeError != null) {
+            ytDlpStatusClear.stop();
+            lblYoutubeError.setStyle("");
             lblYoutubeError.setText(message);
             lblYoutubeError.setVisible(true);
             lblYoutubeError.setManaged(true);
@@ -1265,6 +1556,7 @@ public class PlayerController implements SceneHost {
             if (btnPlaylistPlayPause != null) btnPlaylistPlayPause.setText("▶");
         } else {
             playlistManager.getCurrentTrack().ifPresent(f -> {
+                enterMode(MusicService.PlaybackMode.PLAYLIST);
                 musicService.playPlaylistTrack(f);
                 if (btnPlaylistPlayPause != null) btnPlaylistPlayPause.setText("⏸");
             });
@@ -1273,6 +1565,7 @@ public class PlayerController implements SceneHost {
 
     @FXML private void onPrev() {
         playlistManager.prev().ifPresent(f -> {
+            enterMode(MusicService.PlaybackMode.PLAYLIST);
             musicService.playPlaylistTrack(f);
             if (btnPlaylistPlayPause != null) btnPlaylistPlayPause.setText("⏸");
         });
@@ -1281,6 +1574,7 @@ public class PlayerController implements SceneHost {
 
     @FXML private void onNext() {
         playlistManager.next().ifPresentOrElse(f -> {
+            enterMode(MusicService.PlaybackMode.PLAYLIST);
             musicService.playPlaylistTrack(f);
             if (btnPlaylistPlayPause != null) btnPlaylistPlayPause.setText("⏸");
         }, () -> {

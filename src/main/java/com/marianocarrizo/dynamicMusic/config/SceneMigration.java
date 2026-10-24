@@ -1,7 +1,6 @@
 package com.marianocarrizo.dynamicMusic.config;
 
 import com.marianocarrizo.dynamicMusic.Enums.TrackType;
-import com.marianocarrizo.dynamicMusic.ambiance.EffectType;
 import com.marianocarrizo.dynamicMusic.model.AuraConfig;
 import com.marianocarrizo.dynamicMusic.model.AuraPreset;
 import com.marianocarrizo.dynamicMusic.model.AuraSlot;
@@ -36,7 +35,7 @@ final class SceneMigration {
 
             Scene scene = cfg.buildSceneFromLegacy("Default");
             for (TrackType t : TrackType.values()) {
-                AuraConfig aura = presetFor(cfg.getMoodEffect(t)).defaults();
+                AuraConfig aura = presetFor(cfg.getLegacyMoodEffectName(t)).defaults();
                 aura.setReactivity(cfg.getMoodSensitivity(t) / 4.0);
                 scene.setAura(AuraSlot.of(t), aura);
             }
@@ -49,13 +48,15 @@ final class SceneMigration {
         }
     }
 
-    private static AuraPreset presetFor(EffectType effect) {
-        if (effect == null) return AuraPreset.NEUTRAL;
-        return switch (effect) {
-            case FIRE, BLOOD_RAIN         -> AuraPreset.FIRE;
-            case ELECTRIC, PLASMA, SHOCKWAVE -> AuraPreset.ELECTRIC;
-            case VOID, MAELSTROM          -> AuraPreset.SHADOW;
-            case AURORA                   -> AuraPreset.HOLY;
+    /** Maps a legacy particle effect name (the old EffectType enum) to an aura preset. */
+    private static AuraPreset presetFor(String legacyEffect) {
+        if (legacyEffect == null) return AuraPreset.NEUTRAL;
+        return switch (legacyEffect) {
+            case "FIRE", "BLOOD_RAIN"                -> AuraPreset.FIRE;
+            case "ELECTRIC", "PLASMA", "SHOCKWAVE"   -> AuraPreset.ELECTRIC;
+            case "VOID", "MAELSTROM"                 -> AuraPreset.SHADOW;
+            case "AURORA"                            -> AuraPreset.HOLY;
+            default                                  -> AuraPreset.NEUTRAL;
         };
     }
 
