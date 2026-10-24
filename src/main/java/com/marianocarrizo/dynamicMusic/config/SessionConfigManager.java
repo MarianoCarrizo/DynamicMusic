@@ -6,8 +6,11 @@ import com.google.gson.GsonBuilder;
 import java.io.IOException;
 import java.io.Reader;
 import java.io.Writer;
-import java.nio.file.*;
-import java.nio.file.attribute.FileAttribute;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 
 /**
  * Gestiona la persistencia de la sesión de usuario en disco.

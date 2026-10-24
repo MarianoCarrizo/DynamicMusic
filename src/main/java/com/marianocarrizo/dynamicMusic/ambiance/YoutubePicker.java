@@ -18,7 +18,6 @@ import javafx.scene.layout.VBox;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
 
-import java.util.List;
 import java.util.function.Consumer;
 
 public final class YoutubePicker {
