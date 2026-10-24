@@ -6,6 +6,7 @@ import com.marianocarrizo.dynamicMusic.Enums.TrackType;
 import com.marianocarrizo.dynamicMusic.config.SessionConfig;
 import com.marianocarrizo.dynamicMusic.config.SessionConfigManager;
 import javafx.application.Application;
+import javafx.collections.ListChangeListener;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Cursor;
 import javafx.scene.Node;
@@ -14,6 +15,7 @@ import javafx.scene.Scene;
 import javafx.scene.image.Image;
 import javafx.scene.input.KeyCode;
 import javafx.stage.Stage;
+import javafx.stage.Window;
 import javafx.stage.StageStyle;
 import java.util.HashSet;
 import java.util.Set;
@@ -30,12 +32,15 @@ public class MusicServiceStarter extends Application {
 
         stage.setTitle("Dynamic Music Player");
 
-        // Ícono de la aplicación
-        try {
-            stage.getIcons().add(new Image(getClass().getResourceAsStream("/icon.ico")));
-        } catch (Exception e) {
-            System.out.println("No se encontró icon.ico, se usará el ícono por defecto.");
-        }
+        Image appIcon = new Image(getClass().getResource("/icon.png").toExternalForm());
+        stage.getIcons().add(appIcon);
+        Window.getWindows().addListener((ListChangeListener<Window>) change -> {
+            while (change.next()) {
+                for (Window w : change.getAddedSubList()) {
+                    if (w instanceof Stage s && s.getIcons().isEmpty()) s.getIcons().add(appIcon);
+                }
+            }
+        });
 
         // Estilo sin bordes nativos
         stage.initStyle(StageStyle.UNDECORATED);
