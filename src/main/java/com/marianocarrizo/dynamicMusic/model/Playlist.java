@@ -4,82 +4,96 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * POJO que representa una playlist de usuario.
- * Gson serializa los campos privados por reflexión; no se necesita TypeAdapter.
- * El getter getPaths() inicializa el campo de forma defensiva para que
- * una sesión.json sin el array "paths" nunca provoque NullPointerException.
+ * POJO representing a user playlist.
+ * Gson serialises private fields by reflection; no TypeAdapter needed.
+ *
+ * Schema migration: old sessions carry a bare {@code paths} String array.
+ * New sessions use the {@code items} array of {@link PlaylistItem}.
+ * {@link #getItems()} migrates lazily on first access so no data is lost
+ * and no custom deserialiser is required.
  */
 public class Playlist {
 
     private String name;
+
+    /** LEGACY: read-only migration source. New saves leave this null. */
     private List<String> paths;
 
-    /** Constructor vacío requerido por Gson. */
+    /** Primary storage. Written on every save after first migration. */
+    private List<PlaylistItem> items;
+
+    /** No-arg constructor required by Gson. */
     public Playlist() {
-        this.paths = new ArrayList<>();
+        this.items = new ArrayList<>();
     }
 
-    /** Crea una playlist con el nombre dado y lista de rutas vacía. */
+    /** Creates a playlist with the given name and an empty item list. */
     public Playlist(String name) {
         this.name = name;
-        this.paths = new ArrayList<>();
+        this.items = new ArrayList<>();
     }
 
-    // --- Getters / setters ---
+    // --- Name ---
 
-    public String getName() {
-        return name;
-    }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
 
-    public void setName(String name) {
-        this.name = name;
+    // --- Item access with lazy migration ---
+
+    /**
+     * Returns the live item list, migrating from the legacy {@code paths} field on first call
+     * when the current session file pre-dates this schema change.
+     */
+    public List<PlaylistItem> getItems() {
+        if (items == null) items = new ArrayList<>();
+        if (paths != null && !paths.isEmpty()) {
+            for (String p : paths) items.add(new PlaylistItem(p));
+            paths = null; // consumed; next save writes items only
+        }
+        return items;
     }
 
     /**
-     * Retorna la lista de rutas absolutas de las pistas.
-     * Inicializa el campo de forma perezosa si Gson lo dejó null
-     * (comportamiento defensivo idéntico al de SessionConfig.getAssignments).
+     * Returns a fresh derived {@code List<String>} of absolute paths.
+     * Callers that only need paths keep working without changes.
+     * This is a copy — mutations on the returned list have no effect.
      */
     public List<String> getPaths() {
-        if (paths == null) paths = new ArrayList<>();
-        return paths;
+        List<String> out = new ArrayList<>();
+        for (PlaylistItem it : getItems()) out.add(it.getPath());
+        return out;
     }
 
-    public void setPaths(List<String> paths) {
-        this.paths = paths;
-    }
+    // --- Mutation helpers ---
 
-    // --- Helpers de mutación ---
-
-    /** Agrega una ruta al final de la playlist. */
+    /** Appends a local-file item using only its path. */
     public void add(String path) {
-        getPaths().add(path);
+        getItems().add(new PlaylistItem(path));
     }
 
-    /**
-     * Elimina la pista en la posición dada.
-     * Es un no-op si el índice está fuera de rango.
-     */
+    /** Appends a fully-constructed item (e.g. a YouTube-sourced track). */
+    public void addItem(PlaylistItem item) {
+        getItems().add(item);
+    }
+
+    /** Removes the item at the given index. No-op if the index is out of range. */
     public void removeAt(int index) {
-        List<String> p = getPaths();
-        if (index >= 0 && index < p.size()) {
-            p.remove(index);
-        }
+        List<PlaylistItem> l = getItems();
+        if (index >= 0 && index < l.size()) l.remove(index);
     }
 
     /**
-     * Mueve la pista de la posición {@code from} a la posición {@code to}.
-     * Es un no-op si alguno de los índices está fuera de rango.
+     * Moves the item at position {@code from} to position {@code to}.
+     * No-op if either index is out of range.
      */
     public void reorder(int from, int to) {
-        List<String> p = getPaths();
-        if (from < 0 || from >= p.size() || to < 0 || to >= p.size()) return;
-        String item = p.remove(from);
-        p.add(to, item);
+        List<PlaylistItem> l = getItems();
+        if (from < 0 || from >= l.size() || to < 0 || to >= l.size()) return;
+        l.add(to, l.remove(from));
     }
 
-    /** Retorna la cantidad de pistas; 0 si el campo paths es null. */
+    /** Returns the number of items; 0 if the list has never been populated. */
     public int size() {
-        return paths == null ? 0 : paths.size();
+        return getItems().size();
     }
 }

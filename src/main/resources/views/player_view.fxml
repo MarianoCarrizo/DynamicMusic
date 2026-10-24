@@ -41,6 +41,17 @@
                     <ComboBox fx:id="cmbTrackType" HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
                     <Button text="Assign" onAction="#onAssignTrack" minWidth="70" styleClass="btn-assign"/>
                 </HBox>
+                <!-- YouTube URL -> playlist -->
+                <HBox spacing="8" alignment="CENTER_LEFT">
+                    <TextField fx:id="txtYoutubeUrl" HBox.hgrow="ALWAYS" maxWidth="Infinity"
+                               promptText="Paste YouTube URL..."/>
+                    <Button fx:id="btnAddYoutube" text="Add" onAction="#onAddYoutubeUrl"
+                            minWidth="70" styleClass="btn-secondary"/>
+                    <Button fx:id="btnBrowseYoutube" text="Browse" onAction="#onBrowseYouTube"
+                            minWidth="70" styleClass="btn-secondary"/>
+                </HBox>
+                <Label fx:id="lblYoutubeError" styleClass="error-label" text=""
+                       visible="false" managed="false" wrapText="true"/>
             </VBox>
 
             <!-- Column 2: Details panel -->

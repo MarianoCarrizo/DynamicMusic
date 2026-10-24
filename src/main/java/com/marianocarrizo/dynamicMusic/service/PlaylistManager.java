@@ -1,6 +1,7 @@
 package com.marianocarrizo.dynamicMusic.service;
 
 import com.marianocarrizo.dynamicMusic.model.Playlist;
+import com.marianocarrizo.dynamicMusic.model.PlaylistItem;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -165,6 +166,17 @@ public class PlaylistManager {
         if (isActivePlaylist(playlistName)) {
             rebuildOrder();
         }
+    }
+
+    /**
+     * Appends a fully-constructed {@link PlaylistItem} (e.g. a YouTube-sourced track)
+     * to the named playlist. Rebuilds the playback order if the playlist is active.
+     */
+    public void addItem(String playlistName, PlaylistItem item) {
+        findByName(playlistName).ifPresent(pl -> {
+            pl.addItem(item);
+            if (isActivePlaylist(playlistName)) rebuildOrder();
+        });
     }
 
     /**
@@ -381,6 +393,11 @@ public class PlaylistManager {
     public List<String> getActivePaths() {
         if (activePlaylist == null) return new ArrayList<>();
         return activePlaylist.getPaths();
+    }
+
+    public List<PlaylistItem> getActiveItems() {
+        if (activePlaylist == null) return new ArrayList<>();
+        return activePlaylist.getItems();
     }
 
     /**

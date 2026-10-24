@@ -5,10 +5,13 @@ import com.marianocarrizo.dynamicMusic.ambiance.AmbianceStage;
 import com.marianocarrizo.dynamicMusic.ambiance.BackgroundFitMode;
 import com.marianocarrizo.dynamicMusic.ambiance.BoomerangBaker;
 import com.marianocarrizo.dynamicMusic.ambiance.EffectType;
+import com.marianocarrizo.dynamicMusic.ambiance.YoutubePicker;
 import com.marianocarrizo.dynamicMusic.config.SessionConfig;
 import com.marianocarrizo.dynamicMusic.config.SessionConfigManager;
+import com.marianocarrizo.dynamicMusic.model.PlaylistItem;
 import com.marianocarrizo.dynamicMusic.service.MusicService;
 import com.marianocarrizo.dynamicMusic.service.PlaylistManager;
+import com.marianocarrizo.dynamicMusic.service.YouTubeDownloader;
 import javafx.animation.PauseTransition;
 import javafx.application.Platform;
 import javafx.collections.ListChangeListener;
@@ -32,6 +35,7 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -111,6 +115,12 @@ public class PlayerController {
     @FXML private TextField txtSearch;
     @FXML private TreeView<File> treeFiles;
     @FXML private ComboBox<TrackType> cmbTrackType;
+
+    // YouTube URL input
+    @FXML private TextField txtYoutubeUrl;
+    @FXML private Button btnAddYoutube;
+    @FXML private Button btnBrowseYoutube;
+    @FXML private Label lblYoutubeError;
     @FXML private ComboBox<EffectType> cmbEffect;
     @FXML private ComboBox<String> cmbScreen;
     @FXML private ComboBox<BackgroundFitMode> cmbFitMode;
@@ -143,6 +153,7 @@ public class PlayerController {
     private final MusicService musicService = new MusicService();
     private final SessionConfigManager manager = new SessionConfigManager();
     private final SessionConfig sessionConfig = new SessionConfig();
+    private final YouTubeDownloader youTubeDownloader = new YouTubeDownloader();
     private AmbianceStage ambianceStage;
 
     private boolean isDraggingSlider = false;
@@ -1536,6 +1547,78 @@ public class PlayerController {
         persistPlaylists();
     }
 
+    @FXML
+    private void onAddYoutubeUrl() {
+        if (lblYoutubeError != null) { lblYoutubeError.setText(""); lblYoutubeError.setVisible(false); lblYoutubeError.setManaged(false); }
+
+        String pname = cmbPlaylist.getValue();
+        if (pname == null || pname.isBlank()) {
+            showYoutubeError("Select a playlist first.");
+            return;
+        }
+
+        String url = txtYoutubeUrl != null ? txtYoutubeUrl.getText().trim() : "";
+        Optional<String> vid = YouTubeDownloader.extractVideoId(url);
+        if (vid.isEmpty()) {
+            showYoutubeError("Not a valid YouTube URL.");
+            return;
+        }
+
+        if (!YouTubeDownloader.isYtDlpAvailable()) {
+            new Alert(Alert.AlertType.ERROR,
+                    "yt-dlp not found on PATH. Install it to use this feature.").showAndWait();
+            return;
+        }
+
+        final String capturedUrl = url;
+        final String capturedVid = vid.get();
+        final String placeholderText = "⬇ Downloading... (" + capturedVid + ")";
+
+        if (btnAddYoutube != null) btnAddYoutube.setDisable(true);
+        lstPlaylistTracks.getItems().add(placeholderText);
+        if (txtYoutubeUrl != null) txtYoutubeUrl.clear();
+
+        youTubeDownloader.downloadAsync(capturedUrl, capturedVid,
+                result -> Platform.runLater(() -> {
+                    PlaylistItem item = new PlaylistItem(
+                            result.getPath(), capturedUrl, result.getTitle());
+                    playlistManager.addItem(pname, item);
+                    persistPlaylists();
+                    if (btnAddYoutube != null) btnAddYoutube.setDisable(false);
+                    refreshPlaylistUI();
+                }),
+                err -> Platform.runLater(() -> {
+                    if (btnAddYoutube != null) btnAddYoutube.setDisable(false);
+                    refreshPlaylistUI();
+                    new Alert(Alert.AlertType.ERROR, "Download failed: " + err).showAndWait();
+                })
+        );
+    }
+
+    @FXML
+    private void onBrowseYouTube() {
+        if (!YouTubeDownloader.isYtDlpAvailable()) {
+            new Alert(Alert.AlertType.ERROR,
+                    "yt-dlp not found on PATH. Install it to use this feature.").showAndWait();
+            return;
+        }
+        Stage owner = (Stage) btnBrowseYoutube.getScene().getWindow();
+        YoutubePicker.show(owner, youTubeDownloader, result -> {
+            txtYoutubeUrl.setText(result.url());
+            onAddYoutubeUrl();
+        });
+    }
+
+    private void showYoutubeError(String message) {
+        if (lblYoutubeError != null) {
+            lblYoutubeError.setText(message);
+            lblYoutubeError.setVisible(true);
+            lblYoutubeError.setManaged(true);
+        } else {
+            new Alert(Alert.AlertType.ERROR, message).showAndWait();
+        }
+    }
+
     private void persistPlaylists() {
         sessionConfig.setPlaylists(playlistManager.getPlaylists());
         manager.save(sessionConfig);
@@ -1597,11 +1680,11 @@ public class PlayerController {
         if (current != null && cmbPlaylist.getItems().contains(current))
             cmbPlaylist.setValue(current);
 
-        // Repopulate track ListView with basenames
+        // Repopulate track ListView with display names (title for YouTube tracks, filename otherwise)
         if (lstPlaylistTracks != null) {
             lstPlaylistTracks.getItems().setAll(
-                playlistManager.getActivePaths().stream()
-                    .map(path -> new File(path).getName())
+                playlistManager.getActiveItems().stream()
+                    .map(PlaylistItem::displayName)
                     .toList()
             );
 
