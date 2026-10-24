@@ -6,6 +6,8 @@ Proyecto personal, sin fines comerciales.
 
 ![Ventana principal: barra de escenas, biblioteca, tarjetas de mood y franja Live aura](docs/screenshot-main.png)
 
+![Ventana de ambiance con el aura Fire: viñeta, brasas en los costados y brillo de borde sobre un fondo de ejemplo](docs/screenshot-ambiance.png)
+
 ## Funcionalidades
 
 - **Escenas**: tracks de los cuatro moods, fondo (imagen o video con recorte A-B, velocidad y boomerang) y cinco auras: una por mood y una para la música on demand. Se guardan solas y se pueden duplicar con **Save as**.
