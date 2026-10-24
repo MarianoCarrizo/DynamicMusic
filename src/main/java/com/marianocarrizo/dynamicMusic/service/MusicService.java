@@ -766,7 +766,10 @@ public class MusicService {
                     player.setOnError(() -> {
                         System.err.println("Error en pista de playlist: " + player.getError());
                         Platform.runLater(() -> {
-                            if (onPlaylistEnd != null) onPlaylistEnd.run();
+                            // Skip the bad track only if this playlist player is still the audible source
+                            if (mode == PlaybackMode.PLAYLIST && player == playlistPlayer && onPlaylistEnd != null) {
+                                onPlaylistEnd.run();
+                            }
                         });
                     });
 
