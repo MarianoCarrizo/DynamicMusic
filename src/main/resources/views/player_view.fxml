@@ -27,6 +27,18 @@
             <Button text="✕" onAction="#onCloseWindow" styleClass="btn-window-control, btn-window-close"/>
         </HBox>
 
+        <!-- Update notice: shown only when a verified installer is ready; never blocks playback -->
+        <HBox fx:id="updateBar" spacing="10" alignment="CENTER_LEFT" styleClass="update-bar"
+              visible="false" managed="false">
+            <padding>
+                <Insets top="6" right="12" bottom="6" left="12"/>
+            </padding>
+            <Label fx:id="lblUpdate" text="" styleClass="update-label"/>
+            <Region HBox.hgrow="ALWAYS"/>
+            <Button fx:id="btnUpdateNow" text="Install now" onAction="#onInstallUpdateNow" styleClass="btn-primary"/>
+            <Button fx:id="btnUpdateOnClose" text="On close" onAction="#onInstallUpdateOnClose" styleClass="btn-secondary"/>
+        </HBox>
+
         <!-- Scene bar: scene selector, ambiance toggle (+ screen menu) and master volume -->
         <HBox fx:id="sceneBar" spacing="8" alignment="CENTER_LEFT" styleClass="scene-bar">
             <padding>

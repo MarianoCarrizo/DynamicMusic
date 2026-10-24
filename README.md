@@ -4,6 +4,10 @@ Reproductor de música y ambientación para sesiones de rol de mesa. Cada **esce
 
 Proyecto personal, sin fines comerciales.
 
+![Ventana principal: barra de escenas, biblioteca, tarjetas de mood y franja Live aura](docs/screenshot-main.png)
+
+![Ventana de ambiance con el aura Fire: viñeta, brasas en los costados y brillo de borde sobre un fondo de ejemplo](docs/screenshot-ambiance.png)
+
 ## Funcionalidades
 
 - **Escenas**: tracks de los cuatro moods, fondo (imagen o video con recorte A-B, velocidad y boomerang) y cinco auras: una por mood y una para la música on demand. Se guardan solas y se pueden duplicar con **Save as**.
@@ -17,7 +21,7 @@ Proyecto personal, sin fines comerciales.
 ## Requisitos
 
 - **JDK 21+**
-- **ffmpeg** en el PATH: lo usan la descarga de audio de YouTube y el boomerang de video.
+- **ffmpeg**: lo usan la descarga de audio de YouTube y el boomerang de video. El instalador de Windows ya lo incluye; al correr desde el código fuente tiene que estar en el PATH.
 - Opcional: **Node.js** o **Deno**. yt-dlp los usa para extraer de YouTube de forma confiable.
 
 En Windows, yt-dlp no hace falta instalarlo: la app descarga su propia copia en la primera ejecución. En Linux y macOS hay que tener `yt-dlp` en el PATH.
@@ -66,16 +70,48 @@ Todo se guarda en `%APPDATA%\DynamicMusic` (en Linux y macOS, `~/DynamicMusic`):
 | `library/` | Copias permanentes de los tracks de YouTube usados en escenas |
 | `yt-cache/` | Caché de descargas de YouTube (se limpia sola) |
 | `bin/` | Copia de yt-dlp administrada por la app |
+| `updates/` | Instalador de una versión nueva ya descargada y verificada |
 
-## Generar instalador para Windows (MSI)
+## Instalador para Windows
 
-Requiere WiX Toolset 3.x y los jmods de JavaFX 21 en `C:/javafx-jmods-21.0.2`.
+Las versiones se publican en [Releases](https://github.com/MarianoCarrizo/DynamicMusic/releases) como `DynamicMusic-Setup-X.Y.Z.exe` junto con su `.sha256`. Es un instalador clásico (Siguiente, Siguiente, Instalar) hecho con Inno Setup. Incluye el runtime de Java y ffmpeg, así que no hay que instalar nada más.
 
-```powershell
-.\mvnw.cmd package -DskipTests
+- Instala por usuario en `%LOCALAPPDATA%\Programs\DynamicMusic` (no pide administrador, así las actualizaciones silenciosas siempre encuentran la instalación anterior).
+- Crea accesos directos en el escritorio y en el menú Inicio, y un desinstalador.
+- Instalar una versión más nueva actualiza en el lugar.
+- Los datos de `%APPDATA%\DynamicMusic` no se tocan al instalar ni al desinstalar.
+- ffmpeg se instala en la carpeta `ffmpeg` junto a la app. La app usa esa copia y, si no existe, el ffmpeg del PATH. La compilación incluida es GPL (BtbN FFmpeg-Builds) y trae su `LICENSE.txt`.
+
+### Actualización automática
+
+Solo en la app instalada (al correr con `mvnw` está desactivada):
+
+1. Al iniciar, y como máximo una vez cada 24 horas, consulta el último release publicado en GitHub. Ignora borradores y prereleases.
+2. Si hay una versión más nueva, descarga el instalador en segundo plano a `%APPDATA%\DynamicMusic\updates` y verifica su SHA-256 con el `.sha256` del release. Si no coincide, lo borra.
+3. Cuando está listo aparece un aviso arriba en la ventana: **Version X.Y.Z is ready**. La reproducción nunca se interrumpe sola.
+   - **Install now**: guarda la sesión, cierra la app, instala en silencio y la vuelve a abrir.
+   - **On close**: instala al cerrar la app. Si no se elige ninguna, el aviso vuelve a aparecer en el próximo inicio.
+
+Sin conexión o con el límite de la API de GitHub excedido, la comprobación falla en silencio y se reintenta más adelante.
+
+### Publicar una versión
+
+Crear y subir un tag `vX.Y.Z` desde la rama que se quiere publicar (normalmente `Master`):
+
+```bash
+git tag v1.2.3
+git push origin v1.2.3
 ```
 
-El instalador queda en `target/dist/DynamicMusic-1.0.0.msi`. El modo debug no se incluye en el instalador.
+El workflow `.github/workflows/release.yml` corre los tests, arma la app con `jpackage`, descarga ffmpeg y los jmods de JavaFX con checksum verificado, compila el instalador con Inno Setup y publica el release con el `.exe` y su `.sha256`. La versión sale del tag y llega a la app como `-Ddynamicmusic.version`. Los pull requests y las ejecuciones manuales solo compilan y dejan el instalador como artefacto del workflow.
+
+Para actualizar ffmpeg o JavaFX hay que cambiar la URL y el SHA-256 en el bloque `env` del workflow.
+
+Para probar el script del instalador a mano hace falta Inno Setup 6.3 o superior: `ISCC installer\DynamicMusic.iss /DMyAppVersion=1.2.3 /DAppImageDir=<app-image> /DFfmpegDir=<ffmpeg>`.
+
+### MSI local (legado)
+
+`.\mvnw.cmd package -DskipTests` sigue generando un MSI con `jpackage-maven-plugin` si están WiX Toolset 3.x y los jmods de JavaFX 21 en `C:/javafx-jmods-21.0.2`. Este MSI no incluye ffmpeg ni la actualización automática. Para omitirlo, agregar `-DskipInstaller=true`.
 
 ## Aviso sobre YouTube
 

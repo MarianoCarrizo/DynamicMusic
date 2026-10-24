@@ -64,6 +64,18 @@ class YouTubeDownloaderTest {
     }
 
     @Test
+    void downloadArgsPointYtDlpAtTheBundledFfmpegBeforeTheMarker() {
+        Path ffmpegDir = Path.of("install", "ffmpeg");
+        List<String> args = YouTubeDownloader.downloadArgs(Path.of("out", ID + ".mp3"), "https://youtu.be/" + ID,
+                java.util.Optional.of(ffmpegDir));
+
+        int flag = args.indexOf("--ffmpeg-location");
+        assertTrue(flag >= 0 && flag < args.indexOf("--"));
+        assertEquals(ffmpegDir.toString(), args.get(flag + 1));
+        assertFalse(YouTubeDownloader.downloadArgs(Path.of("out", ID + ".mp3"), "u").contains("--ffmpeg-location"));
+    }
+
+    @Test
     void titleArgsPutTheUrlAfterTheEndOfOptionsMarker() {
         String evil = "-o /etc/passwd";
         List<String> args = YouTubeDownloader.titleArgs(evil);
