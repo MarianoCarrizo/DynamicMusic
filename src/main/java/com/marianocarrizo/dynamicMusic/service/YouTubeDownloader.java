@@ -367,7 +367,7 @@ public final class YouTubeDownloader {
 
         YtDlpManager.ProcResult r;
         try {
-            r = runYtDlp(downloadArgs(out, url), DOWNLOAD_TIMEOUT_SECONDS);
+            r = runYtDlp(downloadArgs(out, url, FfmpegLocator.directory()), DOWNLOAD_TIMEOUT_SECONDS);
         } catch (IOException | InterruptedException e) {
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();
             cleanupLeftovers(dir, videoId, false);
@@ -413,16 +413,28 @@ public final class YouTubeDownloader {
         return !(keepFinal && fileName.equals(videoId + ".mp3"));
     }
 
-    /** yt-dlp arguments for an audio download; the URL goes after "--" so it can never be parsed as a flag. */
+    /** yt-dlp arguments for an audio download using ffmpeg from PATH. */
     static List<String> downloadArgs(Path out, String url) {
-        return List.of(
+        return downloadArgs(out, url, Optional.empty());
+    }
+
+    /**
+     * yt-dlp arguments for an audio download; the URL goes after "--" so it can never be parsed as a flag.
+     * {@code ffmpegDir} (the bundled ffmpeg) is passed as {@code --ffmpeg-location} when present.
+     */
+    static List<String> downloadArgs(Path out, String url, Optional<Path> ffmpegDir) {
+        List<String> args = new ArrayList<>(List.of(
                 "-x",
                 "--audio-format", "mp3",
                 "--no-playlist",
-                "-o", out.toString(),
-                "--", // end of options: a pasted string can never be parsed as a yt-dlp flag
-                url
-        );
+                "-o", out.toString()));
+        ffmpegDir.ifPresent(dir -> {
+            args.add("--ffmpeg-location");
+            args.add(dir.toString());
+        });
+        args.add("--"); // end of options: a pasted string can never be parsed as a yt-dlp flag
+        args.add(url);
+        return List.copyOf(args);
     }
 
     /** yt-dlp arguments for a title lookup; the URL goes after "--". */
