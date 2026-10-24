@@ -21,6 +21,7 @@ import com.marianocarrizo.dynamicMusic.service.YouTubeDownloader;
 import com.marianocarrizo.dynamicMusic.service.YtDlpManager;
 import javafx.animation.Animation;
 import javafx.animation.PauseTransition;
+import javafx.application.HostServices;
 import javafx.application.Platform;
 import javafx.collections.ListChangeListener;
 import javafx.css.PseudoClass;
@@ -78,6 +79,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class PlayerController implements SceneHost {
+
+    private static final String CAFECITO_URL = "https://cafecito.app/duhonha";
+    private HostServices hostServices;
 
     // Layout
     @FXML private VBox mainRoot;
@@ -856,6 +860,15 @@ public class PlayerController implements SceneHost {
         d.setContentText("Name:");
         d.showAndWait().map(String::trim).filter(n -> !n.isEmpty()).ifPresent(name ->
             switchScene(sessionConfig.addScene(name)));
+    }
+
+    public void setHostServices(HostServices hostServices) {
+        this.hostServices = hostServices;
+    }
+
+    @FXML
+    private void onOpenCafecito() {
+        if (hostServices != null) hostServices.showDocument(CAFECITO_URL);
     }
 
     @FXML

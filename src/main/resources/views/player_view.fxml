@@ -53,6 +53,7 @@
                 </items>
             </MenuButton>
             <Region HBox.hgrow="ALWAYS"/>
+            <Hyperlink text="☕ Invitame un cafecito" onAction="#onOpenCafecito" styleClass="link-support"/>
             <SplitMenuButton fx:id="btnToggleAmbiance" text="Show ambiance" onAction="#onToggleAmbiance"
                              styleClass="btn-menu"/>
             <Label text="VOLUME" styleClass="lbl-session-title"/>
