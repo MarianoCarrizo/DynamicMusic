@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/logo/dynamicmusic.svg" width="128" alt="DynamicMusic logo"></p>
+
 # DynamicMusic
 
 Reproductor de música y ambientación para sesiones de rol de mesa. Cada **escena** agrupa cuatro moods (PAUSED, NORMAL, RAGED, ADVANTAGE) con su track, un fondo de imagen o video y un **aura** visual que reacciona a la música. Durante la partida se cambia de mood con el teclado y la música y el aura acompañan el momento.
