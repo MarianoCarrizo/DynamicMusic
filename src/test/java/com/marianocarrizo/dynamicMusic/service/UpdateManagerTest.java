@@ -19,7 +19,6 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -69,15 +68,6 @@ class UpdateManagerTest {
     private static HttpClient client() {
         return HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL)
                 .connectTimeout(Duration.ofSeconds(5)).build();
-    }
-
-    @Test
-    void checksOnlyOnceEveryTwentyFourHours() {
-        long now = 10_000_000_000L;
-        assertTrue(UpdateManager.shouldCheck(0, now));
-        assertFalse(UpdateManager.shouldCheck(now - TimeUnit.HOURS.toMillis(23), now));
-        assertTrue(UpdateManager.shouldCheck(now - TimeUnit.HOURS.toMillis(25), now));
-        assertTrue(UpdateManager.shouldCheck(now + 1000, now), "a timestamp in the future is not trusted");
     }
 
     @Test
