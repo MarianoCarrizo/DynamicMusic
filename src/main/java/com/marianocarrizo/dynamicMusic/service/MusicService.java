@@ -67,6 +67,7 @@ public class MusicService {
     // Amplitud de audio: escrita en el hilo del callback del espectro, leída por la UI
     private volatile double currentAmplitude = 0.0;
     private volatile Consumer<Double> amplitudeListener;
+    private final AudioAnalyzer audioAnalyzer = new AudioAnalyzer();
 
     /**
      * Executor de un único hilo para la preparación de audio.
@@ -166,22 +167,22 @@ public class MusicService {
         return currentAmplitude;
     }
 
+    /** Latest analyzed audio features (bands, energy, beat). Decays to silence when no audio flows. */
+    public AudioFeatures getAudioFeatures() {
+        return audioAnalyzer.current();
+    }
+
     /**
      * Adjunta el listener de espectro de audio a un reproductor.
-     * Promedia las primeras 8 bandas de bajos (dBFS -60 a 0) y normaliza a 0.0–1.0.
+     * Alimenta el AudioAnalyzer (bandas, energia, beats); la amplitud legacy se deriva de la energia.
      * Es seguro llamar desde cualquier hilo.
      */
     private void attachSpectrumListener(MediaPlayer player) {
+        audioAnalyzer.reset(); // new track: drop adaptive normalization state
         player.setAudioSpectrumInterval(0.05);
         player.setAudioSpectrumNumBands(32);
         player.setAudioSpectrumListener((timestamp, duration, magnitudes, phases) -> {
-            float sum = 0;
-            int count = Math.min(8, magnitudes.length);
-            for (int i = 0; i < count; i++) {
-                sum += magnitudes[i]; // valores dBFS, típicamente -60 a 0
-            }
-            double avgDb = sum / (double) count;
-            double amp = Math.min(1.0, Math.max(0.0, (avgDb + 60.0) / 60.0));
+            double amp = audioAnalyzer.process(magnitudes).energy();
             currentAmplitude = amp;
             Consumer<Double> listener = amplitudeListener;
             if (listener != null) listener.accept(amp);
