@@ -1,0 +1,21 @@
+{
+  "url": "https://api.github.com/repos/MarianoCarrizo/DynamicMusic/releases/1",
+  "tag_name": "v1.4.2",
+  "name": "DynamicMusic 1.4.2",
+  "draft": false,
+  "prerelease": false,
+  "assets": [
+    {
+      "name": "DynamicMusic-Setup-1.4.2.exe.sha256",
+      "browser_download_url": "https://github.com/MarianoCarrizo/DynamicMusic/releases/download/v1.4.2/DynamicMusic-Setup-1.4.2.exe.sha256"
+    },
+    {
+      "name": "Source.zip",
+      "browser_download_url": "https://github.com/MarianoCarrizo/DynamicMusic/releases/download/v1.4.2/Source.zip"
+    },
+    {
+      "name": "DynamicMusic-Setup-1.4.2.exe",
+      "browser_download_url": "https://github.com/MarianoCarrizo/DynamicMusic/releases/download/v1.4.2/DynamicMusic-Setup-1.4.2.exe"
+    }
+  ]
+}

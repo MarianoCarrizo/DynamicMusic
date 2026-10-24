@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.geometry.Insets?>
+
+<VBox xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="com.marianocarrizo.dynamicMusic.Controller.SceneEditorController"
+      styleClass="window-root-transparent"
+      spacing="0">
+
+    <VBox styleClass="main-container" VBox.vgrow="ALWAYS" spacing="10">
+        <padding>
+            <Insets top="12" right="12" bottom="12" left="12"/>
+        </padding>
+
+        <HBox spacing="8" alignment="CENTER_LEFT">
+            <Label text="Scene name" styleClass="lbl-session-title"/>
+            <TextField fx:id="txtSceneName" HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
+            <Button fx:id="btnDeleteScene" text="Delete scene" onAction="#onDeleteScene"
+                    styleClass="btn-secondary"/>
+        </HBox>
+
+        <TabPane fx:id="tabPane" VBox.vgrow="ALWAYS" tabClosingPolicy="UNAVAILABLE">
+            <Tab fx:id="tabBackground" text="Background">
+                <content>
+                    <ScrollPane fitToWidth="true" hbarPolicy="NEVER" styleClass="editor-scroll">
+                        <content>
+                            <fx:include fx:id="backgroundEditor" source="background_editor.fxml"/>
+                        </content>
+                    </ScrollPane>
+                </content>
+            </Tab>
+        </TabPane>
+    </VBox>
+</VBox>

@@ -1,0 +1,205 @@
+name: Build installer and release
+
+on:
+  push:
+    tags: ['v*']
+  pull_request:
+    branches: [develop, Master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  JAVAFX_JMODS_URL: https://download2.gluonhq.com/openjfx/21.0.13/openjfx-21.0.13_windows-x64_bin-jmods.zip
+  JAVAFX_JMODS_SHA256: a28ace6c8d213ffbb3f37ff1d44a7b4ae6d837aff54d5af0e66e2213225ba18b
+  FFMPEG_URL: https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-30-13-08/ffmpeg-n8.1.3-9-g29e619e767-win64-gpl-shared-8.1.zip
+  FFMPEG_SHA256: dfe81c3aa0a546ee81980b1b824486dd0fe0a1d452f00cb55135379a74be7bcf
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Derive version
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+            if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "Tag '$GITHUB_REF_NAME' is not vX.Y.Z" >&2
+              exit 1
+            fi
+          else
+            VERSION="0.0.${GITHUB_RUN_NUMBER}"
+          fi
+          echo "APP_VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "Version: $VERSION"
+
+      - name: Run tests
+        shell: bash
+        run: ./mvnw -B test
+
+      - name: Package application jars
+        shell: bash
+        run: ./mvnw -B package -DskipTests -DskipInstaller=true
+
+      - name: Download JavaFX jmods
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Invoke-WebRequest -Uri $env:JAVAFX_JMODS_URL -OutFile "$env:RUNNER_TEMP\jmods.zip"
+          $hash = (Get-FileHash "$env:RUNNER_TEMP\jmods.zip" -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne $env:JAVAFX_JMODS_SHA256) { throw "JavaFX jmods SHA-256 mismatch: $hash" }
+          Expand-Archive "$env:RUNNER_TEMP\jmods.zip" -DestinationPath "$env:RUNNER_TEMP\jmods"
+          $dir = (Get-ChildItem "$env:RUNNER_TEMP\jmods" -Directory | Select-Object -First 1).FullName
+          "JAVAFX_JMODS_DIR=$dir" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Build app image with jpackage
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $jar = (Get-ChildItem target -Filter 'dynamicMusic-*.jar' |
+                  Where-Object { $_.Name -notmatch 'sources|javadoc|original' } |
+                  Select-Object -First 1).FullName
+          if (-not $jar) { throw 'Application jar not found in target/' }
+          $modulePath = @((Resolve-Path target/modules).Path, (Resolve-Path target/deps).Path, $jar, $env:JAVAFX_JMODS_DIR) -join ';'
+          & jpackage --type app-image `
+            --name DynamicMusic `
+            --app-version $env:APP_VERSION `
+            --vendor marianocarrizo `
+            --icon icon.ico `
+            --module-path $modulePath `
+            --module com.marianocarrizo.dynamicMusic/com.marianocarrizo.dynamicMusic.MusicServiceStarter `
+            --java-options '--enable-native-access=javafx.graphics' `
+            --java-options "-Ddynamicmusic.version=$env:APP_VERSION" `
+            --dest target/app-image
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Check the app image
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = 'target/app-image/DynamicMusic'
+          if (-not (Test-Path "$root/DynamicMusic.exe")) { throw 'DynamicMusic.exe missing from the app image' }
+          Get-Content "$root/app/DynamicMusic.cfg"
+          $line = Select-String -Path "$root/runtime/release" -Pattern '^MODULES=' | Select-Object -First 1
+          if (-not $line) { throw 'Runtime image has no MODULES entry in its release file' }
+          $modules = $line.Line.Substring('MODULES='.Length).Trim('"').Split(' ')
+          Write-Host "Runtime modules: $($modules -join ', ')"
+          foreach ($m in 'javafx.media', 'javafx.fxml', 'java.net.http', 'com.google.gson') {
+            if ($modules -notcontains $m) { throw "Runtime image lacks module $m" }
+          }
+
+      - name: Download ffmpeg
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Invoke-WebRequest -Uri $env:FFMPEG_URL -OutFile "$env:RUNNER_TEMP\ffmpeg.zip"
+          $hash = (Get-FileHash "$env:RUNNER_TEMP\ffmpeg.zip" -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne $env:FFMPEG_SHA256) { throw "ffmpeg SHA-256 mismatch: $hash" }
+          Expand-Archive "$env:RUNNER_TEMP\ffmpeg.zip" -DestinationPath "$env:RUNNER_TEMP\ffmpeg-src"
+          $src = (Get-ChildItem "$env:RUNNER_TEMP\ffmpeg-src" -Directory | Select-Object -First 1).FullName
+          $bundle = Join-Path $PWD 'target/ffmpeg-bundle'
+          New-Item -ItemType Directory -Force $bundle | Out-Null
+          Get-ChildItem "$src/bin" | Where-Object { $_.Name -ne 'ffplay.exe' } | Copy-Item -Destination $bundle
+          Copy-Item "$src/LICENSE.txt" $bundle
+          & "$bundle/ffmpeg.exe" -version | Select-Object -First 1
+
+      - name: Ensure Inno Setup 6.3 or newer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          function Find-Iscc {
+            $cmd = Get-Command iscc -ErrorAction SilentlyContinue
+            if ($cmd) { return $cmd.Source }
+            foreach ($base in $env:ProgramFiles, ${env:ProgramFiles(x86)}) {
+              $p = Join-Path $base 'Inno Setup 6\ISCC.exe'
+              if (Test-Path $p) { return $p }
+            }
+            return $null
+          }
+          $iscc = Find-Iscc
+          $ok = $false
+          if ($iscc) {
+            try {
+              $ver = [version](Get-Item $iscc).VersionInfo.FileVersion
+              Write-Host "Found $iscc ($ver)"
+              $ok = $ver -ge [version]'6.3'
+            } catch { Write-Host "Could not read the ISCC version: $_" }
+          }
+          if (-not $ok) {
+            choco install innosetup -y --no-progress
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            $iscc = Find-Iscc
+            if (-not $iscc) { throw 'ISCC.exe not found after installing Inno Setup' }
+          }
+          "ISCC=$iscc" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & $env:ISCC `
+            "/DMyAppVersion=$env:APP_VERSION" `
+            "/DAppImageDir=$((Resolve-Path 'target/app-image/DynamicMusic').Path)" `
+            "/DFfmpegDir=$((Resolve-Path 'target/ffmpeg-bundle').Path)" `
+            "/DOutputDir=$((New-Item -ItemType Directory -Force 'target/installer').FullName)" `
+            installer/DynamicMusic.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Compute SHA-256
+        shell: bash
+        working-directory: target/installer
+        run: |
+          sha256sum "DynamicMusic-Setup-${APP_VERSION}.exe" > "DynamicMusic-Setup-${APP_VERSION}.exe.sha256"
+          cat "DynamicMusic-Setup-${APP_VERSION}.exe.sha256"
+          ls -l
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DynamicMusic-Setup-${{ env.APP_VERSION }}
+          path: |
+            target/installer/DynamicMusic-Setup-${{ env.APP_VERSION }}.exe
+            target/installer/DynamicMusic-Setup-${{ env.APP_VERSION }}.exe.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls -l dist
+          gh release create "$GITHUB_REF_NAME" dist/DynamicMusic-Setup-*.exe dist/DynamicMusic-Setup-*.exe.sha256 \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "DynamicMusic ${GITHUB_REF_NAME#v}" \
+            --generate-notes \
+            --verify-tag

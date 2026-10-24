@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.media.MediaView?>
+<?import javafx.scene.image.ImageView?>
+
+<VBox xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="com.marianocarrizo.dynamicMusic.Controller.BackgroundEditorController"
+      spacing="10">
+    <padding>
+        <Insets top="12" right="12" bottom="12" left="12"/>
+    </padding>
+
+    <Label text="BACKGROUND" styleClass="lbl-session-title"/>
+    <Label fx:id="lblBackgroundFile" text="No background set" styleClass="lbl-preview-track" maxWidth="Infinity"/>
+    <Label fx:id="lblBackgroundType" text="" styleClass="lbl-session-title" maxWidth="Infinity"/>
+    <HBox spacing="6">
+        <Button text="Set background" onAction="#onSetBackground" HBox.hgrow="ALWAYS" maxWidth="Infinity"
+                styleClass="btn-secondary"/>
+        <Button fx:id="btnEditBackground" text="Edit" onAction="#onEditBackground"
+                styleClass="btn-secondary" disable="true"/>
+    </HBox>
+    <HBox spacing="6" alignment="CENTER_LEFT">
+        <Label text="Fit:" styleClass="lbl-session-title" minWidth="45"/>
+        <ComboBox fx:id="cmbFitMode" HBox.hgrow="ALWAYS" maxWidth="Infinity" onAction="#onSelectFitMode"/>
+    </HBox>
+
+    <VBox fx:id="bgPreviewPanel" spacing="6" visible="false" managed="false">
+        <StackPane fx:id="bgPreviewStack" prefHeight="190" minHeight="190">
+            <MediaView fx:id="bgPreviewMediaView" fitWidth="320" fitHeight="180" preserveRatio="true"/>
+            <ImageView fx:id="bgPreviewImageView" visible="false" preserveRatio="true"
+                       fitWidth="320" fitHeight="180"/>
+            <ProgressIndicator fx:id="bgPreviewSpinner" visible="false" mouseTransparent="true"
+                               maxWidth="48" maxHeight="48"/>
+            <Label fx:id="lblBgPreviewPlaceholder" text="No preview" styleClass="lbl-preview-track"/>
+        </StackPane>
+        <HBox spacing="4" alignment="CENTER_LEFT">
+            <Region minWidth="35" maxWidth="35"/>
+            <Pane fx:id="bgMarkBand" HBox.hgrow="ALWAYS" prefHeight="6" minHeight="6" maxHeight="6"/>
+            <Region minWidth="35" maxWidth="35"/>
+        </HBox>
+        <HBox spacing="4" alignment="CENTER_LEFT">
+            <Label fx:id="lblBgPreviewCurrentTime" text="0:00" styleClass="lbl-time" minWidth="35"/>
+            <Slider fx:id="bgPreviewSlider" HBox.hgrow="ALWAYS" min="0" max="100" value="0"
+                    styleClass="spotify-slider"/>
+            <Label fx:id="lblBgPreviewTotalTime" text="0:00" styleClass="lbl-time" minWidth="35"/>
+        </HBox>
+        <HBox spacing="6">
+            <Button fx:id="btnBgMarkStart" text="Mark start" onAction="#onBgMarkStart"
+                    HBox.hgrow="ALWAYS" maxWidth="Infinity" styleClass="btn-secondary" disable="true"/>
+            <Button fx:id="btnBgMarkEnd" text="Mark end" onAction="#onBgMarkEnd"
+                    HBox.hgrow="ALWAYS" maxWidth="Infinity" styleClass="btn-secondary" disable="true"/>
+        </HBox>
+        <HBox spacing="6" alignment="CENTER_LEFT">
+            <Label fx:id="lblBgSegmentInfo" text="Full video" styleClass="lbl-preview-track"
+                   HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
+            <Button fx:id="btnBgClearSegment" text="Clear" onAction="#onBgClearSegment"
+                    styleClass="btn-secondary" disable="true"/>
+        </HBox>
+        <HBox spacing="6" alignment="CENTER_LEFT">
+            <Label text="Speed:" styleClass="lbl-session-title" minWidth="45"/>
+            <ComboBox fx:id="cmbBgVideoSpeed" HBox.hgrow="ALWAYS" maxWidth="Infinity"
+                      onAction="#onSelectBgVideoSpeed"/>
+            <ToggleButton fx:id="btnBgBoomerang" text="Boomerang" onAction="#onToggleBgBoomerang"
+                          HBox.hgrow="ALWAYS" maxWidth="Infinity" styleClass="btn-secondary" disable="true"/>
+            <Label fx:id="lblBgBoomerangHint" text="" styleClass="lbl-preview-track" minWidth="90"/>
+        </HBox>
+        <HBox spacing="6">
+            <Button fx:id="btnApplyBackground" text="Apply" onAction="#onApplyBackground"
+                    HBox.hgrow="ALWAYS" maxWidth="Infinity" styleClass="btn-primary"/>
+            <Button fx:id="btnCancelBackground" text="Cancel" onAction="#onCancelBackground"
+                    HBox.hgrow="ALWAYS" maxWidth="Infinity" styleClass="btn-secondary"/>
+        </HBox>
+    </VBox>
+</VBox>

@@ -1,0 +1,616 @@
+/* =========================================================================
+   ESTILOS BASE GENERALES (Esquinas Rectas Anti-Bugs de Windows 11)
+   ========================================================================= */
+.root, .window-root-transparent {
+    -fx-background-color: transparent !important;
+    -fx-background-fill: transparent !important;
+    -fx-fill: transparent !important;
+    -fx-border-color: transparent !important;
+    -fx-border-width: 0 !important;
+    -fx-padding: 0 !important; /* Calce perfecto a 0px para evitar desfases */
+}
+
+/* El contenedor interno real */
+.main-container {
+    -fx-background-color: #1e1e24;
+    -fx-font-family: "Segoe UI", Helvetica, Arial, sans-serif;
+
+    /* 🔥 CUADRADO TOTAL: Eliminamos cualquier rastro de redondeado */
+    -fx-background-radius: 0px !important;
+    -fx-border-radius: 0px !important;
+    -fx-border-color: #2d2d35;
+    -fx-border-width: 1px;
+}
+
+.label {
+    -fx-text-fill: #e0e0e0;
+}
+
+/* Separador vertical sutil */
+.separator:vertical .line {
+    -fx-border-color: #2d2d35;
+    -fx-border-width: 0 1 0 0;
+}
+
+/* Lista de archivos y árbol de carpetas */
+.list-view, .tree-view {
+    -fx-background-color: #2a2a32;
+    -fx-border-color: #3a3a43;
+    -fx-background-radius: 0px !important;
+}
+.list-cell {
+    -fx-text-fill: #d0d0d0;
+    -fx-background-color: transparent;
+    -fx-padding: 6px 10px;
+}
+.list-cell:filled:hover {
+    -fx-background-color: #383842;
+}
+.tree-cell {
+    -fx-text-fill: #d0d0d0;
+    -fx-background-color: transparent;
+    -fx-padding: 5px 8px;
+}
+.tree-cell:filled:hover {
+    -fx-background-color: #383842;
+}
+.tree-cell:filled:selected {
+    -fx-background-color: #3a3a48;
+    -fx-text-fill: #ffffff;
+}
+.tree-cell:filled:selected:focused {
+    -fx-background-color: #4a4a5a;
+}
+/* Track actualmente sonando en la playlist */
+.list-cell-now-playing {
+    -fx-background-color: #1a3a2a !important;
+    -fx-text-fill: #1db954 !important;
+    -fx-font-weight: bold;
+}
+
+/* Componentes de Entrada */
+.text-field {
+    -fx-background-color: #2a2a32;
+    -fx-text-fill: #ffffff;
+    -fx-border-color: #4f4f5c;
+    -fx-border-radius: 0px !important;
+    -fx-background-radius: 0px !important;
+    -fx-padding: 7px;
+    -fx-prompt-text-fill: #808085;
+}
+.combo-box, .menu-button, .split-menu-button, .color-picker {
+    -fx-background-color: #3a3a43;
+    -fx-background-radius: 0px !important;
+    -fx-border-radius: 0px !important;
+    -fx-border-color: transparent;
+    -fx-padding: 0;
+}
+.combo-box:hover, .menu-button:hover, .split-menu-button:hover, .color-picker:hover,
+.combo-box:focused, .menu-button:focused, .split-menu-button:focused, .color-picker:focused,
+.combo-box:showing, .menu-button:showing, .split-menu-button:showing, .color-picker:showing {
+    -fx-background-color: #4f4f5c;
+    -fx-border-color: transparent;
+}
+.combo-box > .list-cell, .combo-box .label, .menu-button .label, .split-menu-button .label,
+.color-picker .label {
+    -fx-text-fill: #ffffff;
+    -fx-background-color: transparent;
+}
+.combo-box > .list-cell:filled:selected, .combo-box > .list-cell:filled {
+    -fx-background-color: transparent !important;
+    -fx-text-fill: #ffffff !important;
+}
+.combo-box .arrow-button, .menu-button .arrow-button, .split-menu-button .arrow-button,
+.color-picker .arrow-button {
+    -fx-background-color: transparent;
+    -fx-background-radius: 0;
+}
+.combo-box .arrow, .menu-button .arrow, .split-menu-button .arrow, .color-picker .arrow {
+    -fx-background-color: #b0b0b8;
+}
+.split-menu-button > .label {
+    -fx-padding: 7px 12px;
+    -fx-cursor: hand;
+}
+.menu-button > .label {
+    -fx-padding: 7px 10px;
+}
+.btn-menu {
+    -fx-cursor: hand;
+}
+
+.combo-box-popup > .list-view {
+    -fx-background-color: #2a2a32;
+    -fx-border-color: #4f4f5c;
+    -fx-border-width: 1px;
+}
+.combo-box-popup > .list-view .list-cell:filled:hover,
+.combo-box-popup > .list-view .list-cell:filled:selected {
+    -fx-background-color: #4f4f5c;
+    -fx-text-fill: #ffffff;
+}
+.context-menu {
+    -fx-background-color: #2a2a32;
+    -fx-background-radius: 0;
+    -fx-border-color: #4f4f5c;
+    -fx-border-width: 1px;
+    -fx-padding: 2px 0;
+}
+.context-menu .menu-item .label {
+    -fx-text-fill: #e0e0e0;
+}
+.context-menu .menu-item:focused {
+    -fx-background-color: #4f4f5c;
+}
+.context-menu .menu-item:focused .label {
+    -fx-text-fill: #ffffff;
+}
+
+.check-box {
+    -fx-text-fill: #e0e0e0;
+}
+.check-box .box {
+    -fx-background-color: #3a3a43;
+    -fx-background-radius: 0;
+    -fx-border-color: #5a5a6e;
+    -fx-border-radius: 0;
+}
+.check-box:selected .mark {
+    -fx-background-color: #ffffff;
+}
+.text-field:focused {
+    -fx-border-color: #7a7a8e;
+}
+.editor-scroll, .editor-scroll > .viewport {
+    -fx-background-color: transparent;
+    -fx-background: transparent;
+}
+.editor-scroll {
+    -fx-padding: 0;
+}
+.btn-preset {
+    -fx-padding: 7px 8px;
+}
+
+/* =========================================================================
+   BARRA SUPERIOR PERSONALIZADA Base
+   ========================================================================= */
+.window-header {
+    -fx-background-color: #16161a;
+    -fx-background-radius: 0px !important; /* Calce plano con el marco superior */
+}
+
+.window-title {
+    -fx-text-fill: #808085;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-padding: 0 0 0 4px;
+}
+
+/* Botones de control de ventana */
+.btn-window-control {
+    -fx-background-color: transparent !important;
+    -fx-text-fill: #a0a0a5;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-min-width: 26px;
+    -fx-max-width: 26px;
+    -fx-min-height: 20px;
+    -fx-max-height: 20px;
+    -fx-background-radius: 0px !important;
+    -fx-cursor: hand;
+    -fx-padding: 0;
+}
+
+.btn-window-control:hover {
+    -fx-background-color: #2a2a32 !important;
+    -fx-text-fill: #ffffff;
+}
+
+.btn-window-close:hover {
+    -fx-background-color: #e81123 !important;
+    -fx-text-fill: #ffffff;
+}
+
+/* =========================================================================
+   BOTONES Y COMPONENTES ESPECÍFICOS
+   ========================================================================= */
+.btn-secondary, .btn-assign {
+    -fx-background-color: #3a3a43;
+    -fx-text-fill: #ffffff;
+    -fx-background-radius: 0px !important;
+    -fx-padding: 7px 14px;
+    -fx-cursor: hand;
+}
+.btn-secondary:hover, .btn-assign:hover {
+    -fx-background-color: #4f4f5c;
+}
+
+.update-bar {
+    -fx-background-color: #23303f;
+    -fx-border-color: transparent transparent #2d2d35 transparent;
+    -fx-border-width: 0 0 1px 0;
+}
+.update-label {
+    -fx-text-fill: #cfe3ff;
+}
+
+.scene-bar {
+    -fx-background-color: #1a1a20;
+    -fx-border-color: transparent transparent #2d2d35 transparent;
+    -fx-border-width: 0 0 1px 0;
+}
+
+.btn-phase {
+    -fx-background-color: #313139;
+    -fx-text-fill: #d0d0d8;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-background-radius: 0px !important;
+    -fx-border-color: #5a5a6e;
+    -fx-border-radius: 0px !important;
+    -fx-border-width: 2px;
+    -fx-cursor: hand;
+}
+.btn-phase .label {
+    -fx-text-fill: inherit;
+}
+.btn-phase .card-title {
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+}
+.btn-phase .card-track {
+    -fx-font-size: 14px;
+    -fx-font-weight: normal;
+}
+.btn-phase .card-track-empty {
+    -fx-font-style: italic;
+    -fx-opacity: 0.55;
+}
+.btn-phase .card-aura {
+    -fx-font-size: 11px;
+    -fx-font-weight: normal;
+    -fx-opacity: 0.8;
+}
+.btn-phase-empty {
+    -fx-opacity: 0.6;
+    -fx-border-style: segments(6, 4);
+}
+.btn-phase:drop-target {
+    -fx-background-color: #4a4a5c;
+    -fx-border-color: #ffffff;
+    -fx-opacity: 1;
+}
+.btn-phase:hover {
+    -fx-background-color: #3e3e4a;
+    -fx-text-fill: #ffffff;
+    -fx-border-color: #7a7a8e;
+}
+
+.track-info-container {
+    -fx-padding: 5px 0;
+}
+.lbl-session-title {
+    -fx-text-fill: #707075;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+}
+.lbl-track-active {
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #ffffff;
+}
+
+/* =========================================================================
+   NUEVA CONSOLA INFERIOR DE REPRODUCCIÓN
+   ========================================================================= */
+.playback-panel {
+    -fx-background-color: #121214;
+    -fx-background-radius: 0px !important;
+    -fx-padding: 14px 20px;
+    -fx-border-color: #24242b;
+    -fx-border-radius: 0px !important;
+    -fx-border-width: 1px;
+}
+
+/* SplitPane principal: sin padding/borde propio para evitar destello de gutter */
+.main-split {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+    -fx-border-color: transparent;
+}
+
+.main-split > .split-pane-divider {
+    -fx-pref-width: 1px;
+    -fx-padding: 0 2px 0 2px;
+    -fx-background-color: #2d2d35;
+}
+
+/* Panel de detalles: columna central del SplitPane */
+.details-panel {
+    -fx-background-color: #1e1e24;
+    -fx-border-color: #2d2d35;
+    -fx-border-width: 0 1px 0 1px;
+    -fx-padding: 10px;
+}
+
+/* Fila de slider de sensibilidad */
+.sensitivity-row {
+    -fx-alignment: CENTER_LEFT;
+    -fx-spacing: 8px;
+}
+
+/* Reset total para botones planos (Loop y Stop) */
+.btn-spotify-flat {
+    -fx-background-color: transparent !important;
+    -fx-background-insets: 0 !important;
+    -fx-background-radius: 0 !important;
+    -fx-border-color: transparent !important;
+    -fx-border-width: 0 !important;
+    -fx-text-fill: #b3b3b3;
+    -fx-font-size: 15px;
+    -fx-cursor: hand;
+    -fx-padding: 6px;
+    -fx-alignment: CENTER;
+}
+.btn-spotify-flat:hover { -fx-text-fill: #ffffff; }
+.btn-spotify-flat:selected { -fx-text-fill: #1db954; -fx-effect: none !important; }
+
+/* Los botones redondos internos quedan bien circulares para contraste */
+.btn-spotify-circle {
+    -fx-background-color: #ffffff !important;
+    -fx-text-fill: #000000 !important;
+    -fx-background-radius: 40px !important;
+    -fx-border-radius: 40px !important;
+    -fx-min-width: 38px;
+    -fx-max-width: 38px;
+    -fx-min-height: 38px;
+    -fx-max-height: 38px;
+    -fx-cursor: hand;
+    -fx-alignment: CENTER;
+    -fx-padding: 0;
+    -fx-background-insets: 0 !important;
+    -fx-border-width: 0 !important;
+    -fx-border-color: transparent !important;
+}
+.btn-spotify-circle:hover {
+    -fx-scale-x: 1.06;
+    -fx-scale-y: 1.06;
+    -fx-background-color: #f6f6f6 !important;
+}
+/* Sin offset — tanto ▶ como ⏸ quedan centrados en el círculo */
+
+/* Título de cada panel de reproducción */
+.lbl-panel-title {
+    -fx-text-fill: #606068;
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+    -fx-letter-spacing: 1px;
+}
+
+/* Label de track en preescucha */
+.lbl-preview-track {
+    -fx-text-fill: #909098;
+    -fx-font-size: 12px;
+    -fx-font-style: italic;
+}
+
+/* Panel de preescucha: borde superior para separación visual */
+.preview-panel {
+    -fx-border-color: #2a2a35 transparent transparent transparent;
+    -fx-border-width: 1px;
+}
+
+/* Barra de progreso */
+.progress-container { -fx-padding: 2px 0 0 0; }
+.spotify-slider { -fx-cursor: hand; }
+.spotify-slider .track { -fx-background-color: #2c2c30; -fx-background-radius: 0px; -fx-pref-height: 4px; }
+.spotify-slider .range-bar { -fx-background-radius: 0px; -fx-background-color: #1db954; }
+/* Thumb siempre visible: indica el valor/posición actual en todos los sliders */
+.spotify-slider .thumb {
+    -fx-background-color: #ffffff;
+    -fx-background-radius: 0px;
+    -fx-pref-width: 10px;
+    -fx-pref-height: 10px;
+    -fx-background-insets: 0;
+}
+.lbl-time { -fx-font-family: "Segoe UI", Arial, sans-serif; -fx-font-size: 11px; -fx-text-fill: #a7a7a7; -fx-min-width: 30px; }
+
+/* =========================================================================
+   ESTADOS DE AMBIENTACIÓN DINÁMICA (Plano absoluto sin herencias raras)
+   ========================================================================= */
+
+/* --- 1. PAUSED (Gris / Platino) --- */
+#window-paused.main-container { -fx-background-color: #151517; -fx-background-radius: 0px !important; -fx-border-radius: 0px !important; }
+#window-paused .window-header { -fx-background-color: #222226; }
+#window-paused .window-title { -fx-text-fill: #95a5a6; }
+#window-paused .slider .track { -fx-background-color: #3e3e40; }
+#window-paused .slider .thumb { -fx-background-color: #7f8c8d; }
+#window-paused .slider .range-bar { -fx-background-color: #95a5a6; }
+#window-paused .list-cell:filled:selected { -fx-background-color: #4a4a4a; }
+#window-paused .text-field:focused { -fx-border-color: #7f8c8d; }
+#window-paused .btn-spotify-flat:selected { -fx-text-fill: #95a5a6; }
+
+/* --- 2. RAGED (Rojo Combate) --- */
+#window-raged.main-container { -fx-background-color: #160e0e; -fx-background-radius: 0px !important; -fx-border-radius: 0px !important; }
+#window-raged .window-header { -fx-background-color: #2c1616; }
+#window-raged .window-title { -fx-text-fill: #e74c3c; }
+#window-raged .slider .track { -fx-background-color: #451b1b; }
+#window-raged .slider .thumb { -fx-background-color: #e74c3c; }
+#window-raged .slider .range-bar { -fx-background-color: #c0392b; }
+#window-raged .list-cell:filled:selected { -fx-background-color: #8a1f1f; }
+#window-raged .text-field:focused { -fx-border-color: #e74c3c; }
+#window-raged .btn-spotify-flat:selected { -fx-text-fill: #e74c3c; }
+
+/* --- 3. NORMAL (Verde Exploración) --- */
+#window-normal.main-container { -fx-background-color: #0e1410; -fx-background-radius: 0px !important; -fx-border-radius: 0px !important; }
+#window-normal .window-header { -fx-background-color: #16241b; }
+#window-normal .window-title { -fx-text-fill: #2ecc71; }
+#window-normal .slider .track { -fx-background-color: #14331d; }
+#window-normal .slider .thumb { -fx-background-color: #2ecc71; }
+#window-normal .slider .range-bar { -fx-background-color: #27ae60; }
+#window-normal .list-cell:filled:selected { -fx-background-color: #1e4a2b; }
+#window-normal .text-field:focused { -fx-border-color: #2ecc71; }
+#window-normal .btn-spotify-flat:selected { -fx-text-fill: #2ecc71; }
+
+/* --- 4. ADVANTAGE (Azul) --- */
+#window-advantage.main-container { -fx-background-color: #0f1318; -fx-background-radius: 0px !important; -fx-border-radius: 0px !important; }
+#window-advantage .window-header { -fx-background-color: #16222f; }
+#window-advantage .window-title { -fx-text-fill: #3498db; }
+#window-advantage .slider .track { -fx-background-color: #112233; }
+#window-advantage .slider .thumb { -fx-background-color: #3498db; }
+#window-advantage .slider .range-bar { -fx-background-color: #2980b9; }
+#window-advantage .list-cell:filled:selected { -fx-background-color: #1e354a; }
+#window-advantage .text-field:focused { -fx-border-color: #3498db; }
+#window-advantage .btn-spotify-flat:selected { -fx-text-fill: #3498db; }
+
+/* =========================================================================
+   BOTÓN FASE ACTIVO (G6 — reemplaza setStyle() inline en updateButtons)
+   ========================================================================= */
+
+/* Base: borde visible y texto blanco para todos los moods */
+.btn-phase-active {
+    -fx-border-width: 2px;
+    -fx-text-fill: #ffffff;
+}
+
+/* PAUSED: gris/platino con texto oscuro para contraste */
+#window-paused .btn-phase-active {
+    -fx-background-color: #7f8c8d;
+    -fx-border-color: #95a5a6;
+    -fx-text-fill: #000000;
+}
+
+/* RAGED: rojo combate */
+#window-raged .btn-phase-active {
+    -fx-background-color: #c0392b;
+    -fx-border-color: #e74c3c;
+}
+
+/* NORMAL: verde exploración */
+#window-normal .btn-phase-active {
+    -fx-background-color: #27ae60;
+    -fx-border-color: #2ecc71;
+}
+
+/* ADVANTAGE: azul */
+#window-advantage .btn-phase-active {
+    -fx-background-color: #2980b9;
+    -fx-border-color: #3498db;
+}
+
+/* =========================================================================
+   TABPANE MODO MOODS / PLAYLISTS
+   ========================================================================= */
+.tab-pane {
+    -fx-background-color: transparent;
+    -fx-tab-min-height: 30px;
+}
+.tab-pane .tab-header-area {
+    -fx-background-color: #16161a;
+    -fx-padding: 0 0 0 0;
+}
+.tab-pane .tab-header-area .tab-header-background {
+    -fx-background-color: #16161a;
+}
+.tab-pane .tab-header-area .headers-region {
+    -fx-background-color: #16161a;
+}
+.tab-pane > .tab-content-area {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+.tab {
+    -fx-background-color: #1e1e24;
+    -fx-background-radius: 0;
+    -fx-border-color: transparent;
+    -fx-padding: 6px 18px;
+    -fx-cursor: hand;
+}
+.tab .tab-label {
+    -fx-text-fill: #707075;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+}
+.tab:hover .tab-label {
+    -fx-text-fill: #b0b0b8;
+}
+.tab:selected {
+    -fx-background-color: #2a2a32;
+}
+.tab:selected .tab-label {
+    -fx-text-fill: #ffffff;
+}
+.tab-pane .tab-header-area .tab-header-background {
+    -fx-border-color: #2d2d35;
+    -fx-border-width: 0 0 1 0;
+}
+
+/* Lista de tracks de playlist: highlighted item */
+.list-cell:filled:selected {
+    -fx-background-color: #3a3a48;
+    -fx-text-fill: #ffffff;
+}
+.list-cell:filled:selected:focused {
+    -fx-background-color: #4a4a5a;
+}
+
+/* Estado ON del toggle de boomerang */
+.btn-secondary:selected {
+    -fx-background-color: #6a6a80;
+    -fx-text-fill: #ffffff;
+}
+
+/* =========================================================================
+   BG PREVIEW PANEL (WU-5)
+   ========================================================================= */
+
+/* Primary action button — used by Apply in the preview panel */
+.btn-primary {
+    -fx-background-color: #d0d0d8;
+    -fx-text-fill: #0d0d0d;
+    -fx-font-weight: bold;
+    -fx-background-radius: 0px !important;
+    -fx-padding: 7px 14px;
+    -fx-cursor: hand;
+}
+.btn-primary:hover {
+    -fx-background-color: #ffffff;
+}
+.btn-primary:disabled {
+    -fx-opacity: 0.35;
+    -fx-cursor: default;
+}
+
+/* Preview stack: dark background so MediaView and ImageView have a defined container */
+#bgPreviewStack {
+    -fx-background-color: #0d0d0f;
+    -fx-alignment: CENTER;
+}
+
+/* Spinner overlay: keep it centered and on top (StackPane handles z-order) */
+#bgPreviewSpinner {
+    -fx-max-width: 48px;
+    -fx-max-height: 48px;
+}
+
+/* Placeholder label when no media is loaded yet */
+#lblBgPreviewPlaceholder {
+    -fx-text-fill: #505058;
+    -fx-font-size: 12px;
+    -fx-font-style: italic;
+}
+
+/* bgPreviewSlider inherits spotify-slider — no additional rule needed */
+
+/* Segment info label in preview */
+#lblBgSegmentInfo {
+    -fx-text-fill: #909098;
+    -fx-font-size: 11px;
+}
+
+/* Boomerang hint label */
+#lblBgBoomerangHint {
+    -fx-text-fill: #e07040;
+    -fx-font-size: 11px;
+}
