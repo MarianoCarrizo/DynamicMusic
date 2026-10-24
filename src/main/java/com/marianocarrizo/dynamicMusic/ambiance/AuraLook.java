@@ -1,0 +1,116 @@
+package com.marianocarrizo.dynamicMusic.ambiance;
+
+import com.marianocarrizo.dynamicMusic.model.AuraConfig;
+import com.marianocarrizo.dynamicMusic.model.AuraPreset;
+import javafx.scene.paint.Color;
+
+import java.util.EnumMap;
+import java.util.Map;
+
+/**
+ * A fully resolved aura: every value the renderer needs as one flat number array, so two looks
+ * can be crossfaded with a single loop. Built from an {@link AuraConfig} plus the per-preset
+ * flavor table below (the only place where presets differ; the renderer has no per-preset code).
+ */
+final class AuraLook {
+
+    // --- Slot layout of the value array ---
+    static final int PR = 0, PG = 1, PB = 2;          // primary color (0..1)
+    static final int SR = 3, SG = 4, SB = 5;          // secondary color (0..1)
+    static final int INTENSITY = 6;                   // 0..1
+    static final int REACTIVITY = 7;                  // 0..1
+    static final int W_VIGNETTE = 8;                  // layer weights, 0 or 1, fade between
+    static final int W_GLOW = 9;
+    static final int W_EMBERS = 10;
+    static final int W_PULSE = 11;
+    static final int V_BASE = 12;                     // resting vignette opacity
+    static final int V_BREATH = 13;                   // extra vignette opacity at full tonal level
+    static final int V_RIM_DARKEN = 14;               // how far the rim color is pulled to black
+    static final int G_BASE = 15;                     // resting edge glow opacity
+    static final int G_ENERGY = 16;                   // extra glow opacity at full energy/mid
+    static final int BEAT_FLASH = 17;                 // glow lift on a snare hit (and a little kick)
+    static final int BEAT_DECAY = 18;                 // seconds for the beat accent to fade
+    static final int EDGE_LINE = 19;                  // bright thin line along the bottom on beats
+    static final int E_SPEED = 20;                    // ember rise speed multiplier
+    static final int E_FLICKER = 21;                  // ember flicker depth
+    static final int E_SIZE = 22;                     // ember size multiplier
+    static final int E_SWAY = 23;                     // ember sideways sway multiplier
+    static final int E_SECONDARY = 24;                // max share of secondary color in embers
+    static final int E_ALPHA = 25;                    // ember opacity
+    static final int MOTION = 26;                     // audio-driven motion multiplier (1 = normal)
+    static final int PERC = 27;                       // percussive hit multiplier (1 = normal, kick/snare punches)
+    static final int SIZE = 28;
+
+    // Calm mood (PAUSED): percussion is almost off (CALM_PERC); what remains is the slow tonal
+    // breathing, which MOTION scales (swing depth), so the aura stays calm but alive
+    private static final double CALM_MOTION = 0.7;
+    private static final double CALM_PERC = 0.10;
+    private static final double CALM_BEAT_FLASH = 0.5;
+    private static final double CALM_EDGE_LINE = 0.0;
+    private static final double CALM_EMBER_SPEED = 0.55;
+    private static final double CALM_EMBER_FLICKER = 0.4;
+    private static final double CALM_GLOW_ENERGY = 0.8;
+    private static final double CALM_VIGNETTE_BREATH = 0.8;
+
+    /** Per-preset flavor. Colors and intensity/reactivity come from the config, not from here. */
+    private record Flavor(double vBase, double vBreath, double rimDarken,
+                          double gBase, double gEnergy, double beatFlash, double beatDecay, double edgeLine,
+                          double eSpeed, double eFlicker, double eSize, double eSway,
+                          double eSecondary, double eAlpha) {}
+
+    private static final Map<AuraPreset, Flavor> FLAVORS = new EnumMap<>(AuraPreset.class);
+    static {
+        //                              vignette              glow                       ember
+        //                         base  breath darken  base  energy flash decay line  speed flick size sway  sec   alpha
+        FLAVORS.put(AuraPreset.FIRE,     new Flavor(0.34, 0.26, 0.70, 0.30, 0.45, 0.22, 0.22, 0.15, 1.50, 0.70, 1.00, 1.00, 0.55, 0.90));
+        FLAVORS.put(AuraPreset.SHADOW,   new Flavor(0.55, 0.22, 0.85, 0.12, 0.35, 0.10, 0.30, 0.00, 0.55, 0.25, 1.20, 1.30, 0.70, 0.65));
+        FLAVORS.put(AuraPreset.ELECTRIC, new Flavor(0.30, 0.24, 0.70, 0.22, 0.45, 0.55, 0.10, 0.90, 1.10, 0.85, 0.80, 0.40, 0.40, 0.90));
+        FLAVORS.put(AuraPreset.HOLY,     new Flavor(0.18, 0.18, 0.35, 0.30, 0.45, 0.12, 0.35, 0.10, 0.70, 0.20, 1.10, 1.00, 0.50, 0.85));
+        FLAVORS.put(AuraPreset.NEUTRAL,  new Flavor(0.28, 0.20, 0.80, 0.12, 0.35, 0.08, 0.30, 0.00, 0.60, 0.15, 1.00, 0.70, 0.30, 0.80));
+    }
+
+    private AuraLook() {}
+
+    /** Resolves a config into the flat value array, damped when {@code calm}. Never returns null. */
+    static double[] resolve(AuraConfig aura, boolean calm) {
+        double[] v = resolve(aura);
+        if (calm) {
+            v[MOTION]    *= CALM_MOTION;
+            v[PERC]      *= CALM_PERC;
+            v[BEAT_FLASH] *= CALM_BEAT_FLASH;
+            v[EDGE_LINE] *= CALM_EDGE_LINE;
+            v[E_SPEED]   *= CALM_EMBER_SPEED;
+            v[E_FLICKER] *= CALM_EMBER_FLICKER;
+            v[G_ENERGY]  *= CALM_GLOW_ENERGY;
+            v[V_BREATH]  *= CALM_VIGNETTE_BREATH;
+        }
+        return v;
+    }
+
+    /** Resolves a config into the flat value array. Never returns null. */
+    static double[] resolve(AuraConfig aura) {
+        double[] v = new double[SIZE];
+        v[MOTION] = 1.0;
+        v[PERC] = 1.0;
+        if (aura == null) aura = AuraPreset.NEUTRAL.defaults();
+        Flavor f = FLAVORS.get(aura.getPreset());
+
+        Color p = Color.web(aura.getPrimaryColor());
+        Color s = Color.web(aura.getSecondaryColor());
+        v[PR] = p.getRed();  v[PG] = p.getGreen();  v[PB] = p.getBlue();
+        v[SR] = s.getRed();  v[SG] = s.getGreen();  v[SB] = s.getBlue();
+        v[INTENSITY]  = aura.getIntensity();
+        v[REACTIVITY] = aura.getReactivity();
+        v[W_VIGNETTE] = aura.isVignette() ? 1 : 0;
+        v[W_GLOW]     = aura.isEdgeGlow() ? 1 : 0;
+        v[W_EMBERS]   = aura.isEmbers() ? 1 : 0;
+        v[W_PULSE]    = aura.isBackgroundPulse() ? 1 : 0;
+
+        v[V_BASE] = f.vBase;           v[V_BREATH] = f.vBreath;  v[V_RIM_DARKEN] = f.rimDarken;
+        v[G_BASE] = f.gBase;           v[G_ENERGY] = f.gEnergy;
+        v[BEAT_FLASH] = f.beatFlash;   v[BEAT_DECAY] = f.beatDecay;  v[EDGE_LINE] = f.edgeLine;
+        v[E_SPEED] = f.eSpeed;         v[E_FLICKER] = f.eFlicker;    v[E_SIZE] = f.eSize;
+        v[E_SWAY] = f.eSway;           v[E_SECONDARY] = f.eSecondary; v[E_ALPHA] = f.eAlpha;
+        return v;
+    }
+}

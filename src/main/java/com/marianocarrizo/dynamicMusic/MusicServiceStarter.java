@@ -118,7 +118,14 @@ public class MusicServiceStarter extends Application {
         addResizeSupport(stage, root);
 
         stage.setMinWidth(820);
-        stage.setMinHeight(560);
+        stage.setMinHeight(620);
+
+        // Tamaño inicial proporcional a la pantalla principal (evita apertura "apretada")
+        javafx.geometry.Rectangle2D vb = javafx.stage.Screen.getPrimary().getVisualBounds();
+        stage.setWidth(Math.max(stage.getMinWidth(), vb.getWidth() * 0.72));
+        stage.setHeight(Math.max(stage.getMinHeight(), vb.getHeight() * 0.82));
+        stage.centerOnScreen();
+
         stage.show();
     }
 

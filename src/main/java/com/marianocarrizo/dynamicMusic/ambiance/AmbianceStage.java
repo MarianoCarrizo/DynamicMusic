@@ -1,9 +1,13 @@
 package com.marianocarrizo.dynamicMusic.ambiance;
 
-import com.marianocarrizo.dynamicMusic.Enums.TrackType;
+import com.marianocarrizo.dynamicMusic.model.AuraConfig;
+import com.marianocarrizo.dynamicMusic.model.AuraSlot;
+import com.marianocarrizo.dynamicMusic.service.AudioFeatures;
+import javafx.application.Platform;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;
+import javafx.scene.effect.ColorAdjust;
 import javafx.scene.control.ProgressIndicator;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
@@ -24,31 +28,33 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * Secondary JavaFX Stage that projects mood-reactive visuals onto a second
  * monitor or a floating window.
  *
- * Background (image/video/GIF) and particle effects are now independent:
- *  - setBackground(path) controls the media layer for the entire session.
- *  - setMood(type)        only changes which particle effect plays.
- *  - setAmplitude(amp)    feeds audio-reactive data to the particle system.
- *  - applyScreen(index)   moves the window to the given screen index live,
- *                         rebuilding the Stage if the decoration style changes.
+ * Background (image/video/GIF) and the aura overlay are independent:
+ *  - setBackground(path)   controls the media layer for the entire session.
+ *  - setAudioSource(...)   tells the aura where to read audio features from.
+ *  - setAuras(map) / setAura(slot, cfg) store the scene's auras; setActiveSlot(slot) picks the
+ *                          one on screen (a mood slot, or AuraSlot.ON_DEMAND while an on-demand
+ *                          track plays; the caller switches back when it ends).
+ *  - applyScreen(index)    moves the window to the given screen index live,
+ *                          rebuilding the Stage if the decoration style changes.
+ * The aura is drawn over images and videos alike and stops rendering while the window is hidden.
  */
 public class AmbianceStage {
 
-    private static final Map<TrackType, Color> MOOD_COLORS = Map.of(
-            TrackType.PAUSED,    Color.web("#151517"),
-            TrackType.NORMAL,    Color.web("#0e1410"),
-            TrackType.RAGED,     Color.web("#160e0e"),
-            TrackType.ADVANTAGE, Color.web("#0f1318")
-    );
+    // Developer diagnostics switch; see the "debug" profile in pom.xml
+    private static final boolean DEBUG_MODE = Boolean.getBoolean("dynamicmusic.debug");
 
-    // Extensiones de imagen estática (con partículas); bmp incluido junto con los demás
+    // Extensiones de imagen estática; bmp incluido junto con los demás
     private static final Set<String> STATIC_IMAGE_EXT = Set.of("png", "jpg", "jpeg", "bmp");
-    // Extensiones de video/gif (sin partículas)
+    // Extensiones de video
     private static final Set<String> VIDEO_EXT        = Set.of("mp4", "avi");
     // Extensiones aceptadas por DnD (unión de imagen + gif; video excluido del drop)
     private static final Set<String> ACCEPTED_BG_EXT  = Set.of("png", "jpg", "jpeg", "bmp", "gif");
@@ -59,19 +65,18 @@ public class AmbianceStage {
     private Scene     scene;
     private ImageView imageView;
     private MediaView mediaView;
-    private Canvas             particleCanvas;
-    // Indicador de carga de video; siempre sobre particleCanvas (índice 3 en el StackPane)
+    private Canvas             auraCanvas;
+    // Indicador de carga de video; siempre sobre auraCanvas (índice 3 en el StackPane)
     private ProgressIndicator  loadingIndicator;
 
-    private MediaPlayer    currentPlayer;
-    private ParticleSystem currentEffect;
+    private MediaPlayer currentPlayer;
 
-    private TrackType currentMood = TrackType.NORMAL;
-    private volatile double amplitude  = 0.0;
-    private volatile double sensitivity = 2.0;
-
-    // Preferencias de efecto por mood; defaults en el constructor
-    private final Map<TrackType, EffectType> moodEffects = new EnumMap<>(TrackType.class);
+    // Aura overlay: one renderer for the stage's lifetime, re-attached to the canvas on rebuildStage()
+    private final AuraRenderer auraRenderer = new AuraRenderer(this::applyBackgroundPulse);
+    private final Map<AuraSlot, AuraConfig> auras = new EnumMap<>(AuraSlot.class);
+    private AuraSlot activeSlot = AuraSlot.NORMAL;
+    // Shared by the background nodes while the beat pulse is active; detached when brightness is 0
+    private final ColorAdjust pulseAdjust = new ColorAdjust();
 
     // Estado de decoración actual (null = ventana no abierta todavía)
     private StageStyle currentStyle = null;
@@ -101,12 +106,22 @@ public class AmbianceStage {
     private boolean boomerangActive = false;
     private String  bakedVideoPath  = null;
 
-    public AmbianceStage() {
-        moodEffects.put(TrackType.RAGED,     EffectType.FIRE);
-        moodEffects.put(TrackType.NORMAL,    EffectType.AURORA);
-        moodEffects.put(TrackType.ADVANTAGE, EffectType.ELECTRIC);
-        moodEffects.put(TrackType.PAUSED,    EffectType.VOID);
+    // Visibilidad elegida por el usuario; false = ventana oculta (aura detenida, video pausado)
+    private boolean visible = true;
+    // Callback del controlador: se dispara en el hilo FX cada vez que cambia la visibilidad
+    private Consumer<Boolean> onVisibilityChanged = null;
 
+    // Executor de inicialización de media: mueve new Media(uri) fuera del hilo FX
+    private final ExecutorService mediaInit = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "media-init");
+        t.setDaemon(true);
+        return t;
+    });
+    // Contador de generación: protege callbacks Platform.runLater contra media obsoleto
+    // Solo se accede desde el hilo FX; no necesita volatile
+    private int mediaGeneration = 0;
+
+    public AmbianceStage() {
         stage = new Stage();
         buildScene();
     }
@@ -123,7 +138,7 @@ public class AmbianceStage {
         scene         = new Scene(root);
         imageView     = new ImageView();
         mediaView     = new MediaView();
-        particleCanvas = new Canvas();
+        auraCanvas    = new Canvas();
 
         root.getChildren().addAll(imageView, mediaView);
 
@@ -137,12 +152,13 @@ public class AmbianceStage {
         imageView.setVisible(false);
         mediaView.setVisible(false);
 
-        particleCanvas.setMouseTransparent(true);
-        particleCanvas.widthProperty().bind(scene.widthProperty());
-        particleCanvas.heightProperty().bind(scene.heightProperty());
-        root.getChildren().add(particleCanvas);
+        auraCanvas.setMouseTransparent(true);
+        auraCanvas.widthProperty().bind(scene.widthProperty());
+        auraCanvas.heightProperty().bind(scene.heightProperty());
+        root.getChildren().add(auraCanvas);
+        auraRenderer.attach(auraCanvas);
 
-        // Overlay de carga de video: índice 3 (sobre particleCanvas), siempre mouse-transparent
+        // Overlay de carga de video: índice 3 (sobre auraCanvas), siempre mouse-transparent
         // Estilo inline obligatorio: el scene de ambiance no tiene stylesheet asociado
         loadingIndicator = new ProgressIndicator();
         loadingIndicator.setMouseTransparent(true);
@@ -156,9 +172,23 @@ public class AmbianceStage {
         root.setBackground(javafx.scene.layout.Background.EMPTY);
         scene.setFill(Color.BLACK);
         stage.setScene(scene);
+        // Cerrar la ventana (X / Alt+F4) solo la oculta; se puede volver a abrir desde el controlador
+        stage.setOnCloseRequest(e -> {
+            e.consume();
+            hide();
+        });
         stage.setTitle("Dynamic Music — Ambiance");
 
         // Handlers de drag-and-drop: adjuntados aquí para que sobrevivan rebuildStage()
+        // F3 toggles the aura diagnostics HUD (and its CSV recording), only in debug mode
+        // (-Ddynamicmusic.debug=true, set by the Maven "debug" profile); attached here to survive rebuildStage()
+        scene.setOnKeyPressed(event -> {
+            if (DEBUG_MODE && event.getCode() == javafx.scene.input.KeyCode.F3) {
+                auraRenderer.setDebug(!auraRenderer.isDebug());
+                event.consume();
+            }
+        });
+
         scene.setOnDragOver(event -> {
             if (event.getDragboard().hasFiles()) {
                 List<File> files = event.getDragboard().getFiles();
@@ -218,8 +248,56 @@ public class AmbianceStage {
         stage.setFullScreen(false);
         currentStyle = style;
 
-        setMood(currentMood);
         stage.show();
+        auraRenderer.start();
+        notifyVisibility();
+    }
+
+    // --- Mostrar / ocultar a demanda ---
+
+    /**
+     * Muestra la ventana de ambiance. Si nunca se abrió, delega en open().
+     * Si ya está visible, la trae al frente.
+     */
+    public void show() {
+        visible = true;
+        if (currentStyle == null) {
+            open();
+            return;
+        }
+        if (stage.isShowing()) {
+            stage.toFront();
+            return;
+        }
+        if (currentPlayer != null) currentPlayer.play();
+        stage.show();
+        auraRenderer.start();
+        notifyVisibility();
+    }
+
+    /**
+     * Oculta la ventana sin perder estado (fondo, aura, segmento). Detiene el
+     * render del aura y pausa el video para no consumir CPU mientras no se ve.
+     */
+    public void hide() {
+        if (!visible) return;
+        visible = false;
+        auraRenderer.stop();
+        if (currentPlayer != null) currentPlayer.pause();
+        stage.hide();
+        notifyVisibility();
+    }
+
+    public boolean isVisible() {
+        return visible && stage.isShowing();
+    }
+
+    public void setOnVisibilityChanged(Consumer<Boolean> callback) {
+        this.onVisibilityChanged = callback;
+    }
+
+    private void notifyVisibility() {
+        if (onVisibilityChanged != null) onVisibilityChanged.accept(isVisible());
     }
 
     // --- Selección de pantalla en vivo ---
@@ -255,11 +333,13 @@ public class AmbianceStage {
 
     /**
      * Cierra el stage actual, construye uno nuevo con el estilo indicado y
-     * re-aplica todo el estado visual: fondo, mood, efecto, alwaysOnTop y DnD.
+     * re-aplica todo el estado visual: fondo, aura, alwaysOnTop y DnD.
      */
     private void rebuildStage(StageStyle newStyle, Screen target) {
-        // 1. Detener efectos y media del stage viejo
-        stopParticleEffect();
+        // 1. Detener aura y media del stage viejo
+        auraRenderer.stop(); // also resets the background pulse
+        imageView.setEffect(null);
+        mediaView.setEffect(null);
         disposePlayer();
 
         // 2. Desligar bindings del scene graph viejo
@@ -267,8 +347,8 @@ public class AmbianceStage {
         imageView.fitHeightProperty().unbind();
         mediaView.fitWidthProperty().unbind();
         mediaView.fitHeightProperty().unbind();
-        particleCanvas.widthProperty().unbind();
-        particleCanvas.heightProperty().unbind();
+        auraCanvas.widthProperty().unbind();
+        auraCanvas.heightProperty().unbind();
 
         // 3. Cerrar el stage viejo
         stage.close();
@@ -276,7 +356,7 @@ public class AmbianceStage {
         // 4. Crear un stage nuevo
         stage = new Stage();
 
-        // 5. Reconstruir el scene graph y adjuntar al stage nuevo
+        // 5. Reconstruir el scene graph y adjuntar al stage nuevo (buildScene re-adjunta el aura al canvas nuevo)
         buildScene();
 
         // 6. Aplicar estilo y posición
@@ -290,21 +370,22 @@ public class AmbianceStage {
         // 7. Re-aplicar estado visual
         applyCurrentStateToNewStage();
 
-        // 8. Mostrar
-        stage.show();
+        // 8. Mostrar (solo si el usuario no la ocultó)
+        if (visible) {
+            stage.show();
+            auraRenderer.start();
+        }
     }
 
     /**
-     * Re-aplica el estado visual completo al stage/scene recién construido.
-     * Incluye fondo y mood actual. La sensitivity no requiere re-aplicación
-     * explícita porque el campo volatile retiene el último valor escrito por
-     * setSensitivity(); el nuevo scene graph lo usa directamente.
+     * Re-aplica el estado visual al stage/scene recién construido. Solo el fondo:
+     * el renderer del aura conserva su look y su fuente de audio, y el pulso de fondo
+     * se resuelve contra los nodos actuales en cada frame.
      */
     private void applyCurrentStateToNewStage() {
         if (currentBackgroundPath != null) {
             setBackground(currentBackgroundPath);
         }
-        setMood(currentMood);
     }
 
     // --- Resolución de pantalla ---
@@ -369,10 +450,19 @@ public class AmbianceStage {
     }
 
     /**
+     * Limpia el estado boomerang sin re-reproducir el fondo.
+     * Para llamadores que invocan setBackground inmediatamente después
+     * (el branch de video confía en el estado que fijó el llamador).
+     */
+    public void resetBoomerang() {
+        clearBoomerangState();
+    }
+
+    /**
      * Sets a single background for the whole window:
-     *  - Video (MP4/AVI) or GIF: played/shown; particles run if an effect is active.
-     *  - Static image (PNG/JPG/JPEG/BMP): shown with particles on top.
-     *  - null or missing file: solid black background + particles.
+     *  - Video (MP4/AVI) or GIF: played/shown, aura on top.
+     *  - Static image (PNG/JPG/JPEG/BMP): shown, aura on top.
+     *  - null or missing file: solid black background + aura.
      */
     public void setBackground(String path) {
         currentBackgroundPath = path;
@@ -382,7 +472,6 @@ public class AmbianceStage {
             segmentStart = null;
             segmentEnd   = null;
             clearMedia();
-            ensureParticlesRunning();
             return;
         }
         File f = new File(path);
@@ -391,7 +480,6 @@ public class AmbianceStage {
             segmentStart = null;
             segmentEnd   = null;
             clearMedia();
-            ensureParticlesRunning();
             return;
         }
         try {
@@ -399,72 +487,97 @@ public class AmbianceStage {
             if (isVideo(e)) {
                 // No nulificar segmento ni boomerang: el llamador los estableció antes de setBackground durante restore
                 setVideo(f);
-                ensureParticlesRunning();
             } else if ("gif".equals(e)) {
                 clearBoomerangState();
                 segmentStart = null;
                 segmentEnd   = null;
                 setImage(f);
-                ensureParticlesRunning();
             } else if (isStaticImage(e)) {
                 clearBoomerangState();
                 segmentStart = null;
                 segmentEnd   = null;
                 setImage(f);
-                ensureParticlesRunning();
             } else {
                 clearBoomerangState();
                 segmentStart = null;
                 segmentEnd   = null;
                 clearMedia();
-                ensureParticlesRunning();
             }
         } catch (Exception ex) {
             clearBoomerangState();
             segmentStart = null;
             segmentEnd   = null;
             clearMedia();
-            ensureParticlesRunning();
         }
     }
 
-    // --- Mood (only changes particle effect, never touches the background) ---
+    // --- Aura (never touches the background media, only the overlay and a subtle pulse on it) ---
 
-    public void setMood(TrackType type) {
-        if (type == null) return;
-        currentMood = type;
-        setColor(MOOD_COLORS.getOrDefault(type, Color.BLACK));
-        stopParticleEffect();
-        startParticleEffect(moodEffects.getOrDefault(type, EffectType.AURORA));
+    /** Where the aura reads audio features from; polled every rendered frame on the FX thread. */
+    public void setAudioSource(Supplier<AudioFeatures> source) {
+        auraRenderer.setAudioSource(source);
     }
 
-    // --- Per-mood effect override ---
+    /**
+     * Replaces the stored auras (typically the active scene's) and moves the visible aura to
+     * them with the long (~1.5 s) crossfade. The configs are kept by reference.
+     */
+    public void setAuras(Map<AuraSlot, AuraConfig> newAuras) {
+        auras.clear();
+        if (newAuras != null) auras.putAll(newAuras);
+        showActiveAura(true);
+    }
 
-    public void setMoodEffect(TrackType mood, EffectType effect) {
-        if (mood == null || effect == null) return;
-        EffectType previous = moodEffects.put(mood, effect);
-        if (mood == currentMood && effect != previous) {
-            stopParticleEffect();
-            startParticleEffect(effect);
+    /**
+     * Stores the aura of one slot. If that slot is the visible one the change is applied with
+     * a short (~0.2 s) blend, so live edits feel immediate; other slots are just remembered.
+     */
+    public void setAura(AuraSlot slot, AuraConfig aura) {
+        if (slot == null || aura == null) return;
+        auras.put(slot, aura);
+        if (slot == activeSlot) showActiveAura(false);
+    }
+
+    /**
+     * Chooses which slot's aura is on screen and crossfades to it (long transition).
+     * Use a mood slot normally; step 4 calls {@code setActiveSlot(AuraSlot.ON_DEMAND)} when an
+     * on-demand track starts and switches back to the mood slot when it ends.
+     */
+    public void setActiveSlot(AuraSlot slot) {
+        if (slot == null) return;
+        activeSlot = slot;
+        showActiveAura(true);
+    }
+
+    public AuraSlot getActiveSlot() {
+        return activeSlot;
+    }
+
+    private void showActiveAura(boolean longTransition) {
+        AuraConfig aura = auras.get(activeSlot);
+        // PAUSED is the calm mood: always softer than the others, whatever preset it uses
+        if (aura != null) auraRenderer.setTarget(aura, longTransition, activeSlot == AuraSlot.PAUSED);
+    }
+
+    /**
+     * Called by the renderer every frame the pulse changes. Scales both background nodes (only
+     * one is visible) around their center and lifts brightness; the effect is attached only
+     * while brightness is non-zero so video is not rendered offscreen the rest of the time.
+     * Reads the node fields on each call, so it keeps working after rebuildStage().
+     */
+    private void applyBackgroundPulse(double scale, double brightness) {
+        imageView.setScaleX(scale);
+        imageView.setScaleY(scale);
+        mediaView.setScaleX(scale);
+        mediaView.setScaleY(scale);
+        if (brightness > 0.002) {
+            pulseAdjust.setBrightness(brightness);
+            if (imageView.getEffect() != pulseAdjust) imageView.setEffect(pulseAdjust);
+            if (mediaView.getEffect() != pulseAdjust) mediaView.setEffect(pulseAdjust);
+        } else {
+            if (imageView.getEffect() != null) imageView.setEffect(null);
+            if (mediaView.getEffect() != null) mediaView.setEffect(null);
         }
-    }
-
-    public EffectType getMoodEffect(TrackType type) {
-        return moodEffects.getOrDefault(type, EffectType.AURORA);
-    }
-
-    // --- Amplitude (written from audio thread, read by ParticleSystem on FX thread) ---
-
-    public void setAmplitude(double amp) {
-        this.amplitude = Math.min(1.0, amp * sensitivity);
-    }
-
-    public void setSensitivity(double s) {
-        this.sensitivity = Math.max(0.1, s);
-    }
-
-    public double getAmplitude() {
-        return amplitude;
     }
 
     // --- Fit mode (public API) ---
@@ -612,16 +725,6 @@ public class AmbianceStage {
 
     // --- Internal helpers ---
 
-    private void ensureParticlesRunning() {
-        if (currentEffect == null) {
-            startParticleEffect(moodEffects.getOrDefault(currentMood, EffectType.AURORA));
-        }
-    }
-
-    private void setColor(Color color) {
-        scene.setFill(color);
-    }
-
     private void disposePlayer() {
         if (currentPlayer != null) {
             currentPlayer.stop();
@@ -631,6 +734,7 @@ public class AmbianceStage {
     }
 
     private void clearMedia() {
+        mediaGeneration++; // invalida cualquier callback de video pendiente
         disposePlayer();
         loadingIndicator.setVisible(false);
         imageView.setImage(null);
@@ -639,6 +743,7 @@ public class AmbianceStage {
     }
 
     private void setImage(File f) {
+        mediaGeneration++; // invalida cualquier callback de video pendiente (transición video→imagen)
         disposePlayer();
         loadingIndicator.setVisible(false);
         mediaView.setVisible(false);
@@ -670,65 +775,79 @@ public class AmbianceStage {
         // Cuando el boomerang está activo, reproducir el archivo bakeado en lugar del original
         File toPlay = (boomerangActive && bakedVideoPath != null) ? new File(bakedVideoPath) : f;
 
+        // Incrementar generación ANTES de cualquier trabajo en background
+        final int gen = ++mediaGeneration;
+
         imageView.setVisible(false);
         imageView.setImage(null);
-        disposePlayer();
-        Media media = new Media(toPlay.toURI().toString());
-        currentPlayer = new MediaPlayer(media);
-        currentPlayer.setCycleCount(MediaPlayer.INDEFINITE);
-        currentPlayer.setMute(true);
-        // Aplicación pre-READY del segmento: solo cuando NO está activo el boomerang
-        // (el archivo bakeado ya es el segmento completo — no se aplica startTime/stopTime)
-        if (!(boomerangActive && bakedVideoPath != null)) {
-            if (segmentStart != null && segmentEnd != null) {
-                currentPlayer.setStartTime(segmentStart);
-                currentPlayer.setStopTime(segmentEnd);
-            }
-        }
-        // Velocidad de reproducción: no requiere estado READY; se aplica directamente
-        currentPlayer.setRate(videoRate);
-        mediaView.setMediaPlayer(currentPlayer);
+        disposePlayer();                   // descartar el player anterior de forma síncrona
         mediaView.setVisible(true);
-        currentPlayer.setOnError(this::onMediaError);
-        // Captura de identidad: ocultar el indicador solo si este player sigue siendo el actual
-        MediaPlayer player = currentPlayer;
-        player.setOnReady(() -> {
-            if (currentPlayer == player) {
-                loadingIndicator.setVisible(false);
-                applyFitToMediaView(); // las dimensiones del media ya son válidas en READY
-                // Re-afirmar segmento solo cuando el boomerang NO está activo
-                // (previene que un segmento obsoleto se aplique al palíndromo bakeado)
-                if (!(boomerangActive && bakedVideoPath != null)) {
-                    if (segmentStart != null && segmentEnd != null) {
-                        player.setStartTime(segmentStart);
-                        player.setStopTime(segmentEnd);
-                    }
-                }
-                if (onVideoReady != null) onVideoReady.run();
+        loadingIndicator.setVisible(true); // spinner PRIMERO — pinta antes de cualquier llamada nativa
+
+        final String uri = toPlay.toURI().toString();
+        final boolean bakedActive = (boomerangActive && bakedVideoPath != null);
+
+        mediaInit.submit(() -> {
+            Media media;
+            try {
+                media = new Media(uri);    // sondeo nativo pesado — fuera del hilo FX
+            } catch (Exception ex) {
+                Platform.runLater(this::onMediaError);
+                return;
             }
+            // Volver al hilo FX para construir el player y asignarlo al scene graph
+            Platform.runLater(() -> {
+                // Guardia de generación: si el usuario cambió el fondo mientras el sondeo
+                // corría, este callback es obsoleto — descartar sin tocar ningún estado
+                if (gen != mediaGeneration) {
+                    new MediaPlayer(media).dispose(); // evitar fuga del Media ya inicializado
+                    return;
+                }
+                MediaPlayer player = new MediaPlayer(media);
+                currentPlayer = player;
+                player.setCycleCount(MediaPlayer.INDEFINITE);
+                player.setMute(true);
+                // Aplicar segmento pre-READY solo cuando el boomerang NO está activo
+                if (!bakedActive && segmentStart != null && segmentEnd != null) {
+                    player.setStartTime(segmentStart);
+                    player.setStopTime(segmentEnd);
+                }
+                player.setRate(videoRate);
+                // CRÍTICO: mediaView y loadingIndicator se leen como campos de instancia
+                // al momento de ejecución — nunca capturados como locales antes del submit,
+                // para que rebuildStage() pueda reasignar los campos sin romper este callback
+                mediaView.setMediaPlayer(player);
+                player.setOnError(this::onMediaError);
+                // El Media ya viene parseado del hilo de fondo: el player puede llegar a READY
+                // ANTES de registrar el handler, y setOnReady no se dispara retroactivamente.
+                // Registrar y luego verificar el estado actual, con guardia de ejecución única.
+                final boolean[] readyFired = { false };
+                Runnable readyHandler = () -> {
+                    if (readyFired[0]) return;
+                    readyFired[0] = true;
+                    // Doble guardia: identidad + generación (defensa en profundidad)
+                    if (currentPlayer == player && gen == mediaGeneration) {
+                        loadingIndicator.setVisible(false);
+                        applyFitToMediaView();
+                        // Re-afirmar segmento en READY cuando el boomerang NO está activo
+                        if (!bakedActive && segmentStart != null && segmentEnd != null) {
+                            player.setStartTime(segmentStart);
+                            player.setStopTime(segmentEnd);
+                        }
+                        if (onVideoReady != null) onVideoReady.run();
+                    }
+                };
+                player.setOnReady(readyHandler);
+                if (visible) player.play(); // hidden: show() resumes playback
+                applyFitToMediaView();
+                if (player.getStatus() == MediaPlayer.Status.READY) readyHandler.run();
+            });
         });
-        loadingIndicator.setVisible(true);
-        currentPlayer.play();
-        // Aplicar modos no-FILL de inmediato (no necesitan dimensiones); FILL se aplica en onReady
-        applyFitToMediaView();
     }
 
     private void onMediaError() {
         loadingIndicator.setVisible(false);
         clearMedia();
-        ensureParticlesRunning();
-    }
-
-    private void startParticleEffect(EffectType effect) {
-        currentEffect = new ParticleSystem(particleCanvas, effect, this::getAmplitude);
-        currentEffect.start();
-    }
-
-    private void stopParticleEffect() {
-        if (currentEffect != null) {
-            currentEffect.stop();
-            currentEffect = null;
-        }
     }
 
     // --- Segment loop API ---
@@ -841,7 +960,8 @@ public class AmbianceStage {
     // --- Dispose ---
 
     public void dispose() {
-        stopParticleEffect();
+        auraRenderer.stop();
+        mediaInit.shutdownNow();
         disposePlayer();
         stage.close();
     }

@@ -44,14 +44,25 @@ public class SessionConfigManager {
         Path path = configPath();
         if (!Files.exists(path)) {
             System.out.println("No session config found — starting fresh");
-            return new SessionConfig();
+            SessionConfig fresh = new SessionConfig();
+            fresh.getActiveScene(); // single empty "Default" scene
+            return fresh;
         }
-        try (Reader reader = Files.newBufferedReader(path)) {
-            SessionConfig cfg = gson.fromJson(reader, SessionConfig.class);
-            return cfg != null ? cfg : new SessionConfig();
+        try {
+            SessionConfig cfg;
+            try (Reader reader = Files.newBufferedReader(path)) {
+                cfg = gson.fromJson(reader, SessionConfig.class);
+            }
+            if (cfg == null) cfg = new SessionConfig();
+            // Legacy (pre-scenes) files are converted to one "Default" scene and saved right away.
+            // Done after the reader is closed: Windows cannot replace a file that is still open.
+            if (SceneMigration.migrate(cfg, path)) save(cfg);
+            return cfg;
         } catch (Exception e) {
             System.err.println("Error al leer la sesión guardada: " + e.getMessage());
-            return new SessionConfig();
+            SessionConfig fallback = new SessionConfig();
+            fallback.getActiveScene();
+            return fallback;
         }
     }
 

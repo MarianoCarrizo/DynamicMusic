@@ -22,7 +22,6 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.BiConsumer;
-import java.util.function.Consumer;
 
 public class MusicService {
 
@@ -33,7 +32,9 @@ public class MusicService {
     /** Modo de reproducción activo. Solo un modo emite audio a la vez. */
     public enum PlaybackMode {
         MOOD,
-        PLAYLIST
+        PLAYLIST,
+        /** A single track played on request, independent of the scene (replaces mood/playlist audio). */
+        ON_DEMAND
     }
 
     // =========================================================================
@@ -48,6 +49,9 @@ public class MusicService {
 
     // Volumen RMS calculado por pista — necesario para restaurar al hacer fade-in
     private final Map<TrackType, Double> trackGains;
+
+    // Per-slot load generation: lets unloadTrack/loadTrack discard stale in-flight loads (FX thread only)
+    private final Map<TrackType, Integer> loadSeq = new EnumMap<>(TrackType.class);
 
     // Timeline de fade activo (mood o playlist) — se cancela si el usuario actúa antes
     private Timeline activeFade;
@@ -65,8 +69,7 @@ public class MusicService {
     private final StringProperty nowPlaying = new SimpleStringProperty("—");
 
     // Amplitud de audio: escrita en el hilo del callback del espectro, leída por la UI
-    private volatile double currentAmplitude = 0.0;
-    private volatile Consumer<Double> amplitudeListener;
+    private final AudioAnalyzer audioAnalyzer = new AudioAnalyzer();
 
     /**
      * Executor de un único hilo para la preparación de audio.
@@ -96,6 +99,15 @@ public class MusicService {
 
     // Ganancia RMS raw de la preescucha activa (necesaria para live-reapply del volumen maestro)
     private double previewGain = 1.0;
+
+    // On-demand source: one player, created only when the user asks for it
+    private MediaPlayer onDemandPlayer = null;
+    private double onDemandGain = 1.0;
+    private boolean onDemandLoop = false;
+    // Bumped on every mode request; discards on-demand loads that were superseded while preparing
+    private int onDemandSeq = 0;
+    private BiConsumer<Duration, Duration> onDemandProgressListener = null;
+    private Runnable onDemandStateListener = null;
 
     // Callback que el controlador suministra para avanzar al siguiente track
     private Runnable onPlaylistEnd = null;
@@ -144,6 +156,9 @@ public class MusicService {
         if (previewPlayer != null) {
             previewPlayer.setVolume(effectiveGain(previewGain));
         }
+        if (onDemandPlayer != null) {
+            onDemandPlayer.setVolume(effectiveGain(onDemandGain));
+        }
     }
 
     public double getMasterVolume() {
@@ -158,33 +173,23 @@ public class MusicService {
         return nowPlaying;
     }
 
-    public void setAmplitudeListener(Consumer<Double> listener) {
-        this.amplitudeListener = listener;
-    }
-
-    public double getCurrentAmplitude() {
-        return currentAmplitude;
+    /** Latest analyzed audio features (bands, energy, beat). Decays to silence when no audio flows. */
+    public AudioFeatures getAudioFeatures() {
+        return audioAnalyzer.current();
     }
 
     /**
      * Adjunta el listener de espectro de audio a un reproductor.
-     * Promedia las primeras 8 bandas de bajos (dBFS -60 a 0) y normaliza a 0.0–1.0.
+     * Alimenta el AudioAnalyzer (bandas, energia, beats); el aura lo lee via getAudioFeatures().
      * Es seguro llamar desde cualquier hilo.
      */
     private void attachSpectrumListener(MediaPlayer player) {
-        player.setAudioSpectrumInterval(0.05);
-        player.setAudioSpectrumNumBands(32);
+        audioAnalyzer.reset(); // new track: drop adaptive normalization state
+        player.setAudioSpectrumInterval(0.025); // 40 Hz: lower latency for the aura; AudioAnalyzer.TICK_NS matches
+        player.setAudioSpectrumNumBands(AudioAnalyzer.NUM_BANDS);
+        player.setAudioSpectrumThreshold(-75); // default -60 dB flattens the quiet high band
         player.setAudioSpectrumListener((timestamp, duration, magnitudes, phases) -> {
-            float sum = 0;
-            int count = Math.min(8, magnitudes.length);
-            for (int i = 0; i < count; i++) {
-                sum += magnitudes[i]; // valores dBFS, típicamente -60 a 0
-            }
-            double avgDb = sum / (double) count;
-            double amp = Math.min(1.0, Math.max(0.0, (avgDb + 60.0) / 60.0));
-            currentAmplitude = amp;
-            Consumer<Double> listener = amplitudeListener;
-            if (listener != null) listener.accept(amp);
+            audioAnalyzer.process(magnitudes, timestamp);
         });
     }
 
@@ -201,10 +206,15 @@ public class MusicService {
         if (!Platform.isFxApplicationThread()) {
             System.err.println("ADVERTENCIA: setPlaybackMode fue invocado fuera del hilo FX");
         }
+        // Any explicit mode request supersedes an on-demand load still preparing
+        if (target != PlaybackMode.ON_DEMAND) onDemandSeq++;
         if (mode == target) return;
 
         // --- Teardown del modo saliente ---
-        if (mode == PlaybackMode.MOOD) {
+        if (mode == PlaybackMode.ON_DEMAND) {
+            cancelActiveFade();
+            disposeOnDemandPlayer();
+        } else if (mode == PlaybackMode.MOOD) {
             // Saliendo del modo MOOD: cancelar fade, pausar el reproductor activo,
             // desconectar el listener de espectro
             cancelActiveFade();
@@ -235,6 +245,8 @@ public class MusicService {
             if (currentTrack != null && players.containsKey(currentTrack)) {
                 attachSpectrumListener(players.get(currentTrack));
             }
+            // Playlist/on-demand may have overwritten the label
+            nowPlaying.set(currentTrack != null ? trackNames.getOrDefault(currentTrack, "—") : "—");
             // No se auto-reproduce; el controlador decide
         }
         // Entrando al modo PLAYLIST: playlistPlayer ya es null; el controlador
@@ -256,9 +268,21 @@ public class MusicService {
      * hilo FX vía Platform.runLater.
      */
     public void loadTrack(TrackType type, File file) {
+        loadTrack(type, file, null);
+    }
+
+    /**
+     * Same as {@link #loadTrack(TrackType, File)}, with a callback run on the FX thread once
+     * the new player is ready and installed. A load superseded by a newer load or by
+     * {@link #unloadTrack(TrackType)} for the same slot is dropped and never calls back.
+     * If the slot already had a player it is disposed; when that player was the current
+     * track and was playing, the new one starts playing in its place.
+     */
+    public void loadTrack(TrackType type, File file, Runnable onLoaded) {
         if (file == null || !file.exists()) return;
 
         final String trackDisplayName = file.getName();
+        final int seq = loadSeq.merge(type, 1, Integer::sum);
 
         audioPrep.submit(() -> {
             try {
@@ -272,6 +296,7 @@ public class MusicService {
                 final double gain = ConversorUtils.calculateGainForRMS(finalFile);
 
                 Platform.runLater(() -> {
+                    if (loadSeq.getOrDefault(type, 0) != seq) return; // superseded or unloaded
                     String sourceUrl = finalFile.toURI().toString();
                     Media media = new Media(sourceUrl);
                     MediaPlayer player = new MediaPlayer(media);
@@ -300,13 +325,32 @@ public class MusicService {
                     });
 
                     player.setOnReady(() -> {
-                        players.put(type, player);
+                        if (loadSeq.getOrDefault(type, 0) != seq) {
+                            player.dispose(); // superseded while preparing
+                            return;
+                        }
+                        boolean resumePlayback = false;
+                        MediaPlayer replaced = players.put(type, player);
+                        if (replaced != null) {
+                            if (type == currentTrack) {
+                                cancelActiveFade();
+                                resumePlayback = replaced.getStatus() == MediaPlayer.Status.PLAYING;
+                            }
+                            replaced.setAudioSpectrumListener(null);
+                            replaced.stop();
+                            replaced.dispose();
+                        }
                         trackNames.put(type, trackDisplayName);
                         trackGains.put(type, gain);
                         attachSpectrumListener(player);
                         if (currentTrack == null) {
                             currentTrack = type;
                         }
+                        if (type == currentTrack && replaced != null) {
+                            nowPlaying.set(trackDisplayName); // swapped in place: keep the label in sync
+                            if (resumePlayback) player.play();
+                        }
+                        if (onLoaded != null) onLoaded.run();
                         if (progressListener != null) {
                             Platform.runLater(() -> {
                                 Duration total = player.getTotalDuration();
@@ -323,6 +367,51 @@ public class MusicService {
                 e.printStackTrace();
             }
         });
+    }
+
+    /**
+     * Releases the player of a mood slot. If it was the current track, playback stops and
+     * there is no current track until another one is selected or loaded.
+     * Pending loads for the slot are cancelled. Must be called on the FX thread.
+     */
+    public void unloadTrack(TrackType type) {
+        if (type == null) return;
+        loadSeq.merge(type, 1, Integer::sum); // invalidate in-flight loads
+        MediaPlayer removed = players.remove(type);
+        trackNames.remove(type);
+        trackGains.remove(type);
+        if (removed == null) return;
+        if (type == currentTrack) {
+            cancelActiveFade();
+            currentTrack = null;
+            nowPlaying.set("—");
+        }
+        removed.setAudioSpectrumListener(null);
+        removed.stop();
+        removed.dispose();
+    }
+
+    /** Current mood slot, or null when nothing is selected. */
+    public TrackType getCurrentTrack() {
+        return currentTrack;
+    }
+
+    /**
+     * Makes a loaded slot the current track WITHOUT starting playback (the previous
+     * current player is paused). No-op if the slot is not loaded or already current.
+     */
+    public void selectTrack(TrackType type) {
+        if (mode != PlaybackMode.MOOD) return;
+        if (type == null || type == currentTrack || !players.containsKey(type)) return;
+        cancelActiveFade();
+        if (currentTrack != null && players.containsKey(currentTrack)) {
+            MediaPlayer old = players.get(currentTrack);
+            old.pause();
+            old.setAudioSpectrumListener(null);
+        }
+        currentTrack = type;
+        attachSpectrumListener(players.get(type));
+        nowPlaying.set(trackNames.getOrDefault(type, type.name()));
     }
 
     // =========================================================================
@@ -378,6 +467,10 @@ public class MusicService {
         // T-08: pausar también el reproductor de playlist si está sonando
         if (playlistPlayer != null && playlistPlayer.getStatus() == MediaPlayer.Status.PLAYING) {
             playlistPlayer.pause();
+        }
+
+        if (onDemandPlayer != null && onDemandPlayer.getStatus() == MediaPlayer.Status.PLAYING) {
+            onDemandPlayer.pause();
         }
 
         // (2) Detener y descartar la preescucha previa si existía
@@ -769,6 +862,136 @@ public class MusicService {
     /** Establece el listener de progreso para el panel de playlist. */
     public void setPlaylistProgressListener(BiConsumer<Duration, Duration> l) {
         this.playlistProgressListener = l;
+    }
+
+    // =========================================================================
+    // ON_DEMAND: play any file immediately, replacing mood/playlist audio
+    // =========================================================================
+
+    private void disposeOnDemandPlayer() {
+        if (onDemandPlayer != null) {
+            onDemandPlayer.setAudioSpectrumListener(null);
+            onDemandPlayer.stop();
+            onDemandPlayer.dispose();
+            onDemandPlayer = null;
+        }
+    }
+
+    /**
+     * Plays {@code file} right away, replacing whatever mood or playlist audio was playing.
+     * The previous source is torn down only once the new player is prepared, so a failed or
+     * superseded load leaves the current audio untouched. Must be called on the FX thread.
+     *
+     * @param onStarted run on the FX thread when the track starts playing
+     */
+    public void playOnDemand(File file, String title, Runnable onStarted) {
+        if (file == null || !file.exists()) return;
+        final int seq = ++onDemandSeq;
+
+        audioPrep.submit(() -> {
+            try {
+                final File finalFile = file.getName().toLowerCase().endsWith(".flac")
+                        ? ConversorUtils.convertFlacToWav(file) : file;
+                final double gain = ConversorUtils.calculateGainForRMS(finalFile);
+
+                Platform.runLater(() -> {
+                    if (seq != onDemandSeq) return; // superseded by another request
+
+                    // Build the new player first; the audible source is only swapped in setOnReady,
+                    // so a file that fails to open leaves the current music playing
+                    final MediaPlayer player;
+                    try {
+                        player = new MediaPlayer(new Media(finalFile.toURI().toString()));
+                    } catch (RuntimeException ex) {
+                        System.err.println("Could not open on-demand track: " + ex.getMessage());
+                        return;
+                    }
+
+                    player.currentTimeProperty().addListener((obs, o, nv) -> {
+                        if (onDemandProgressListener != null && player == onDemandPlayer) {
+                            Duration total = player.getTotalDuration();
+                            if (total != null && !total.isUnknown()) onDemandProgressListener.accept(nv, total);
+                        }
+                    });
+                    player.setOnEndOfMedia(() -> Platform.runLater(() -> {
+                        if (player != onDemandPlayer) return;
+                        if (onDemandLoop) {
+                            player.seek(Duration.ZERO);
+                            player.play();
+                        } else {
+                            player.pause();
+                            player.seek(Duration.ZERO); // stays loaded: replay or close
+                            if (onDemandStateListener != null) onDemandStateListener.run();
+                        }
+                    }));
+                    player.setOnError(() -> {
+                        System.err.println("On-demand playback error: " + player.getError());
+                        Platform.runLater(() -> {
+                            if (player == onDemandPlayer) {
+                                if (onDemandStateListener != null) onDemandStateListener.run();
+                            } else {
+                                player.dispose(); // failed before it became audible: nothing to undo
+                            }
+                        });
+                    });
+                    player.setOnReady(() -> {
+                        if (seq != onDemandSeq) { // a mood/playlist/other track was picked meanwhile
+                            player.dispose();
+                            return;
+                        }
+                        setPlaybackMode(PlaybackMode.ON_DEMAND); // tears down mood/playlist
+                        disposeOnDemandPlayer();                  // replaces a previous on-demand track
+                        stopPreview();
+                        onDemandGain = gain;
+                        player.setVolume(effectiveGain(gain));
+                        attachSpectrumListener(player);
+                        onDemandPlayer = player;
+                        nowPlaying.set(title != null ? title : file.getName());
+                        player.play();
+                        if (onDemandProgressListener != null)
+                            onDemandProgressListener.accept(Duration.ZERO, player.getTotalDuration());
+                        if (onStarted != null) onStarted.run();
+                        if (onDemandStateListener != null) onDemandStateListener.run();
+                    });
+                });
+            } catch (Exception e) {
+                System.err.println("Could not load on-demand track: " + e.getMessage());
+                e.printStackTrace();
+            }
+        });
+    }
+
+    public void onDemandPlay() {
+        if (mode == PlaybackMode.ON_DEMAND && onDemandPlayer != null) onDemandPlayer.play();
+    }
+
+    public void onDemandPause() {
+        if (mode == PlaybackMode.ON_DEMAND && onDemandPlayer != null) onDemandPlayer.pause();
+    }
+
+    public boolean isOnDemandPlaying() {
+        return mode == PlaybackMode.ON_DEMAND && onDemandPlayer != null
+                && onDemandPlayer.getStatus() == MediaPlayer.Status.PLAYING;
+    }
+
+    public void seekOnDemand(double fraction) {
+        if (onDemandPlayer == null) return;
+        Duration total = onDemandPlayer.getTotalDuration();
+        if (total != null && !total.isUnknown() && total.toMillis() > 0)
+            onDemandPlayer.seek(total.multiply(fraction));
+    }
+
+    public void setOnDemandLoop(boolean enabled) {
+        this.onDemandLoop = enabled;
+    }
+
+    public void setOnDemandProgressListener(BiConsumer<Duration, Duration> l) {
+        this.onDemandProgressListener = l;
+    }
+
+    /** Called (FX thread) when the on-demand player starts, errors or reaches its end. */
+    public void setOnDemandStateListener(Runnable r) {
+        this.onDemandStateListener = r;
     }
 
     // =========================================================================

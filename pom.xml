@@ -234,4 +234,27 @@
             </plugin>
         </plugins>
     </build>
+    <profiles>
+        <!--
+            Debug profile: ./mvnw javafx:run -Pdebug
+            Enables developer diagnostics (F3 aura HUD + audio-debug.csv recording).
+            Never active in the normal run or the MSI build.
+        -->
+        <profile>
+            <id>debug</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.openjfx</groupId>
+                        <artifactId>javafx-maven-plugin</artifactId>
+                        <configuration>
+                            <options>
+                                <option>-Ddynamicmusic.debug=true</option>
+                            </options>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

@@ -4,58 +4,71 @@ import com.marianocarrizo.dynamicMusic.Enums.TrackType;
 import com.marianocarrizo.dynamicMusic.ambiance.AmbianceStage;
 import com.marianocarrizo.dynamicMusic.ambiance.BackgroundFitMode;
 import com.marianocarrizo.dynamicMusic.ambiance.BoomerangBaker;
-import com.marianocarrizo.dynamicMusic.ambiance.EffectType;
+import com.marianocarrizo.dynamicMusic.ambiance.YoutubePicker;
 import com.marianocarrizo.dynamicMusic.config.SessionConfig;
 import com.marianocarrizo.dynamicMusic.config.SessionConfigManager;
+import com.marianocarrizo.dynamicMusic.model.AuraConfig;
+import com.marianocarrizo.dynamicMusic.model.AuraPreset;
+import com.marianocarrizo.dynamicMusic.model.AuraSlot;
+import com.marianocarrizo.dynamicMusic.model.BackgroundConfig;
+import com.marianocarrizo.dynamicMusic.model.PlaylistItem;
+import com.marianocarrizo.dynamicMusic.model.Scene;
 import com.marianocarrizo.dynamicMusic.service.MusicService;
 import com.marianocarrizo.dynamicMusic.service.PlaylistManager;
+import com.marianocarrizo.dynamicMusic.service.TrackLibrary;
+import com.marianocarrizo.dynamicMusic.service.YouTubeDownloader;
+import com.marianocarrizo.dynamicMusic.service.YtDlpManager;
+import javafx.animation.Animation;
 import javafx.animation.PauseTransition;
 import javafx.application.Platform;
 import javafx.collections.ListChangeListener;
-import javafx.util.Duration;
+import javafx.css.PseudoClass;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
+import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.*;
+import javafx.scene.input.ClipboardContent;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.Dragboard;
+import javafx.scene.input.TransferMode;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
+import javafx.scene.paint.Color;
+import javafx.scene.shape.Circle;
 import javafx.stage.DirectoryChooser;
-import javafx.stage.FileChooser;
 import javafx.stage.Screen;
 import javafx.stage.Stage;
+import javafx.util.Duration;
+import javafx.util.StringConverter;
 
 import java.io.File;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
-public class PlayerController {
+public class PlayerController implements SceneHost {
 
     // Layout
     @FXML private VBox mainRoot;
     @FXML private Button btnMaximize;
-    @FXML private VBox detailsPanel;
-    @FXML private Label lblBackgroundType;
-    @FXML private VBox assignmentsList;
+
+    // Scene bar
+    @FXML private ComboBox<Scene> cmbScene;
+    // Main action toggles the ambiance window; its menu lists the screens
+    @FXML private SplitMenuButton btnToggleAmbiance;
 
     // Slider y label del volumen maestro global
     @FXML private Slider sldMasterVolume;
     @FXML private Label  lblMasterVolume;
 
-    // Sliders de sensibilidad por mood
-    @FXML private Slider sldSensPaused;
-    @FXML private Slider sldSensNormal;
-    @FXML private Slider sldSensRaged;
-    @FXML private Slider sldSensAdvantage;
-
-    // Labels de valor de sensibilidad por mood
-    @FXML private Label lblSensPaused;
-    @FXML private Label lblSensNormal;
-    @FXML private Label lblSensRaged;
-    @FXML private Label lblSensAdvantage;
-
-    // Botones de mood
+    // Botones (tarjetas) de mood
     @FXML private Button btnPaused;
     @FXML private Button btnNormal;
     @FXML private Button btnRaged;
@@ -68,7 +81,8 @@ public class PlayerController {
     @FXML private Label lblCurrentTime;
     @FXML private Label lblTotalTime;
 
-    // Panel de preescucha
+    // Panel de preescucha (visible solo mientras hay una preescucha activa)
+    @FXML private VBox previewPanel;
     @FXML private ToggleButton btnPreviewLoop;
     @FXML private Button btnPreviewPlayPause;
     @FXML private Slider previewSlider;
@@ -76,7 +90,18 @@ public class PlayerController {
     @FXML private Label lblPreviewTotalTime;
     @FXML private Label lblPreviewTrack;
 
-    // Label general
+    // On-demand player (visible only while an on-demand track is loaded)
+    @FXML private VBox onDemandPanel;
+    @FXML private Label lblOnDemandTrack;
+    @FXML private ToggleButton btnOnDemandLoop;
+    @FXML private Button btnOnDemandPlayPause;
+    @FXML private Slider onDemandSlider;
+    @FXML private Label lblOnDemandCurrentTime;
+    @FXML private Label lblOnDemandTotalTime;
+    private boolean isDraggingOnDemandSlider = false;
+
+    // Caption + nombre de la pista del mood activo
+    @FXML private Label lblNowPlayingMood;
     @FXML private Label lblNowPlaying;
 
     // T-10: TabPane de modos
@@ -105,56 +130,101 @@ public class PlayerController {
     // Lista y búsqueda
     @FXML private TextField txtSearch;
     @FXML private TreeView<File> treeFiles;
-    @FXML private ComboBox<TrackType> cmbTrackType;
-    @FXML private ComboBox<EffectType> cmbEffect;
-    @FXML private ComboBox<String> cmbScreen;
-    @FXML private ComboBox<BackgroundFitMode> cmbFitMode;
-    @FXML private Label lblBackgroundFile;
 
-    // Segment loop controls (video-only, hidden by default via FXML)
-    @FXML private VBox   segmentControls;
-    @FXML private Button btnMarkStart;
-    @FXML private Button btnMarkEnd;
-    @FXML private Label  lblSegmentInfo;
-    @FXML private Button btnClearSegment;
-    @FXML private ComboBox<Double> cmbVideoSpeed;
+    // YouTube URL input
+    @FXML private TextField txtYoutubeUrl;
+    @FXML private Button btnAddYoutube;
+    @FXML private Button btnPlayYoutube;
+    @FXML private Button btnBrowseYoutube;
+    @FXML private Label lblYoutubeError;
 
-    // Boomerang controls
-    @FXML private ToggleButton btnBoomerang;
-    @FXML private Label        lblBoomerangHint;
+    private static final PseudoClass DROP_TARGET = PseudoClass.getPseudoClass("drop-target");
 
     private File rootFolder;
 
     private final MusicService musicService = new MusicService();
     private final SessionConfigManager manager = new SessionConfigManager();
     private final SessionConfig sessionConfig = new SessionConfig();
+    private final YouTubeDownloader youTubeDownloader = new YouTubeDownloader();
     private AmbianceStage ambianceStage;
+    private SceneEditorController sceneEditor; // created lazily, single instance
 
     private boolean isDraggingSlider = false;
     private boolean isDraggingPreviewSlider = false;
     private boolean isDraggingPlaylistSlider = false;
     private boolean applyingSession = false;
     private boolean refreshingUI = false;
-    private Duration pendingSegmentStart = null; // null = no start marked yet
     private TrackType currentActiveType = TrackType.NORMAL;
 
-    // Boomerang state
+    // Live aura strip: quick edits to the active mood's aura during play
+    @FXML private Label  lblLiveAura;
+    @FXML private HBox   livePresetBox;
+    @FXML private Slider sldLiveIntensity;
+    @FXML private Slider sldLiveReactivity;
+    @FXML private Label  lblLiveIntensity;
+    @FXML private Label  lblLiveReactivity;
+    private final Map<AuraPreset, ToggleButton> livePresetButtons = new EnumMap<>(AuraPreset.class);
+    private final ToggleGroup livePresetGroup = new ToggleGroup();
+    private boolean updatingLiveAura = false;
+
+    // Boomerang state (live ambiance)
     private final BoomerangBaker boomerangBaker = new BoomerangBaker();
     private boolean ffmpegAvailable = false;
     private String bakeGuardSrc;   // snapshot en el momento del bake para la guardia de stale
     private long   bakeGuardStart;
     private long   bakeGuardEnd;
 
+    // File IO off the FX thread (pinning yt-cache tracks into the library)
+    private final ExecutorService ioExecutor = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "track-io");
+        t.setDaemon(true);
+        return t;
+    });
+
+    // Debounces saves coming from sliders and color pickers in the scene editor
+    private final PauseTransition saveDebounce = new PauseTransition(Duration.millis(400));
+
+    // Path requested for each mood slot of the active scene; avoids reloading an unchanged track on scene switch
+    private final Map<TrackType, String> loadedPaths = new EnumMap<>(TrackType.class);
+
+    // Mood card widgets (the card buttons keep their fx:ids, handlers and shortcuts)
+    private final Map<TrackType, Button> moodButtons = new EnumMap<>(TrackType.class);
+    private final Map<TrackType, MoodCard> moodCards = new EnumMap<>(TrackType.class);
+
+    private static final class MoodCard {
+        final Label track = new Label();
+        final Circle dot = new Circle(5);
+        final Label preset = new Label();
+    }
+
+    // Screen menu (inside btnToggleAmbiance): item 0 = Auto, item N = screen N-1
+    private final ToggleGroup screenGroup = new ToggleGroup();
+
     private PlaylistManager playlistManager;
-    private final Map<TrackType, Double> moodSensitivity = new java.util.EnumMap<>(TrackType.class);
 
     @FXML
     public void initialize() {
+        startYtDlpManager();
+        buildMoodCards();
+        buildLiveAura();
+        refreshCards();
         updateButtons();
+        updateNowPlayingCaption();
 
-        if (cmbTrackType != null) {
-            cmbTrackType.getItems().setAll(TrackType.values());
-            cmbTrackType.setValue(TrackType.NORMAL);
+        saveDebounce.setOnFinished(e -> manager.save(sessionConfig));
+
+        if (cmbScene != null) {
+            cmbScene.setConverter(new StringConverter<>() {
+                @Override public String toString(Scene s) { return s == null ? "" : s.getName(); }
+                @Override public Scene fromString(String s) { return null; }
+            });
+            cmbScene.setOnAction(e -> {
+                if (refreshingUI) return;
+                Scene chosen = cmbScene.getValue();
+                if (chosen == null || chosen.getId().equals(sessionConfig.getActiveScene().getId())) return;
+                switchScene(chosen);
+            });
+            refreshSceneCombo();
         }
 
         if (txtSearch != null) {
@@ -162,12 +232,14 @@ public class PlayerController {
         }
 
         if (treeFiles != null) {
-            treeFiles.setCellFactory(tv -> new TreeCell<>() {
-                @Override
-                protected void updateItem(File item, boolean empty) {
-                    super.updateItem(item, empty);
-                    if (empty || item == null) { setText(null); return; }
-                    setText(item.isDirectory() ? "📁 " + item.getName() : item.getName());
+            treeFiles.setCellFactory(tv -> new LibraryCell());
+            treeFiles.setOnKeyPressed(e -> {
+                if (e.getCode() == KeyCode.ENTER) {
+                    TreeItem<File> selected = treeFiles.getSelectionModel().getSelectedItem();
+                    if (selected != null && selected.getValue() != null && selected.getValue().isFile()) {
+                        playNow(selected.getValue(), null);
+                        e.consume();
+                    }
                 }
             });
             treeFiles.setOnMouseClicked(e -> {
@@ -209,6 +281,32 @@ public class PlayerController {
                 updatePreviewPlayPauseButton();
             }));
 
+        // On-demand player
+        musicService.setOnDemandProgressListener((current, total) ->
+            Platform.runLater(() -> {
+                if (!isDraggingOnDemandSlider && total != null && !total.isUnknown() && total.toMillis() > 0) {
+                    onDemandSlider.setValue(current.toMillis() / total.toMillis() * 100);
+                    lblOnDemandCurrentTime.setText(formatDuration(current));
+                    lblOnDemandTotalTime.setText(formatDuration(total));
+                }
+                updateOnDemandPlayPauseButton();
+            }));
+        musicService.setOnDemandStateListener(() -> {
+            if (!isDraggingOnDemandSlider && !musicService.isOnDemandPlaying()) {
+                onDemandSlider.setValue(0); // ended: back to the start, ready to replay
+                lblOnDemandCurrentTime.setText("0:00");
+            }
+            updateOnDemandPlayPauseButton();
+        });
+        if (onDemandSlider != null) {
+            onDemandSlider.setOnMousePressed(e -> isDraggingOnDemandSlider = true);
+            onDemandSlider.setOnMouseReleased(e -> {
+                isDraggingOnDemandSlider = false;
+                musicService.seekOnDemand(onDemandSlider.getValue() / 100.0);
+            });
+        }
+        showOnDemandPanel(false);
+
         if (progressSlider != null) {
             progressSlider.setOnMousePressed(e -> isDraggingSlider = true);
             progressSlider.setOnMouseReleased(e -> {
@@ -231,98 +329,43 @@ public class PlayerController {
 
         updatePreviewPanel(false);
         ambianceStage = new AmbianceStage();
-        ambianceStage.setOnVideoReady(() -> Platform.runLater(() -> {
-            if (btnMarkStart != null)    btnMarkStart.setDisable(false);
-            if (btnClearSegment != null) btnClearSegment.setDisable(false);
-            // btnMarkEnd permanece deshabilitado hasta que el usuario marque un inicio
-            refreshSegmentLabel();
-            updateBoomerangEnablement();
-        }));
-        musicService.setAmplitudeListener(amp -> ambianceStage.setAmplitude(amp));
+        // El live ambiance ya no expone controles de segmento; no hay setOnVideoReady en la UI
+        ambianceStage.setAudioSource(musicService::getAudioFeatures);
+        ambianceStage.setOnVisibilityChanged(this::updateAmbianceToggle);
 
-        // Callback: el stage de ambiance notifica cuando el usuario suelta una imagen
+        // Callback: el stage de ambiance notifica cuando el usuario suelta una imagen.
+        // The drop replaces the background of the ACTIVE scene.
         ambianceStage.setOnBackgroundDropped(path -> {
-            sessionConfig.setBackgroundImagePath(path);
+            BackgroundConfig bg = sessionConfig.getActiveScene().getBackground();
+            bg.setPath(path);
             sessionConfig.setLastImageFolderPath(new File(path).getParent());
-            // El fondo soltado siempre es imagen/gif (video excluido de DnD); limpiar segmento
-            pendingSegmentStart = null;
-            sessionConfig.setVideoSegmentStartMs(null);
-            sessionConfig.setVideoSegmentEndMs(null);
+            // DnD only accepts images/GIFs; clear any saved video state from a prior background
+            bg.setSegmentStartMs(null);
+            bg.setSegmentEndMs(null);
+            bg.setBoomerangEnabled(false);
             manager.save(sessionConfig);
-            Platform.runLater(() -> updateBackgroundLabel(path));
+            Platform.runLater(() -> {
+                if (sceneEditor != null) sceneEditor.refreshBackground();
+            });
         });
 
-        if (cmbEffect != null) {
-            cmbEffect.getItems().setAll(EffectType.values());
-            cmbEffect.setValue(EffectType.AURORA);
-        }
-
-        if (cmbFitMode != null) {
-            cmbFitMode.setConverter(new javafx.util.StringConverter<>() {
-                @Override public String toString(BackgroundFitMode mode) {
-                    if (mode == null) return "";
-                    return switch (mode) {
-                        case FILL    -> "Fill";
-                        case FIT     -> "Fit";
-                        case STRETCH -> "Stretch";
-                        case CENTER  -> "Center";
-                    };
-                }
-                @Override public BackgroundFitMode fromString(String s) {
-                    return BackgroundFitMode.fromString(s != null ? s.toUpperCase() : null);
-                }
-            });
-            cmbFitMode.getItems().setAll(BackgroundFitMode.values());
-            cmbFitMode.setValue(BackgroundFitMode.FILL);
-        }
-
-        // Combo de velocidad de reproducción de video
-        if (cmbVideoSpeed != null) {
-            cmbVideoSpeed.getItems().setAll(0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0);
-            cmbVideoSpeed.setConverter(new javafx.util.StringConverter<>() {
-                @Override public String toString(Double v) {
-                    if (v == null) return "";
-                    // Formatear sin ceros finales; "1x" en lugar de "1.0x"
-                    String s = (v == Math.floor(v)) ? String.valueOf(v.intValue()) : String.valueOf(v);
-                    return s + "x";
-                }
-                @Override public Double fromString(String s) {
-                    if (s == null || s.isEmpty()) return 1.0;
-                    try { return Double.parseDouble(s.replace("x", "")); }
-                    catch (NumberFormatException e) { return 1.0; }
-                }
-            });
-            cmbVideoSpeed.setValue(1.0);
-        }
-
-        // Combo de selección de pantalla
-        populateScreenCombo();
+        // Menú de selección de pantalla (dentro del botón de ambiance)
+        populateScreenMenu();
         Screen.getScreens().addListener((ListChangeListener<Screen>) change -> {
-            populateScreenCombo();
-            // Re-resolver desde la intención guardada, no desde el combo clampado.
+            populateScreenMenu();
+            // Re-resolver desde la intención guardada, no desde el menú clampado.
             // Si el monitor recordado volvió a conectarse, la ambiance se mueve de vuelta
             // a él de inmediato; si sigue ausente, resolveScreen() aplica auto-fallback.
             int savedIntent = sessionConfig.getAmbianceScreenIndex();
-            int comboTarget = savedIntent < 0 ? 0 : savedIntent + 1;
-            boolean inRange = cmbScreen != null && comboTarget < cmbScreen.getItems().size();
-            refreshingUI = true;
-            try {
-                if (cmbScreen != null) {
-                    cmbScreen.getSelectionModel().select(inRange ? comboTarget : 0);
-                }
-            } finally {
-                refreshingUI = false;
-            }
+            int menuTarget = savedIntent < 0 ? 0 : savedIntent + 1;
+            boolean inRange = menuTarget < screenItemCount();
+            selectScreenItem(inRange ? menuTarget : 0);
             if (ambianceStage != null) {
                 ambianceStage.applyScreen(savedIntent);
             }
         });
 
-        for (TrackType t : TrackType.values()) moodSensitivity.put(t, 2.0);
-
-        wireSensitivitySliders();
         wireMasterVolumeSlider();
-        refreshAssignments();
 
         // T-12: PlaylistManager + wiring de callbacks
         playlistManager = new PlaylistManager();
@@ -385,6 +428,7 @@ public class PlayerController {
                     int idx = lstPlaylistTracks.getSelectionModel().getSelectedIndex();
                     if (idx >= 0) {
                         playlistManager.startAt(idx).ifPresent(f -> {
+                            enterMode(MusicService.PlaybackMode.PLAYLIST);
                             musicService.playPlaylistTrack(f);
                             if (btnPlaylistPlayPause != null) btnPlaylistPlayPause.setText("⏸");
                             refreshPlaylistUI();
@@ -397,10 +441,8 @@ public class PlayerController {
         if (modeTabPane != null) {
             modeTabPane.getSelectionModel().selectedItemProperty().addListener((obs, oldTab, newTab) -> {
                 if (applyingSession || newTab == null) return;
+                // Tabs are only views: they never change what is playing
                 boolean isPlaylist = newTab == playlistsTab;
-                musicService.setPlaybackMode(isPlaylist
-                    ? MusicService.PlaybackMode.PLAYLIST
-                    : MusicService.PlaybackMode.MOOD);
                 sessionConfig.setActiveMode(isPlaylist ? "playlist" : "mood");
                 manager.save(sessionConfig);
                 if (isPlaylist) refreshPlaylistUI();
@@ -413,6 +455,157 @@ public class PlayerController {
         });
     }
 
+    // --- Tarjetas de mood ---
+
+    private void buildMoodCards() {
+        bindCard(TrackType.PAUSED,    btnPaused,    1);
+        bindCard(TrackType.NORMAL,    btnNormal,    2);
+        bindCard(TrackType.RAGED,     btnRaged,     3);
+        bindCard(TrackType.ADVANTAGE, btnAdvantage, 4);
+    }
+
+    /** Turns a mood button into a three-line card and makes it a drop target for tracks. */
+    private void bindCard(TrackType type, Button button, int number) {
+        if (button == null) return;
+        MoodCard card = new MoodCard();
+
+        Label title = new Label("[" + number + "] " + type.name());
+        title.getStyleClass().add("card-title");
+        card.track.getStyleClass().add("card-track");
+        card.track.setMaxWidth(190);
+        card.track.setAlignment(Pos.CENTER);
+        card.preset.getStyleClass().add("card-aura");
+        HBox auraRow = new HBox(5, card.dot, card.preset);
+        auraRow.setAlignment(Pos.CENTER);
+
+        VBox box = new VBox(4, title, card.track, auraRow);
+        box.setAlignment(Pos.CENTER);
+        button.setText(null);
+        button.setGraphic(box);
+        button.setContentDisplay(ContentDisplay.GRAPHIC_ONLY);
+        button.setMinWidth(0);
+
+        button.setOnDragOver(e -> {
+            if (audioFileIn(e.getDragboard()) != null) e.acceptTransferModes(TransferMode.COPY);
+            e.consume();
+        });
+        button.setOnDragEntered(e -> {
+            if (audioFileIn(e.getDragboard()) != null) button.pseudoClassStateChanged(DROP_TARGET, true);
+        });
+        button.setOnDragExited(e -> button.pseudoClassStateChanged(DROP_TARGET, false));
+        button.setOnDragDropped(e -> {
+            File f = audioFileIn(e.getDragboard());
+            if (f != null) assignTrack(type, f);
+            e.setDropCompleted(f != null);
+            e.consume();
+        });
+
+        moodButtons.put(type, button);
+        moodCards.put(type, card);
+    }
+
+    /** First supported audio file carried by the dragboard (tree drag or external drop), or null. */
+    private File audioFileIn(Dragboard db) {
+        if (db == null || !db.hasFiles()) return null;
+        for (File f : db.getFiles()) {
+            if (f.isFile() && isAudioFile(f)) return f;
+        }
+        return null;
+    }
+
+    /** Refreshes track name and aura preset/dot of every card from the active scene. */
+    private void refreshCards() {
+        Scene scene = sessionConfig.getActiveScene();
+        Map<TrackType, String> assignments = scene.getAssignments();
+        for (TrackType type : TrackType.values()) {
+            MoodCard card = moodCards.get(type);
+            if (card == null) continue;
+            String path = assignments.get(type);
+            card.track.getStyleClass().remove("card-track-empty");
+            if (path == null || path.isEmpty()) {
+                card.track.setText("Drop a track here");
+                card.track.getStyleClass().add("card-track-empty");
+            } else {
+                File f = new File(path);
+                card.track.setText(stripExtension(f.getName()) + (f.isFile() ? "" : " (missing)"));
+            }
+            AuraConfig aura = scene.getAura(AuraSlot.of(type));
+            card.dot.setFill(Color.web(aura.getPrimaryColor()));
+            card.preset.setText(capitalize(aura.getPreset().name()));
+        }
+        refreshLiveAura();
+    }
+
+    // --- Live aura strip ---
+
+    private void buildLiveAura() {
+        if (livePresetBox == null) return;
+        for (AuraPreset p : AuraPreset.values()) {
+            ToggleButton tb = new ToggleButton(capitalize(p.name()));
+            tb.getStyleClass().addAll("btn-secondary", "btn-preset");
+            tb.setToggleGroup(livePresetGroup);
+            tb.setOnAction(e -> {
+                if (!tb.isSelected()) tb.setSelected(true); // a preset is always selected
+                if (!updatingLiveAura) pickLivePreset(p);
+            });
+            livePresetButtons.put(p, tb);
+            livePresetBox.getChildren().add(tb);
+        }
+        sldLiveIntensity.valueProperty().addListener((obs, o, nv) -> {
+            lblLiveIntensity.setText(Math.round(nv.doubleValue() * 100) + "%");
+            if (!updatingLiveAura) editLiveAura(a -> a.setIntensity(nv.doubleValue()));
+        });
+        sldLiveReactivity.valueProperty().addListener((obs, o, nv) -> {
+            lblLiveReactivity.setText(Math.round(nv.doubleValue() * 100) + "%");
+            if (!updatingLiveAura) editLiveAura(a -> a.setReactivity(nv.doubleValue()));
+        });
+    }
+
+    /** Shows the active mood's aura in the strip without triggering edits. */
+    private void refreshLiveAura() {
+        if (livePresetBox == null) return;
+        AuraConfig aura = sessionConfig.getActiveScene().getAura(liveSlot());
+        updatingLiveAura = true;
+        try {
+            lblLiveAura.setText("LIVE AURA · " + (usesOnDemandAura() ? "ON DEMAND" : currentActiveType.name()));
+            ToggleButton tb = livePresetButtons.get(aura.getPreset());
+            if (tb != null) tb.setSelected(true);
+            sldLiveIntensity.setValue(aura.getIntensity());
+            sldLiveReactivity.setValue(aura.getReactivity());
+        } finally {
+            updatingLiveAura = false;
+        }
+    }
+
+    /** Swaps the preset look but keeps the levels the user is playing with. */
+    private void pickLivePreset(AuraPreset preset) {
+        AuraSlot slot = liveSlot();
+        Scene scene = sessionConfig.getActiveScene();
+        AuraConfig old = scene.getAura(slot);
+        if (old.getPreset() == preset) return; // re-clicking must not wipe custom colors
+        AuraConfig fresh = preset.defaults();
+        fresh.setIntensity(old.getIntensity());
+        fresh.setReactivity(old.getReactivity());
+        scene.setAura(slot, fresh);
+        onLiveAuraEdited(slot);
+    }
+
+    private void editLiveAura(java.util.function.Consumer<AuraConfig> change) {
+        AuraSlot slot = liveSlot();
+        change.accept(sessionConfig.getActiveScene().getAura(slot));
+        onLiveAuraEdited(slot);
+    }
+
+    private void onLiveAuraEdited(AuraSlot slot) {
+        onAuraEdited(slot);
+        if (sceneEditor != null) sceneEditor.refreshAuras();
+    }
+
+    private void updateNowPlayingCaption() {
+        if (lblNowPlayingMood != null)
+            lblNowPlayingMood.setText("NOW PLAYING · " + currentActiveType.name());
+    }
+
     // --- Controles de mood ---
 
     @FXML private void onSwitchToPaused()   { switchTrack(TrackType.PAUSED); }
@@ -422,16 +615,15 @@ public class PlayerController {
 
     public void switchTrack(TrackType type) {
         if (type == null || !musicService.isLoaded(type)) return;
-        if (type == currentActiveType) return;
+        boolean fromOtherSource = musicService.getPlaybackMode() != MusicService.PlaybackMode.MOOD;
+        if (!fromOtherSource && type == currentActiveType && musicService.getCurrentTrack() == type) return;
+        enterMode(MusicService.PlaybackMode.MOOD); // explicit: playlist/on-demand audio stops here
         musicService.switchTrack(type);
         this.currentActiveType = type;
         updateWindowMood(type);
-        if (ambianceStage != null) {
-            ambianceStage.setMood(type);
-            if (cmbEffect != null) cmbEffect.setValue(ambianceStage.getMoodEffect(type));
-            double s = moodSensitivity.getOrDefault(type, 2.0);
-            ambianceStage.setSensitivity(s);
-        }
+        updateNowPlayingCaption();
+        if (ambianceStage != null) ambianceStage.setActiveSlot(AuraSlot.of(type)); // long crossfade
+        refreshLiveAura();
         updateButtons();
         setMoodButtonIcon("⏸"); // siempre arranca reproduciendo
         updatePreviewPanel(false);
@@ -445,6 +637,7 @@ public class PlayerController {
             musicService.fadeOutAndPause(null);
         } else {
             setMoodButtonIcon("⏸");
+            enterMode(MusicService.PlaybackMode.MOOD); // explicit: replaces playlist/on-demand audio
             musicService.fadeInAndPlay();
         }
     }
@@ -465,6 +658,99 @@ public class PlayerController {
             btnPlayPause.setText(musicService.isPlaying() ? "⏸" : "▶");
     }
 
+    // --- Playback source (mood / playlist / on-demand) ---
+
+    /** Music outside the moods (on-demand tracks and playlists) shares the scene's on-demand aura. */
+    private boolean usesOnDemandAura() {
+        MusicService.PlaybackMode mode = musicService.getPlaybackMode();
+        return mode == MusicService.PlaybackMode.ON_DEMAND || mode == MusicService.PlaybackMode.PLAYLIST;
+    }
+
+    /** Aura slot shown by the ambiance and edited by the live strip: the on-demand aura outside moods, else the mood's. */
+    private AuraSlot liveSlot() {
+        return usesOnDemandAura() ? AuraSlot.ON_DEMAND : AuraSlot.of(currentActiveType);
+    }
+
+    /** Explicitly changes the audible source (never called from tab changes) and syncs the UI around it. */
+    private void enterMode(MusicService.PlaybackMode target) {
+        musicService.setPlaybackMode(target);
+        syncSourceUi();
+    }
+
+    private void syncSourceUi() {
+        MusicService.PlaybackMode mode = musicService.getPlaybackMode();
+        if (mode != MusicService.PlaybackMode.ON_DEMAND) showOnDemandPanel(false);
+        if (mode != MusicService.PlaybackMode.PLAYLIST) {
+            if (btnPlaylistPlayPause != null) btnPlaylistPlayPause.setText("▶");
+            if (lstPlaylistTracks != null) lstPlaylistTracks.refresh();
+        }
+        if (ambianceStage != null) ambianceStage.setActiveSlot(liveSlot());
+        refreshLiveAura();
+        updatePlayPauseButton();
+    }
+
+    // --- On-demand player ---
+
+    /** Plays {@code file} immediately, replacing whatever plays (mood or playlist). Title may be null. */
+    private void playNow(File file, String title) {
+        if (file == null || !file.isFile()) return;
+        String label = title != null && !title.isBlank() ? title : stripExtension(file.getName());
+        if (lblOnDemandTrack != null) lblOnDemandTrack.setText(label);
+        if (onDemandSlider != null) onDemandSlider.setValue(0);
+        if (lblOnDemandCurrentTime != null) lblOnDemandCurrentTime.setText("0:00");
+        if (lblOnDemandTotalTime != null) lblOnDemandTotalTime.setText("0:00");
+        musicService.playOnDemand(file, label, () -> {
+            // The service switched to ON_DEMAND once the track was prepared
+            showOnDemandPanel(true);
+            if (ambianceStage != null) ambianceStage.setActiveSlot(AuraSlot.ON_DEMAND);
+            refreshLiveAura();
+            setMoodButtonIcon("▶");
+            if (btnPlaylistPlayPause != null) btnPlaylistPlayPause.setText("▶");
+            if (lstPlaylistTracks != null) lstPlaylistTracks.refresh();
+            updateOnDemandPlayPauseButton();
+        });
+    }
+
+    private void showOnDemandPanel(boolean show) {
+        if (onDemandPanel == null) return;
+        onDemandPanel.setVisible(show);
+        onDemandPanel.setManaged(show);
+    }
+
+    private void updateOnDemandPlayPauseButton() {
+        if (btnOnDemandPlayPause != null)
+            btnOnDemandPlayPause.setText(musicService.isOnDemandPlaying() ? "⏸" : "▶");
+    }
+
+    @FXML
+    private void onToggleOnDemandPlayPause() {
+        if (musicService.isOnDemandPlaying()) musicService.onDemandPause();
+        else musicService.onDemandPlay();
+        updateOnDemandPlayPauseButton();
+    }
+
+    /** Stops and rewinds; the player stays visible so the track can be replayed. */
+    @FXML
+    private void onOnDemandStop() {
+        musicService.onDemandPause();
+        musicService.seekOnDemand(0);
+        if (onDemandSlider != null) onDemandSlider.setValue(0);
+        if (lblOnDemandCurrentTime != null) lblOnDemandCurrentTime.setText("0:00");
+        updateOnDemandPlayPauseButton();
+    }
+
+    /** Closes the player: audio stops and the ambiance goes back to the current mood. Nothing resumes. */
+    @FXML
+    private void onOnDemandClose() {
+        enterMode(MusicService.PlaybackMode.MOOD);
+        setMoodButtonIcon("▶");
+    }
+
+    @FXML
+    private void onToggleOnDemandLoop() {
+        if (btnOnDemandLoop != null) musicService.setOnDemandLoop(btnOnDemandLoop.isSelected());
+    }
+
     // --- Controles de preescucha ---
 
     private void startPreview(File file) {
@@ -475,6 +761,7 @@ public class PlayerController {
         musicService.previewTrack(file);
         updatePreviewPanel(true);
         updatePreviewPlayPauseButton();
+        updateOnDemandPlayPauseButton(); // the service pauses a playing on-demand track
     }
 
     @FXML
@@ -505,10 +792,13 @@ public class PlayerController {
             btnPreviewPlayPause.setText(musicService.isPreviewPlaying() ? "⏸" : "▶");
     }
 
+    /** The preview strip is only shown (and takes space) while a preview is active. */
     private void updatePreviewPanel(boolean active) {
+        if (previewPanel != null) {
+            previewPanel.setVisible(active);
+            previewPanel.setManaged(active);
+        }
         if (btnPreviewPlayPause != null) btnPreviewPlayPause.setDisable(!active);
-        // El botón stop del preview se deshabilita si no hay nada cargado
-        // (accedemos por el padre del botón no por fx:id — lo resolvemos por disable)
         if (previewSlider != null) previewSlider.setDisable(!active);
         if (!active && lblPreviewTrack != null)
             lblPreviewTrack.setText("No active preview");
@@ -524,30 +814,18 @@ public class PlayerController {
     // --- Estado de botones de mood ---
 
     private void updateButtons() {
-        boolean hasPaused    = musicService.isLoaded(TrackType.PAUSED);
-        boolean hasNormal    = musicService.isLoaded(TrackType.NORMAL);
-        boolean hasRaged     = musicService.isLoaded(TrackType.RAGED);
-        boolean hasAdvantage = musicService.isLoaded(TrackType.ADVANTAGE);
-
-        if (btnPaused != null)    btnPaused.setDisable(!hasPaused);
-        if (btnNormal != null)    btnNormal.setDisable(!hasNormal);
-        if (btnRaged != null)     btnRaged.setDisable(!hasRaged);
-        if (btnAdvantage != null) btnAdvantage.setDisable(!hasAdvantage);
-
-        // Limpiar clase activa de todos y reasignarla al mood actual
-        for (Button b : new Button[]{btnPaused, btnNormal, btnRaged, btnAdvantage}) {
-            if (b != null) b.getStyleClass().remove("btn-phase-active");
+        for (TrackType t : TrackType.values()) {
+            Button b = moodButtons.get(t);
+            if (b == null) continue;
+            // Empty cards stay enabled so they can receive drops; the click is a no-op (switchTrack guards)
+            b.getStyleClass().remove("btn-phase-empty");
+            b.getStyleClass().remove("btn-phase-active");
+            if (!musicService.isLoaded(t)) b.getStyleClass().add("btn-phase-empty");
         }
 
-        if (currentActiveType != null) {
-            Button active = switch (currentActiveType) {
-                case PAUSED    -> btnPaused;
-                case NORMAL    -> btnNormal;
-                case RAGED     -> btnRaged;
-                case ADVANTAGE -> btnAdvantage;
-            };
-            if (active != null && musicService.isLoaded(currentActiveType))
-                active.getStyleClass().add("btn-phase-active");
+        if (currentActiveType != null && musicService.isLoaded(currentActiveType)) {
+            Button active = moodButtons.get(currentActiveType);
+            if (active != null) active.getStyleClass().add("btn-phase-active");
         }
     }
 
@@ -561,403 +839,396 @@ public class PlayerController {
         });
     }
 
-    // --- Sesión ---
+    // --- Escenas ---
 
-    @FXML
-    private void onSetBackground() {
-        FileChooser chooser = new FileChooser();
-        chooser.setTitle("Select background for ambiance");
-        chooser.getExtensionFilters().add(
-                new FileChooser.ExtensionFilter("Background (images/video)",
-                        "*.png", "*.jpg", "*.jpeg", "*.bmp", "*.gif", "*.mp4", "*.avi"));
-
-        // Abrir en el último directorio de imagen usado, si existe
-        String lastImgDir = sessionConfig.getLastImageFolderPath();
-        if (lastImgDir != null) {
-            File dir = new File(lastImgDir);
-            if (dir.isDirectory()) chooser.setInitialDirectory(dir);
-        }
-
-        File file = chooser.showOpenDialog(null);
-        if (file == null) return;
-
-        String path = file.getAbsolutePath();
-        sessionConfig.setBackgroundImagePath(path);
-        sessionConfig.setLastImageFolderPath(file.getParent());
-        // Cualquier nuevo fondo borra la ventana de loop activa
-        pendingSegmentStart = null;
-        sessionConfig.setVideoSegmentStartMs(null);
-        sessionConfig.setVideoSegmentEndMs(null);
-        manager.save(sessionConfig);
-        if (ambianceStage != null) ambianceStage.setBackground(path);
-        updateBackgroundLabel(path);
-    }
-
-    @FXML
-    private void onSelectEffect() {
-        if (cmbEffect == null) return;
-        EffectType effect = cmbEffect.getValue();
-        if (effect == null) return;
-        sessionConfig.setMoodEffect(currentActiveType, effect);
-        manager.save(sessionConfig);
-        if (ambianceStage != null) ambianceStage.setMoodEffect(currentActiveType, effect);
-    }
-
-    @FXML
-    private void onSelectFitMode() {
-        if (refreshingUI || cmbFitMode == null) return;
-        BackgroundFitMode mode = cmbFitMode.getValue();
-        if (mode == null) return;
-        sessionConfig.setBackgroundFitMode(mode.name());
-        manager.save(sessionConfig);
-        if (ambianceStage != null) ambianceStage.setBackgroundFitMode(mode);
-    }
-
-    // --- Segment loop handlers ---
-
-    @FXML
-    private void onMarkStart() {
-        if (ambianceStage == null) return;
-        pendingSegmentStart = ambianceStage.getCurrentVideoTime();
-        if (lblSegmentInfo != null)
-            lblSegmentInfo.setText("Start " + formatSegmentTime(pendingSegmentStart) + " — mark end");
-        if (btnMarkEnd != null) btnMarkEnd.setDisable(false);
-    }
-
-    @FXML
-    private void onMarkEnd() {
-        if (ambianceStage == null || pendingSegmentStart == null) {
-            if (lblSegmentInfo != null) lblSegmentInfo.setText("Mark a start position first");
-            return;
-        }
-        Duration end = ambianceStage.getCurrentVideoTime();
-        Duration gap = end.subtract(pendingSegmentStart);
-        // Piso de 0.5s: verificado empíricamente que loops sub-2s reproducen sin problemas
-        if (end.lessThanOrEqualTo(pendingSegmentStart) || gap.lessThan(Duration.millis(500))) {
-            if (lblSegmentInfo != null) lblSegmentInfo.setText("End must be at least 0.5s after start");
-            return; // loop activo sin cambios; nada persistido
-        }
-        ambianceStage.setVideoSegment(pendingSegmentStart, end);
-        sessionConfig.setVideoSegmentStartMs((long) pendingSegmentStart.toMillis());
-        sessionConfig.setVideoSegmentEndMs((long) end.toMillis());
-        manager.save(sessionConfig);
-        String segLabel = "Loop: " + formatSegmentTime(pendingSegmentStart) + " – " + formatSegmentTime(end);
-        if (lblSegmentInfo != null) lblSegmentInfo.setText(segLabel);
-        // Advertencia suave para segmentos largos (T-21)
-        if (gap.greaterThan(Duration.seconds(30)) && lblSegmentInfo != null) {
-            lblSegmentInfo.setText(segLabel + "  (long segment — bake may be slow)");
-        }
-        rebakeIfBoomerangOn();
-        updateBoomerangEnablement();
-    }
-
-    @FXML
-    private void onClearSegment() {
-        if (ambianceStage == null) return;
-        // Forzar boomerang OFF antes de limpiar el segmento (T-11)
-        if (btnBoomerang != null && btnBoomerang.isSelected()) {
-            revertToggle();
-            ambianceStage.deactivateBoomerang();
-            sessionConfig.setBoomerangEnabled(false);
-        }
-        ambianceStage.clearVideoSegment();
-        pendingSegmentStart = null;
-        sessionConfig.setVideoSegmentStartMs(null);
-        sessionConfig.setVideoSegmentEndMs(null);
-        manager.save(sessionConfig);
-        if (lblSegmentInfo != null) lblSegmentInfo.setText("Full video");
-        if (btnMarkEnd != null) btnMarkEnd.setDisable(true);
-        updateBoomerangEnablement();
-    }
-
-    // --- Velocidad de reproducción de video ---
-
-    @FXML
-    private void onSelectVideoSpeed() {
-        if (refreshingUI || cmbVideoSpeed == null) return;
-        Double v = cmbVideoSpeed.getValue();
-        if (v == null) return;
-        if (ambianceStage != null) ambianceStage.setVideoRate(v);
-        sessionConfig.setVideoPlaybackRate(v);
-        manager.save(sessionConfig);
-    }
-
-    // --- Boomerang ---
-
-    /**
-     * Inyecta el resultado del sondeo de ffmpeg antes de applySession.
-     * Configura el hint en el label si ffmpeg no está disponible.
-     */
-    public void setFfmpegAvailable(boolean available) {
-        this.ffmpegAvailable = available;
-        if (btnBoomerang != null && lblBoomerangHint != null) {
-            lblBoomerangHint.setText(available ? "" : "Requires ffmpeg");
-        }
-    }
-
-    /**
-     * Actualiza el estado de habilitación del botón de boomerang.
-     * Requiere: video listo + segmento válido + ffmpeg disponible.
-     */
-    private void updateBoomerangEnablement() {
-        if (btnBoomerang == null) return;
-        boolean hasSegment = sessionConfig.getVideoSegmentStartMs() != null
-                          && sessionConfig.getVideoSegmentEndMs()   != null;
-        boolean ready = ambianceStage != null && ambianceStage.isVideoBackground();
-        btnBoomerang.setDisable(!(ffmpegAvailable && hasSegment && ready));
-    }
-
-    /**
-     * Revierte el toggle a estado no-seleccionado usando la guardia refreshingUI
-     * para evitar que setSelected dispare onToggleBoomerang recursivamente.
-     */
-    private void revertToggle() {
-        if (btnBoomerang == null) return;
+    private void refreshSceneCombo() {
+        if (cmbScene == null) return;
         refreshingUI = true;
         try {
-            btnBoomerang.setSelected(false);
+            cmbScene.setValue(null);
+            cmbScene.getItems().setAll(sessionConfig.getScenes());
+            cmbScene.setValue(sessionConfig.getActiveScene());
         } finally {
             refreshingUI = false;
         }
     }
 
-    /**
-     * Resetea el toggle del boomerang y desactiva el boomerang en AmbianceStage.
-     */
-    private void resetBoomerangToggle() {
-        revertToggle();
-        if (ambianceStage != null) ambianceStage.deactivateBoomerang();
+    /** Makes {@code target} the active scene: persists, loads its tracks/background/auras, syncs the editor. */
+    private void switchScene(Scene target) {
+        sessionConfig.setActiveScene(target.getId());
+        manager.save(sessionConfig);
+        refreshSceneCombo();
+        applyScene(sessionConfig.getActiveScene());
+        if (sceneEditor != null) sceneEditor.refresh();
+    }
+
+    @FXML
+    private void onNewScene() {
+        TextInputDialog d = new TextInputDialog("New scene");
+        d.setTitle("New scene");
+        d.setHeaderText(null);
+        d.setContentText("Name:");
+        d.showAndWait().map(String::trim).filter(n -> !n.isEmpty()).ifPresent(name ->
+            switchScene(sessionConfig.addScene(name)));
     }
 
     /**
-     * Manejador FXML del toggle de boomerang.
-     * La guardia refreshingUI previene recursión cuando se hace setSelected programáticamente.
+     * Saves the current setup (tracks, background, all auras including live tweaks) as a new
+     * named scene and switches to it; the original scene stays as it was.
      */
     @FXML
-    private void onToggleBoomerang() {
-        if (refreshingUI) return;
-        if (btnBoomerang == null || ambianceStage == null) return;
+    private void onSaveSceneAs() {
+        Scene active = sessionConfig.getActiveScene();
+        TextInputDialog d = new TextInputDialog(active.getName() + " copy");
+        d.setTitle("Save as new scene");
+        d.setHeaderText(null);
+        d.setContentText("Name:");
+        d.showAndWait().map(String::trim).filter(n -> !n.isEmpty()).ifPresent(name -> {
+            Scene copy = sessionConfig.duplicateScene(active.getId(), name);
+            if (copy != null) switchScene(copy);
+        });
+    }
 
-        boolean wantOn = btnBoomerang.isSelected();
-        Long s = sessionConfig.getVideoSegmentStartMs();
-        Long e = sessionConfig.getVideoSegmentEndMs();
-        String src = sessionConfig.getBackgroundImagePath();
-
-        if (!wantOn) {
-            // Toggle apagado
-            ambianceStage.deactivateBoomerang();
-            sessionConfig.setBoomerangEnabled(false);
-            manager.save(sessionConfig);
-            refreshSegmentLabel();
-            return;
+    @FXML
+    private void onEditScene() {
+        if (sceneEditor == null) {
+            sceneEditor = SceneEditorController.create(mainRoot.getScene().getWindow(), this);
         }
-
-        // Toggle encendido — validar condiciones
-        if (src == null || s == null || e == null) {
-            revertToggle();
-            return;
-        }
-        sessionConfig.setBoomerangEnabled(true);
-        manager.save(sessionConfig);
-
-        if (boomerangBaker.isCached(src, s, e)) {
-            // Cache hit: activación instantánea sin bake (T-06)
-            ambianceStage.activateBoomerang(boomerangBaker.cacheKeyPath(src, s, e).toString());
-            updateBoomerangEnablement();
-            refreshSegmentLabel();
-            return;
-        }
-
-        // Cache miss: iniciar bake asíncrono
-        startBake(src, s, e);
+        sceneEditor.show();
     }
 
     /**
-     * Inicia el bake asíncrono y configura el estado pendiente.
+     * Applies everything scene-specific: the four mood tracks (a slot without a usable file is
+     * unloaded, which stops it if it was playing), background, fit, segment, rate, boomerang
+     * and auras. The current mood is kept; a track that was playing keeps playing with the
+     * new scene's file (MusicService swaps the player in place).
+     */
+    private void applyScene(Scene scene) {
+        // 1. Tracks
+        Map<TrackType, String> assignments = scene.getAssignments();
+        for (TrackType t : TrackType.values()) {
+            String path = assignments.get(t);
+            if (path != null && new File(path).isFile()) {
+                if (!path.equals(loadedPaths.get(t))) {
+                    loadedPaths.put(t, path);
+                    musicService.loadTrack(t, new File(path), () -> onTrackLoaded(t));
+                }
+            } else {
+                loadedPaths.remove(t);
+                musicService.unloadTrack(t); // missing file or no assignment
+            }
+        }
+
+        // 2. Background + fit mode
+        applyBackgroundToAmbiance();
+        applyFitMode();
+
+        // 3. Auras: hand the scene's auras to the stage and crossfade to the current mood's
+        if (ambianceStage != null) {
+            Map<AuraSlot, AuraConfig> auras = new EnumMap<>(AuraSlot.class);
+            for (AuraSlot slot : AuraSlot.values()) auras.put(slot, scene.getAura(slot));
+            ambianceStage.setAuras(auras);
+            ambianceStage.setActiveSlot(liveSlot());
+        }
+
+        // 4. UI
+        refreshCards();
+        updateButtons();
+        updatePlayPauseButton();
+        resetMoodProgressIfEmpty();
+    }
+
+    /** Clears the mood progress bar when the selected mood has no track loaded (stale times otherwise). */
+    private void resetMoodProgressIfEmpty() {
+        if (musicService.isLoaded(currentActiveType)) return;
+        if (progressSlider != null) progressSlider.setValue(0);
+        if (lblCurrentTime != null) lblCurrentTime.setText("0:00");
+        if (lblTotalTime != null) lblTotalTime.setText("0:00");
+    }
+
+    /** Called on the FX thread when a mood track finished loading. */
+    private void onTrackLoaded(TrackType type) {
+        // Make the selected mood the current one when nothing is playing, so Play uses it
+        if (type == currentActiveType && !musicService.isPlaying()
+                && musicService.getCurrentTrack() != type) {
+            musicService.selectTrack(type);
+        }
+        refreshCards();
+        updateButtons();
+        updatePlayPauseButton();
+    }
+
+    // --- SceneHost ---
+
+    @Override public SessionConfig session() { return sessionConfig; }
+
+    @Override public void saveSession() { manager.save(sessionConfig); }
+
+    @Override public boolean isFfmpegAvailable() { return ffmpegAvailable; }
+
+    @Override
+    public void onSceneRenamed() {
+        refreshSceneCombo();
+    }
+
+    @Override
+    public boolean deleteActiveScene() {
+        if (!sessionConfig.deleteScene(sessionConfig.getActiveScene().getId())) return false;
+        manager.save(sessionConfig);
+        refreshSceneCombo();
+        applyScene(sessionConfig.getActiveScene());
+        if (sceneEditor != null) sceneEditor.refresh();
+        return true;
+    }
+
+    @Override
+    public void onAuraEdited(AuraSlot slot) {
+        if (slot == null) return;
+        // Always stored; the stage blends quickly only when the edited slot is the visible one
+        if (ambianceStage != null) ambianceStage.setAura(slot, sessionConfig.getActiveScene().getAura(slot));
+        refreshCards();
+        saveDebounce.playFromStart();
+    }
+
+    /**
+     * Assigns a track to a mood of the active scene. Pinning (a file copy when the track
+     * lives in the YouTube cache) runs off the FX thread; the scene is then updated and the
+     * track loaded on the FX thread.
+     */
+    @Override
+    public void assignTrack(TrackType type, File file) {
+        if (type == null || file == null || !file.isFile() || !isAudioFile(file)) return;
+        final Scene target = sessionConfig.getActiveScene();
+        final String source = file.getAbsolutePath();
+        CompletableFuture.supplyAsync(() -> TrackLibrary.pin(source), ioExecutor)
+            .whenComplete((pinned, err) -> Platform.runLater(() -> {
+                String path = (err == null && pinned != null) ? pinned : source;
+                // Already pinned: setAssignment's own pin is a no-op here (no IO on the FX thread)
+                target.setAssignment(type, path);
+                manager.save(sessionConfig);
+                if (target == sessionConfig.getActiveScene()) {
+                    loadedPaths.put(type, path);
+                    musicService.loadTrack(type, new File(path), () -> onTrackLoaded(type));
+                    refreshCards();
+                    if (sceneEditor != null) sceneEditor.refreshTracks();
+                }
+            }));
+    }
+
+    /**
+     * Removes the track of a mood. The player is released through MusicService.unloadTrack,
+     * which stops it if that mood was playing.
+     */
+    @Override
+    public void clearTrack(TrackType type) {
+        if (type == null) return;
+        sessionConfig.getActiveScene().setAssignment(type, null);
+        manager.save(sessionConfig);
+        loadedPaths.remove(type);
+        musicService.unloadTrack(type);
+        updateButtons();
+        updatePlayPauseButton();
+        resetMoodProgressIfEmpty();
+        refreshCards();
+        if (sceneEditor != null) sceneEditor.refreshTracks();
+    }
+
+    @Override
+    public void applyBackground() {
+        applyBackgroundToAmbiance();
+    }
+
+    @Override
+    public void applyFitMode() {
+        if (ambianceStage == null) return;
+        ambianceStage.setBackgroundFitMode(BackgroundFitMode.fromString(sessionConfig.getBackgroundFitMode()));
+    }
+
+    /**
+     * Pushes the active scene's background to the ambiance: sanitizes the stored path,
+     * sets segment and rate BEFORE the background (so the video picks them up on READY),
+     * then restores the boomerang from the cache or bakes it.
+     */
+    private void applyBackgroundToAmbiance() {
+        if (ambianceStage == null) return;
+        BackgroundConfig bg = sessionConfig.getActiveScene().getBackground();
+        String bgPath = bg.getPath();
+        // Sanear sesiones corruptas: un archivo de la caché de boomerang jamás es
+        // identidad válida de fondo (estado derivado; puede ser purgado en cualquier momento)
+        if (bgPath != null && boomerangBaker.isCachePath(bgPath)) {
+            bgPath = null;
+            bg.setPath(null);
+            bg.setSegmentStartMs(null);
+            bg.setSegmentEndMs(null);
+            bg.setBoomerangEnabled(false);
+        } else if (bgPath != null && !new File(bgPath).exists()) {
+            // La ruta fue guardada pero el archivo ya no existe: limpiar para evitar
+            // que session.json vuelva a persistir un path roto en la próxima sesión.
+            bgPath = null;
+            bg.setPath(null);
+        }
+
+        Long segStart = bg.getSegmentStartMs();
+        Long segEnd   = bg.getSegmentEndMs();
+        double rate = sessionConfig.getVideoPlaybackRate();
+
+        // Drop any boomerang/segment left by the previous background before the new one loads:
+        // the video branch of setBackground trusts the state set by the caller.
+        ambianceStage.resetBoomerang();
+
+        if (bgPath == null) {
+            ambianceStage.clearVideoSegment();
+            ambianceStage.setBackground(null);
+            return;
+        }
+
+        boolean isVideo = "Video".equals(BackgroundEditorController.mediaType(bgPath));
+        if (isVideo && segStart != null && segEnd != null) {
+            // Establecer el segmento ANTES de setBackground para que setVideo() lo reciba en READY
+            ambianceStage.setVideoSegment(Duration.millis(segStart), Duration.millis(segEnd));
+        } else {
+            // Also guards against a stale segment left from a previous background type
+            if (!isVideo) {
+                bg.setSegmentStartMs(null);
+                bg.setSegmentEndMs(null);
+            }
+            ambianceStage.clearVideoSegment();
+        }
+        // Establecer la velocidad ANTES de setBackground para que setVideo() la lea al crear el player
+        ambianceStage.setVideoRate(rate);
+        ambianceStage.setBackground(bgPath);
+
+        // Boomerang restore: applied state to the live ambiance
+        boolean wantBoomerang = Boolean.TRUE.equals(bg.getBoomerangEnabled());
+        if (wantBoomerang && isVideo && segStart != null && segEnd != null && ffmpegAvailable) {
+            if (boomerangBaker.isCached(bgPath, segStart, segEnd)) {
+                ambianceStage.activateBoomerang(
+                        boomerangBaker.cacheKeyPath(bgPath, segStart, segEnd).toString());
+            } else {
+                startBake(bgPath, segStart, segEnd);
+            }
+        } else {
+            bg.setBoomerangEnabled(false);
+        }
+    }
+
+    // --- Live ambiance boomerang state (used when a scene background is applied) ---
+
+    /**
+     * Injects the ffmpeg availability result before applySession.
+     */
+    public void setFfmpegAvailable(boolean available) {
+        this.ffmpegAvailable = available;
+    }
+
+    /**
+     * Starts an async bake for the live ambiance.
      */
     private void startBake(String src, long s, long e) {
         bakeGuardSrc   = src;
         bakeGuardStart = s;
         bakeGuardEnd   = e;
-        if (lblSegmentInfo != null) lblSegmentInfo.setText("Baking boomerang…");
-        // Deshabilitar el toggle durante el bake para evitar doble disparo
-        if (btnBoomerang != null) btnBoomerang.setDisable(true);
         boomerangBaker.bakeAsync(src, s, e,
                 outPath -> Platform.runLater(() -> onBakeSuccess(outPath, src, s, e)),
-                err     -> Platform.runLater(() -> onBakeFailure(err)));
+                err     -> Platform.runLater(() -> onBakeFailure(err, src, s, e)));
     }
 
-    /**
-     * Callback de éxito del bake, ejecutado en el hilo FX.
-     * Aplica la guardia de stale-bake antes de activar el boomerang.
-     */
-    private void onBakeSuccess(java.nio.file.Path out, String src, long s, long e) {
-        boolean stillValid =
-                btnBoomerang != null && btnBoomerang.isSelected()
-                && src.equals(sessionConfig.getBackgroundImagePath())
+    /** True while the active scene still wants exactly this background and segment. */
+    private boolean isBakeStillWanted(String src, long s, long e) {
+        return
+                src.equals(sessionConfig.getBackgroundImagePath())
                 && sessionConfig.getVideoSegmentStartMs() != null
                 && s == sessionConfig.getVideoSegmentStartMs()
+                && sessionConfig.getVideoSegmentEndMs() != null
                 && e == sessionConfig.getVideoSegmentEndMs()
                 && src.equals(bakeGuardSrc)
                 && s == bakeGuardStart
                 && e == bakeGuardEnd;
-
-        if (!stillValid) {
-            // Bake obsoleto: revertir el toggle y corregir el estado persistido (T-10)
-            revertToggle();
-            sessionConfig.setBoomerangEnabled(false);
-            manager.save(sessionConfig);
-            updateBoomerangEnablement();
-            refreshSegmentLabel();
-            return;
-        }
-        ambianceStage.activateBoomerang(out.toString());
-        updateBoomerangEnablement();
-        refreshSegmentLabel();
     }
 
-    /**
-     * Callback de fallo del bake, ejecutado en el hilo FX.
-     * El toggle nunca queda bloqueado: revertToggle() se llama primero.
-     */
-    private void onBakeFailure(String stderrTail) {
-        revertToggle();
+    private void onBakeSuccess(java.nio.file.Path out, String src, long s, long e) {
+        if (!isBakeStillWanted(src, s, e)) return;
+        ambianceStage.activateBoomerang(out.toString());
+    }
+
+    private void onBakeFailure(String stderrTail, String src, long s, long e) {
+        System.err.println(stderrTail);
+        // A failed bake for a scene the user already left must not clear the new scene's flag
+        if (!isBakeStillWanted(src, s, e)) return;
         if (ambianceStage != null) ambianceStage.deactivateBoomerang();
         sessionConfig.setBoomerangEnabled(false);
         manager.save(sessionConfig);
-        updateBoomerangEnablement();
-        if (lblSegmentInfo != null) {
-            lblSegmentInfo.setText("Boomerang bake failed");
-            PauseTransition pt = new PauseTransition(Duration.seconds(3));
-            pt.setOnFinished(ev -> refreshSegmentLabel());
-            pt.play();
-        }
-        System.err.println(stderrTail);
     }
 
-    /**
-     * Si el boomerang está ON al re-marcar un segmento, recomputa o re-bakea.
-     */
-    private void rebakeIfBoomerangOn() {
-        if (btnBoomerang == null || !btnBoomerang.isSelected()) return;
-        String src = sessionConfig.getBackgroundImagePath();
-        Long s = sessionConfig.getVideoSegmentStartMs();
-        Long e = sessionConfig.getVideoSegmentEndMs();
-        if (src == null || s == null || e == null) return;
-        if (boomerangBaker.isCached(src, s, e)) {
-            // Cache hit: swap instantáneo (T-09)
-            ambianceStage.activateBoomerang(boomerangBaker.cacheKeyPath(src, s, e).toString());
-            refreshSegmentLabel();
-        } else {
-            // Cache miss: re-bake; el clip bakeado actual sigue reproduciendo (T-08)
-            startBake(src, s, e);
-        }
-    }
-
-    // --- Selección de pantalla de ambiance ---
-
-    /**
-     * Repopula el ComboBox de pantallas sin disparar onSelectScreen.
-     * Conserva la selección previa si el índice sigue siendo válido.
-     */
-    private void populateScreenCombo() {
-        if (cmbScreen == null) return;
-        refreshingUI = true;
-        try {
-            int previousComboIndex = cmbScreen.getSelectionModel().getSelectedIndex();
-            List<Screen> screens = Screen.getScreens();
-
-            cmbScreen.getItems().clear();
-            cmbScreen.getItems().add("Auto (recommended)");
-            for (int i = 0; i < screens.size(); i++) {
-                Screen s = screens.get(i);
-                int w = (int) s.getBounds().getWidth();
-                int h = (int) s.getBounds().getHeight();
-                String tag = s.equals(Screen.getPrimary()) ? " (primary)" : "";
-                cmbScreen.getItems().add("Screen " + (i + 1) + " — " + w + "x" + h + tag);
-            }
-
-            // Restaurar selección previa si sigue siendo válida; si no, seleccionar "Auto"
-            if (previousComboIndex >= 0 && previousComboIndex < cmbScreen.getItems().size()) {
-                cmbScreen.getSelectionModel().select(previousComboIndex);
-            } else {
-                cmbScreen.getSelectionModel().select(0);
-            }
-        } finally {
-            refreshingUI = false;
-        }
-    }
-
-    /**
-     * Convierte el índice visual del ComboBox al índice de Screen (0-based) o -1 para Auto.
-     * Índice 0 del combo → Auto (-1); índice N → pantalla N-1.
-     */
-    private int screenComboIndexToScreenIndex(int comboIndex) {
-        return comboIndex <= 0 ? -1 : comboIndex - 1;
-    }
+    // --- Ambiance y selección de pantalla ---
 
     @FXML
-    private void onSelectScreen() {
-        if (refreshingUI || cmbScreen == null) return;
-        int resolvedIndex = screenComboIndexToScreenIndex(cmbScreen.getSelectionModel().getSelectedIndex());
+    private void onToggleAmbiance() {
+        if (ambianceStage == null) return;
+        if (ambianceStage.isVisible()) ambianceStage.hide();
+        else ambianceStage.show();
+    }
+
+    private void updateAmbianceToggle(boolean showing) {
+        if (btnToggleAmbiance == null) return;
+        btnToggleAmbiance.setText(showing ? "Hide ambiance" : "Show ambiance");
+    }
+
+    /**
+     * Repopula el menú de pantallas sin disparar la selección.
+     * Conserva la selección previa si el índice sigue siendo válido.
+     */
+    private void populateScreenMenu() {
+        if (btnToggleAmbiance == null) return;
+        int previousIndex = selectedScreenItem();
+        List<Screen> screens = Screen.getScreens();
+
+        btnToggleAmbiance.getItems().clear();
+        screenGroup.getToggles().clear();
+        addScreenItem("Auto (recommended)", 0);
+        for (int i = 0; i < screens.size(); i++) {
+            Screen s = screens.get(i);
+            int w = (int) s.getBounds().getWidth();
+            int h = (int) s.getBounds().getHeight();
+            String tag = s.equals(Screen.getPrimary()) ? " (primary)" : "";
+            addScreenItem("Screen " + (i + 1) + " — " + w + "x" + h + tag, i + 1);
+        }
+
+        // Restaurar selección previa si sigue siendo válida; si no, seleccionar "Auto"
+        selectScreenItem(previousIndex >= 0 && previousIndex < screenItemCount() ? previousIndex : 0);
+    }
+
+    private void addScreenItem(String text, int menuIndex) {
+        RadioMenuItem item = new RadioMenuItem(text);
+        item.setToggleGroup(screenGroup);
+        item.setOnAction(e -> onScreenSelected(menuIndex));
+        btnToggleAmbiance.getItems().add(item);
+    }
+
+    private int screenItemCount() {
+        return btnToggleAmbiance == null ? 0 : btnToggleAmbiance.getItems().size();
+    }
+
+    private int selectedScreenItem() {
+        if (btnToggleAmbiance == null) return -1;
+        Toggle selected = screenGroup.getSelectedToggle();
+        return selected == null ? -1 : btnToggleAmbiance.getItems().indexOf(selected);
+    }
+
+    private void selectScreenItem(int index) {
+        if (btnToggleAmbiance == null || index < 0 || index >= screenItemCount()) return;
+        ((RadioMenuItem) btnToggleAmbiance.getItems().get(index)).setSelected(true);
+    }
+
+    /** Menu index 0 → Auto (-1); index N → screen N-1. */
+    private void onScreenSelected(int menuIndex) {
+        if (refreshingUI) return;
+        int resolvedIndex = menuIndex <= 0 ? -1 : menuIndex - 1;
         sessionConfig.setAmbianceScreenIndex(resolvedIndex);
         manager.save(sessionConfig);
         if (ambianceStage != null) {
             ambianceStage.applyScreen(resolvedIndex);
         }
-    }
-
-    // --- Label de archivo de fondo ---
-
-    /**
-     * Actualiza el label con el nombre del archivo de fondo actual.
-     * Muestra el placeholder si la ruta es null o el archivo no existe.
-     */
-    private void updateBackgroundLabel(String path) {
-        if (lblBackgroundFile == null) return;
-        if (path == null || !new File(path).exists()) {
-            lblBackgroundFile.setText("No background set");
-            if (lblBackgroundType != null) lblBackgroundType.setText("");
-        } else {
-            lblBackgroundFile.setText(new File(path).getName());
-            if (lblBackgroundType != null) lblBackgroundType.setText(backgroundMediaType(path));
-        }
-        boolean isVideo = "Video".equals(backgroundMediaType(path));
-        if (segmentControls != null) {
-            segmentControls.setVisible(isVideo);
-            segmentControls.setManaged(isVideo);
-        }
-        // Resetear habilitación; los botones de marca se re-habilitan en el callback onVideoReady.
-        // Clear queda habilitado con cualquier fondo de video (REQ-04), sin esperar READY.
-        if (btnMarkStart != null)    btnMarkStart.setDisable(true);
-        if (btnMarkEnd != null)      btnMarkEnd.setDisable(true);
-        if (btnClearSegment != null) btnClearSegment.setDisable(!isVideo);
-        pendingSegmentStart = null;
-        refreshSegmentLabel();
-        // Resetear boomerang al cambiar el fondo (T-12/T-13).
-        // Durante restauración de sesión se omite: el bloque de restore aplica el estado correcto.
-        if (!applyingSession) {
-            resetBoomerangToggle();
-            sessionConfig.setBoomerangEnabled(false);
-            updateBoomerangEnablement();
-        }
-    }
-
-    /**
-     * Infiere el tipo de medio a partir de la extensión del archivo.
-     * Retorna "Image", "GIF", "Video" o "" para extensiones desconocidas.
-     */
-    private String backgroundMediaType(String path) {
-        if (path == null) return "";
-        String lower = path.toLowerCase();
-        int dot = lower.lastIndexOf('.');
-        if (dot < 0) return "";
-        return switch (lower.substring(dot + 1)) {
-            case "png", "jpg", "jpeg", "bmp" -> "Image";
-            case "gif"                        -> "GIF";
-            case "mp4", "avi"                 -> "Video";
-            default                           -> "";
-        };
     }
 
     // --- Slider de volumen maestro ---
@@ -999,109 +1270,56 @@ public class PlayerController {
         });
     }
 
-    // --- Sliders de sensibilidad ---
+    // --- Biblioteca: celdas del árbol (drag + menú contextual) ---
 
-    /**
-     * Conecta los cuatro sliders de sensibilidad con el mapa en memoria y la persistencia.
-     * Llamado desde initialize() después de pre-sembrar moodSensitivity con valores por defecto.
-     */
-    private void wireSensitivitySliders() {
-        wireSingleSensitivitySlider(TrackType.PAUSED,     sldSensPaused,     lblSensPaused);
-        wireSingleSensitivitySlider(TrackType.NORMAL,     sldSensNormal,     lblSensNormal);
-        wireSingleSensitivitySlider(TrackType.RAGED,      sldSensRaged,      lblSensRaged);
-        wireSingleSensitivitySlider(TrackType.ADVANTAGE,  sldSensAdvantage,  lblSensAdvantage);
-    }
+    /** Tree cell for the library: drag a track onto a mood card, or use the "Assign to" context menu. */
+    private final class LibraryCell extends TreeCell<File> {
+        private final ContextMenu menu = new ContextMenu();
 
-    private void wireSingleSensitivitySlider(TrackType mood, Slider slider, Label valueLabel) {
-        if (slider == null) return;
+        LibraryCell() {
+            Menu assign = new Menu("Assign to");
+            assign.getItems().addAll(
+                    assignItem("Paused", TrackType.PAUSED),
+                    assignItem("Normal", TrackType.NORMAL),
+                    assignItem("Raged", TrackType.RAGED),
+                    assignItem("Advantage", TrackType.ADVANTAGE));
+            MenuItem playNow = new MenuItem("Play now");
+            playNow.setOnAction(e -> {
+                File f = getItem();
+                if (f != null && f.isFile()) playNow(f, null);
+            });
+            menu.getItems().addAll(playNow, assign);
 
-        // Valor inicial desde el mapa en memoria (ya pre-sembrado con 2.0 en initialize)
-        double initial = moodSensitivity.getOrDefault(mood, 2.0);
-        slider.setValue(initial);
-        if (valueLabel != null) valueLabel.setText(String.format("%.1fx", initial));
-
-        // Listener de valor: actualiza mapa y label en tiempo real
-        slider.valueProperty().addListener((obs, oldV, newV) -> {
-            double rounded = Math.round(newV.doubleValue() * 10.0) / 10.0;
-            moodSensitivity.put(mood, rounded);
-            if (valueLabel != null) valueLabel.setText(String.format("%.1fx", rounded));
-            if (mood == currentActiveType && ambianceStage != null) {
-                ambianceStage.setSensitivity(rounded);
-            }
-            // Persistencia en false-edge de valueChanging (cubre flechas de teclado)
-        });
-
-        // Persistencia al soltar el mouse
-        slider.setOnMouseReleased(e -> {
-            double rounded = Math.round(slider.getValue() * 10.0) / 10.0;
-            sessionConfig.setMoodSensitivity(mood, rounded);
-            manager.save(sessionConfig);
-        });
-
-        // Persistencia al finalizar cambio por teclado (false-edge de valueChanging)
-        slider.valueChangingProperty().addListener((obs, wasChanging, isChanging) -> {
-            if (wasChanging && !isChanging) {
-                double rounded = Math.round(slider.getValue() * 10.0) / 10.0;
-                sessionConfig.setMoodSensitivity(mood, rounded);
-                manager.save(sessionConfig);
-            }
-        });
-
-        // Persistencia al perder el foco (cubre teclas en los extremos del rango)
-        slider.focusedProperty().addListener((obs, hadFocus, hasFocus) -> {
-            if (hadFocus && !hasFocus) {
-                double rounded = Math.round(slider.getValue() * 10.0) / 10.0;
-                sessionConfig.setMoodSensitivity(mood, rounded);
-                manager.save(sessionConfig);
-            }
-        });
-    }
-
-    /**
-     * Aplica el valor del mapa en memoria al slider y label indicados.
-     * Usado desde applySession (Platform.runLater) para restaurar la UI.
-     */
-    private void updateSensitivitySlider(TrackType mood, Slider slider, Label valueLabel) {
-        if (slider == null) return;
-        double v = moodSensitivity.getOrDefault(mood, 2.0);
-        slider.setValue(v);
-        if (valueLabel != null) valueLabel.setText(String.format("%.1fx", v));
-    }
-
-    // --- Lista de asignaciones ---
-
-    /**
-     * Reconstruye la lista de asignaciones del panel de detalles.
-     * Muestra una fila por TrackType con el nombre del archivo asignado o "(none)".
-     */
-    private void refreshAssignments() {
-        if (assignmentsList == null) return;
-        assignmentsList.getChildren().clear();
-        Map<TrackType, String> assignments = sessionConfig.getAssignments();
-        for (TrackType t : TrackType.values()) {
-            String path = assignments.get(t);
-            String display = (path != null && !path.isEmpty())
-                ? new File(path).getName()
-                : "(none)";
-            Label row = new Label(t.name() + "  →  " + display);
-            row.getStyleClass().add("lbl-preview-track");
-            row.setMaxWidth(Double.MAX_VALUE);
-            assignmentsList.getChildren().add(row);
+            setOnDragDetected(e -> {
+                File f = getItem();
+                if (f == null || f.isDirectory()) return;
+                Dragboard db = startDragAndDrop(TransferMode.COPY);
+                ClipboardContent content = new ClipboardContent();
+                content.putFiles(List.of(f));
+                db.setContent(content);
+                e.consume();
+            });
         }
-    }
 
-    @FXML
-    private void onAssignTrack() {
-        if (treeFiles == null || cmbTrackType == null) return;
-        TreeItem<File> selectedItem = treeFiles.getSelectionModel().getSelectedItem();
-        if (selectedItem == null) return;
-        File selected = selectedItem.getValue();
-        TrackType type = cmbTrackType.getValue();
-        if (selected != null && !selected.isDirectory() && type != null) {
-            musicService.loadTrack(type, selected);
-            sessionConfig.put(type, selected.getAbsolutePath());
-            manager.save(sessionConfig);
-            refreshAssignments();
+        private MenuItem assignItem(String label, TrackType type) {
+            MenuItem item = new MenuItem(label);
+            item.setOnAction(e -> {
+                File f = getItem();
+                if (f != null && f.isFile()) assignTrack(type, f);
+            });
+            return item;
+        }
+
+        @Override
+        protected void updateItem(File item, boolean empty) {
+            super.updateItem(item, empty);
+            if (empty || item == null) {
+                setText(null);
+                setContextMenu(null);
+                return;
+            }
+            setText(item.isDirectory() ? "📁 " + item.getName() : item.getName());
+            setContextMenu(item.isDirectory() ? null : menu);
         }
     }
 
@@ -1199,6 +1417,144 @@ public class PlayerController {
         persistPlaylists();
     }
 
+    @FXML
+    private void onAddYoutubeUrl() {
+        if (lblYoutubeError != null) { lblYoutubeError.setText(""); lblYoutubeError.setVisible(false); lblYoutubeError.setManaged(false); }
+
+        String pname = cmbPlaylist.getValue();
+        if (pname == null || pname.isBlank()) {
+            showYoutubeError("Select a playlist first.");
+            return;
+        }
+
+        String url = txtYoutubeUrl != null ? txtYoutubeUrl.getText().trim() : "";
+        Optional<String> vid = YouTubeDownloader.extractVideoId(url);
+        if (vid.isEmpty()) {
+            showYoutubeError("Not a valid YouTube URL.");
+            return;
+        }
+
+        if (!YouTubeDownloader.isYtDlpAvailable()) {
+            new Alert(Alert.AlertType.ERROR,
+                    "yt-dlp not found on PATH. Install it to use this feature.").showAndWait();
+            return;
+        }
+
+        final String capturedUrl = url;
+        final String capturedVid = vid.get();
+        final String placeholderText = "⬇ Downloading... (" + capturedVid + ")";
+
+        if (btnAddYoutube != null) btnAddYoutube.setDisable(true);
+        lstPlaylistTracks.getItems().add(placeholderText);
+        if (txtYoutubeUrl != null) txtYoutubeUrl.clear();
+
+        youTubeDownloader.downloadAsync(capturedUrl, capturedVid,
+                result -> Platform.runLater(() -> {
+                    PlaylistItem item = new PlaylistItem(
+                            result.getPath(), capturedUrl, result.getTitle());
+                    playlistManager.addItem(pname, item);
+                    persistPlaylists();
+                    if (btnAddYoutube != null) btnAddYoutube.setDisable(false);
+                    refreshPlaylistUI();
+                }),
+                err -> Platform.runLater(() -> {
+                    if (btnAddYoutube != null) btnAddYoutube.setDisable(false);
+                    refreshPlaylistUI();
+                    new Alert(Alert.AlertType.ERROR, "Download failed: " + err).showAndWait();
+                })
+        );
+    }
+
+    /** Downloads the pasted YouTube URL (a cache hit skips yt-dlp) and plays it on demand. */
+    @FXML
+    private void onPlayYoutubeUrl() {
+        if (lblYoutubeError != null) { lblYoutubeError.setText(""); lblYoutubeError.setVisible(false); lblYoutubeError.setManaged(false); }
+        String url = txtYoutubeUrl != null ? txtYoutubeUrl.getText().trim() : "";
+        playYoutubeNow(url);
+    }
+
+    private void playYoutubeNow(String url) {
+        Optional<String> vid = YouTubeDownloader.extractVideoId(url);
+        if (vid.isEmpty()) {
+            showYoutubeError("Not a valid YouTube URL.");
+            return;
+        }
+        if (!YouTubeDownloader.isYtDlpAvailable()) {
+            new Alert(Alert.AlertType.ERROR,
+                    "yt-dlp not found on PATH. Install it to use this feature.").showAndWait();
+            return;
+        }
+        if (btnPlayYoutube != null) btnPlayYoutube.setDisable(true);
+        showYtDlpStatus("Downloading track...");
+        youTubeDownloader.downloadAsync(url, vid.get(),
+                result -> Platform.runLater(() -> {
+                    if (btnPlayYoutube != null) btnPlayYoutube.setDisable(false);
+                    ytDlpStatusClear.playFromStart();
+                    if (txtYoutubeUrl != null) txtYoutubeUrl.clear();
+                    playNow(new File(result.getPath()), result.displayName());
+                }),
+                err -> Platform.runLater(() -> {
+                    if (btnPlayYoutube != null) btnPlayYoutube.setDisable(false);
+                    showYoutubeError("Download failed: " + err);
+                })
+        );
+    }
+
+    @FXML
+    private void onBrowseYouTube() {
+        if (!YouTubeDownloader.isYtDlpAvailable()) {
+            new Alert(Alert.AlertType.ERROR,
+                    "yt-dlp not found on PATH. Install it to use this feature.").showAndWait();
+            return;
+        }
+        Stage owner = (Stage) btnBrowseYoutube.getScene().getWindow();
+        YoutubePicker.show(owner, youTubeDownloader, result -> {
+            playYoutubeNow(result.url());
+        });
+    }
+
+    private final PauseTransition ytDlpStatusClear = new PauseTransition(javafx.util.Duration.seconds(5));
+
+    /** Starts the managed yt-dlp download/update in the background and mirrors its status in the YouTube label. */
+    private void startYtDlpManager() {
+        ytDlpStatusClear.setOnFinished(e -> {
+            if (lblYoutubeError != null) {
+                lblYoutubeError.setText("");
+                lblYoutubeError.setVisible(false);
+                lblYoutubeError.setManaged(false);
+            }
+        });
+        YtDlpManager mgr = YtDlpManager.get();
+        mgr.setStatusListener(msg -> Platform.runLater(() -> showYtDlpStatus(msg)));
+        mgr.ensureReadyAsync();
+    }
+
+    private void showYtDlpStatus(String message) {
+        if (lblYoutubeError == null) return;
+        boolean error = message.startsWith("Could not");
+        lblYoutubeError.setText(message);
+        lblYoutubeError.setStyle(error ? "" : "-fx-text-fill: #8a8f98;");
+        lblYoutubeError.setVisible(true);
+        lblYoutubeError.setManaged(true);
+        ytDlpStatusClear.stop();
+        if (!message.endsWith("...")) {
+            ytDlpStatusClear.setDuration(javafx.util.Duration.seconds(error ? 10 : 4));
+            ytDlpStatusClear.playFromStart();
+        }
+    }
+
+    private void showYoutubeError(String message) {
+        if (lblYoutubeError != null) {
+            ytDlpStatusClear.stop();
+            lblYoutubeError.setStyle("");
+            lblYoutubeError.setText(message);
+            lblYoutubeError.setVisible(true);
+            lblYoutubeError.setManaged(true);
+        } else {
+            new Alert(Alert.AlertType.ERROR, message).showAndWait();
+        }
+    }
+
     private void persistPlaylists() {
         sessionConfig.setPlaylists(playlistManager.getPlaylists());
         manager.save(sessionConfig);
@@ -1212,6 +1568,7 @@ public class PlayerController {
             if (btnPlaylistPlayPause != null) btnPlaylistPlayPause.setText("▶");
         } else {
             playlistManager.getCurrentTrack().ifPresent(f -> {
+                enterMode(MusicService.PlaybackMode.PLAYLIST);
                 musicService.playPlaylistTrack(f);
                 if (btnPlaylistPlayPause != null) btnPlaylistPlayPause.setText("⏸");
             });
@@ -1220,6 +1577,7 @@ public class PlayerController {
 
     @FXML private void onPrev() {
         playlistManager.prev().ifPresent(f -> {
+            enterMode(MusicService.PlaybackMode.PLAYLIST);
             musicService.playPlaylistTrack(f);
             if (btnPlaylistPlayPause != null) btnPlaylistPlayPause.setText("⏸");
         });
@@ -1228,6 +1586,7 @@ public class PlayerController {
 
     @FXML private void onNext() {
         playlistManager.next().ifPresentOrElse(f -> {
+            enterMode(MusicService.PlaybackMode.PLAYLIST);
             musicService.playPlaylistTrack(f);
             if (btnPlaylistPlayPause != null) btnPlaylistPlayPause.setText("⏸");
         }, () -> {
@@ -1260,11 +1619,11 @@ public class PlayerController {
         if (current != null && cmbPlaylist.getItems().contains(current))
             cmbPlaylist.setValue(current);
 
-        // Repopulate track ListView with basenames
+        // Repopulate track ListView with display names (title for YouTube tracks, filename otherwise)
         if (lstPlaylistTracks != null) {
             lstPlaylistTracks.getItems().setAll(
-                playlistManager.getActivePaths().stream()
-                    .map(path -> new File(path).getName())
+                playlistManager.getActiveItems().stream()
+                    .map(PlaylistItem::displayName)
                     .toList()
             );
 
@@ -1283,147 +1642,31 @@ public class PlayerController {
         }
     }
 
+
     public void applySession(SessionConfig cfg) {
         if (cfg == null) return;
-        cfg.getAssignments().forEach((type, path) -> {
-            File file = new File(path);
-            if (file.exists()) {
-                musicService.loadTrack(type, file);
-                sessionConfig.put(type, path);
-            }
-        });
+        // Keep the loaded scenes (ids, assignments, backgrounds, auras); scene-specific state is
+        // restored by applyScene below. Only session-wide settings are restored here.
+        sessionConfig.adoptScenesFrom(cfg);
 
-        // Restore per-mood effect preferences
-        for (TrackType type : TrackType.values()) {
-            EffectType effect = cfg.getMoodEffect(type);
-            sessionConfig.setMoodEffect(type, effect);
-            if (ambianceStage != null) ambianceStage.setMoodEffect(type, effect);
-        }
-
-        // Restaurar ruta de imagen de fondo global
-        String bgPath = cfg.getBackgroundImagePath();
-        if (bgPath != null && new File(bgPath).exists()) {
-            // La ruta existe: persistir y aplicar normalmente.
-            sessionConfig.setBackgroundImagePath(bgPath);
-        } else if (bgPath != null) {
-            // La ruta fue guardada pero el archivo ya no existe: limpiar para evitar
-            // que session.json vuelva a persistir un path roto en la próxima sesión.
-            sessionConfig.setBackgroundImagePath(null);
-            bgPath = null;
-        }
         String lastImgDir = cfg.getLastImageFolderPath();
         if (lastImgDir != null) {
             sessionConfig.setLastImageFolderPath(lastImgDir);
         }
-        // Reflejar valores de segmento en sessionConfig local para que saves posteriores los round-tripeen
-        Long segStart = cfg.getVideoSegmentStartMs();
-        Long segEnd   = cfg.getVideoSegmentEndMs();
-        sessionConfig.setVideoSegmentStartMs(segStart);
-        sessionConfig.setVideoSegmentEndMs(segEnd);
-
-        // Restaurar velocidad de reproducción de video
-        double restoredRate = cfg.getVideoPlaybackRate();
-        sessionConfig.setVideoPlaybackRate(restoredRate);
-
-        final String bgPathFinal = bgPath;
-        Platform.runLater(() -> {
-            applyingSession = true;
-            try {
-            if (ambianceStage != null && bgPathFinal != null) {
-                boolean isVideo = "Video".equals(backgroundMediaType(bgPathFinal));
-                if (isVideo && segStart != null && segEnd != null) {
-                    // Establecer el segmento ANTES de setBackground para que setVideo() lo reciba en READY
-                    ambianceStage.setVideoSegment(Duration.millis(segStart), Duration.millis(segEnd));
-                } else if (!isVideo) {
-                    // Guardia: segmento obsoleto de una sesión anterior donde cambió el tipo de fondo
-                    sessionConfig.setVideoSegmentStartMs(null);
-                    sessionConfig.setVideoSegmentEndMs(null);
-                    if (ambianceStage != null) {
-                        ambianceStage.clearVideoSegment();
-                    }
-                }
-                // Establecer la velocidad ANTES de setBackground para que setVideo() la lea al crear el player
-                if (ambianceStage != null) ambianceStage.setVideoRate(restoredRate);
-                ambianceStage.setBackground(bgPathFinal);   // dispara setVideo → aplica campos en READY
-                updateBackgroundLabel(bgPathFinal);          // alterna visibilidad de segmentControls
-
-                // Bloque de restauración de boomerang — R-4: debe ir DESPUÉS de updateBackgroundLabel
-                // (segmento ya establecido, velocidad ya establecida, fondo ya cargado)
-                boolean isVideoBg = "Video".equals(backgroundMediaType(bgPathFinal));
-                boolean wantBoomerang = Boolean.TRUE.equals(cfg.getBoomerangEnabled());
-                if (wantBoomerang && isVideoBg && segStart != null && segEnd != null && ffmpegAvailable) {
-                    sessionConfig.setBoomerangEnabled(true);
-                    refreshingUI = true;
-                    try {
-                        if (btnBoomerang != null) btnBoomerang.setSelected(true);
-                    } finally {
-                        refreshingUI = false;
-                    }
-                    if (boomerangBaker.isCached(bgPathFinal, segStart, segEnd)) {
-                        // Cache hit: activación instantánea (T-17)
-                        ambianceStage.activateBoomerang(
-                                boomerangBaker.cacheKeyPath(bgPathFinal, segStart, segEnd).toString());
-                    } else {
-                        // Cache miss: re-bake silencioso (T-18)
-                        startBake(bgPathFinal, segStart, segEnd);
-                    }
-                } else {
-                    sessionConfig.setBoomerangEnabled(false);
-                }
-                updateBoomerangEnablement();
-            } else {
-                updateBackgroundLabel(null);
-            }
-            // Restaurar selección del combo dentro del bloque refreshingUI
-            refreshingUI = true;
-            try {
-                if (cmbVideoSpeed != null) {
-                    // Buscar el valor en la lista; si no existe, seleccionar 1.0
-                    boolean found = cmbVideoSpeed.getItems().contains(restoredRate);
-                    cmbVideoSpeed.setValue(found ? restoredRate : 1.0);
-                }
-            } finally {
-                refreshingUI = false;
-            }
-            } finally {
-                applyingSession = false;
-            }
-        });
 
         // Restaurar índice de pantalla de ambiance
         int screenIdx = cfg.getAmbianceScreenIndex();
         sessionConfig.setAmbianceScreenIndex(screenIdx);
         Platform.runLater(() -> {
-            populateScreenCombo();
-            // Seleccionar el ítem correcto en el combo (índice -1 → posición 0 "Auto")
-            if (cmbScreen != null) {
-                int comboPos = screenIdx < 0 ? 0 : screenIdx + 1;
-                // Si el índice recordado está fuera del rango disponible, mostrar "Auto"
-                // sin sobrescribir el índice guardado — la intención se conserva.
-                int safePos = comboPos < cmbScreen.getItems().size() ? comboPos : 0;
-                refreshingUI = true;
-                try {
-                    cmbScreen.getSelectionModel().select(safePos);
-                } finally {
-                    refreshingUI = false;
-                }
-            }
+            populateScreenMenu();
+            // Seleccionar el ítem correcto en el menú (índice -1 → posición 0 "Auto")
+            int menuPos = screenIdx < 0 ? 0 : screenIdx + 1;
+            // Si el índice recordado está fuera del rango disponible, mostrar "Auto"
+            // sin sobrescribir el índice guardado — la intención se conserva.
+            selectScreenItem(menuPos < screenItemCount() ? menuPos : 0);
             if (ambianceStage != null) {
                 ambianceStage.applyScreen(screenIdx);
             }
-        });
-
-        // Restaurar modo de ajuste del fondo
-        BackgroundFitMode fit = BackgroundFitMode.fromString(cfg.getBackgroundFitMode());
-        sessionConfig.setBackgroundFitMode(fit.name());
-        Platform.runLater(() -> {
-            refreshingUI = true;
-            try {
-                if (cmbFitMode != null) cmbFitMode.setValue(fit);
-            } finally {
-                refreshingUI = false;
-            }
-            if (ambianceStage != null) ambianceStage.setBackgroundFitMode(fit);
         });
 
         String lastPath = cfg.getLastFolderPath();
@@ -1438,6 +1681,10 @@ public class PlayerController {
 
         // T-15: Restore playlists
         playlistManager.setPlaylists(cfg.getPlaylists());
+        // Carry the global playlist state over, or the next save would drop it from session.json
+        sessionConfig.setPlaylists(cfg.getPlaylists());
+        sessionConfig.setActiveMode(cfg.getActiveMode());
+        sessionConfig.setActivePlaylistName(cfg.getActivePlaylistName());
         refreshPlaylistUI();
 
         // T-15: Restore active mode
@@ -1454,19 +1701,8 @@ public class PlayerController {
             applyingSession = false;
         }
 
-        // Restaurar sensibilidades por mood desde la sesión guardada
-        for (TrackType t : TrackType.values()) {
-            double v = cfg.getMoodSensitivity(t);
-            moodSensitivity.put(t, v);
-            sessionConfig.setMoodSensitivity(t, v);
-        }
         // Aplicar en UI (puede ejecutarse antes de show(); Platform.runLater es seguro)
         Platform.runLater(() -> {
-            updateSensitivitySlider(TrackType.PAUSED,     sldSensPaused,     lblSensPaused);
-            updateSensitivitySlider(TrackType.NORMAL,     sldSensNormal,     lblSensNormal);
-            updateSensitivitySlider(TrackType.RAGED,      sldSensRaged,      lblSensRaged);
-            updateSensitivitySlider(TrackType.ADVANTAGE,  sldSensAdvantage,  lblSensAdvantage);
-
             // Restaurar volumen maestro desde sesión
             double mv = cfg.getMasterVolume();
             sessionConfig.setMasterVolume(mv);
@@ -1475,7 +1711,9 @@ public class PlayerController {
             if (lblMasterVolume != null)
                 lblMasterVolume.setText(Math.round(mv * 100) + "%");
 
-            refreshAssignments();
+            // Scene part: tracks, background, auras. Runs after the ambiance stage has opened.
+            refreshSceneCombo();
+            applyScene(sessionConfig.getActiveScene());
         });
     }
 
@@ -1555,6 +1793,11 @@ public class PlayerController {
 
     @FXML
     private void onCloseWindow(ActionEvent event) {
+        if (sceneEditor != null) sceneEditor.dispose(); // releases the background preview player
+        if (saveDebounce.getStatus() == Animation.Status.RUNNING) {
+            saveDebounce.stop();
+            manager.save(sessionConfig); // flush a pending editor save
+        }
         Platform.exit();
         System.exit(0);
     }
@@ -1572,31 +1815,14 @@ public class PlayerController {
         return (totalSeconds / 60) + ":" + String.format("%02d", totalSeconds % 60);
     }
 
-    /**
-     * Formatea un Duration como m:ss para el label del segmento (por ejemplo, "0:12", "1:05").
-     * Null-safe: retorna "0:00" para entrada null.
-     */
-    private String formatSegmentTime(Duration d) {
-        if (d == null) return "0:00";
-        int totalSeconds = (int) d.toSeconds();
-        return (totalSeconds / 60) + ":" + String.format("%02d", totalSeconds % 60);
+    private static String stripExtension(String name) {
+        int dot = name.lastIndexOf('.');
+        return dot > 0 ? name.substring(0, dot) : name;
     }
 
-    /**
-     * Refresca lblSegmentInfo a partir de los valores de sesión persistidos.
-     * Muestra "Full video" cuando los campos ms son null, o "Loop: m:ss – m:ss" en caso contrario.
-     */
-    private void refreshSegmentLabel() {
-        if (lblSegmentInfo == null) return;
-        Long startMs = sessionConfig.getVideoSegmentStartMs();
-        Long endMs   = sessionConfig.getVideoSegmentEndMs();
-        if (startMs == null || endMs == null) {
-            lblSegmentInfo.setText("Full video");
-        } else {
-            lblSegmentInfo.setText("Loop: "
-                + formatSegmentTime(Duration.millis(startMs))
-                + " – "
-                + formatSegmentTime(Duration.millis(endMs)));
-        }
+    private static String capitalize(String enumName) {
+        String s = enumName.replace('_', ' ').toLowerCase();
+        return Character.toUpperCase(s.charAt(0)) + s.substring(1);
     }
+
 }
