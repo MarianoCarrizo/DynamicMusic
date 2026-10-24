@@ -5,7 +5,9 @@ import org.junit.jupiter.api.Test;
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AudioAnalyzerTest {
 
@@ -16,7 +18,6 @@ class AudioAnalyzerTest {
     private final AtomicLong clock = new AtomicLong(1_000_000_000L);
     private final AudioAnalyzer analyzer = new AudioAnalyzer(clock::get);
 
-    /** Frame of 256 bands: silent floor, steady tonal bed in bands 3-23, optional kick in bands 0-2. */
     private static float[] frame(boolean kick, float bedDb) {
         float[] f = new float[AudioAnalyzer.NUM_BANDS];
         Arrays.fill(f, FLOOR_DB);
@@ -30,13 +31,11 @@ class AudioAnalyzerTest {
         return analyzer.process(frame);
     }
 
-    /** Result of a kick-over-bed simulation. */
     private record Run(int hits, long beats, double maxKickBetweenHits, double minTonal, double maxTonal) {}
 
-    /** Kick every ~0.31 s for {@code seconds}; measures tonal steadiness and kick decay after a 4 s warmup. */
     private Run simulateKick(double seconds) {
         int ticks = (int) Math.round(seconds / TICK_S);
-        int warmupTicks = 160; // 4 s: the adaptive peaks settle
+        int warmupTicks = 160;
         long beatsAtWarmup = 0;
         int hits = 0;
         double maxKickBetween = 0, minTonal = 1, maxTonal = 0;
@@ -53,7 +52,6 @@ class AudioAnalyzerTest {
                     hits++;
                     lastHitTick = k;
                 } else if (k - lastHitTick >= 9) {
-                    // late in the gap, right before the next hit
                     maxKickBetween = Math.max(maxKickBetween, f.kick());
                 }
                 minTonal = Math.min(minTonal, f.tonal());
@@ -132,7 +130,7 @@ class AudioAnalyzerTest {
         AudioFeatures before = analyzer.current();
         assertTrue(before.energy() > 0.05);
 
-        clock.addAndGet(2_000_000_000L); // 2 s without spectrum frames (paused)
+        clock.addAndGet(2_000_000_000L);
         AudioFeatures after = analyzer.current();
 
         assertTrue(after.energy() < before.energy() * 0.2,
@@ -172,7 +170,6 @@ class AudioAnalyzerTest {
 
     @Test
     void beatsAreSuppressedDuringWarmupAfterReset() {
-        // warm up the adaptive state, then reset and immediately feed hits
         simulateKick(5.0);
         analyzer.reset();
         long base = analyzer.current().beatCount();
@@ -217,7 +214,7 @@ class AudioAnalyzerTest {
     @Test
     void oversizedAndOutOfRangeInputIsHandled() {
         float[] big = new float[1024];
-        Arrays.fill(big, 40f); // above 0 dBFS: clamped
+        Arrays.fill(big, 40f);
         AudioFeatures a = assertDoesNotThrow(() -> tick(big));
         assertFinite(a);
 
@@ -227,7 +224,6 @@ class AudioAnalyzerTest {
 
         float[] nan = new float[AudioAnalyzer.NUM_BANDS];
         Arrays.fill(nan, Float.NaN);
-        // NaN is not a valid dB value, but it must not poison later frames permanently
         assertDoesNotThrow(() -> tick(nan));
     }
 

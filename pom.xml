@@ -20,7 +20,6 @@
             Sobreescribir con: mvn package -Djavafx.jmods=C:/ruta/a/javafx-jmods-21.0.2
         -->
         <javafx.jmods>C:/javafx-jmods-21.0.2</javafx.jmods>
-        <!-- Offline corpus evaluation (AudioAnalyzerCorpusTest) is opt-in: -Dgroups=corpus -DexcludedGroups=none -->
         <excludedGroups>corpus</excludedGroups>
     </properties>
 
@@ -93,7 +92,6 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.14.0</version>
                 <executions>
-                    <!-- UpdateManagerTest serves fake release assets from the JDK's built-in HTTP server -->
                     <execution>
                         <id>default-testCompile</id>
                         <configuration>
@@ -118,7 +116,36 @@
                 </configuration>
             </plugin>
 
-            <!-- Unit tests run on the classpath (no module path) so tests can reach package-private code -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-checkstyle-plugin</artifactId>
+                <version>3.6.0</version>
+                <dependencies>
+                    <dependency>
+                        <groupId>com.puppycrawl.tools</groupId>
+                        <artifactId>checkstyle</artifactId>
+                        <version>10.21.4</version>
+                    </dependency>
+                </dependencies>
+                <configuration>
+                    <configLocation>config/checkstyle/checkstyle.xml</configLocation>
+                    <includeTestSourceDirectory>true</includeTestSourceDirectory>
+                    <failOnViolation>true</failOnViolation>
+                    <violationSeverity>error</violationSeverity>
+                    <consoleOutput>true</consoleOutput>
+                    <excludes>**/module-info.java</excludes>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>checkstyle-validate</id>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
@@ -268,11 +295,6 @@
         </plugins>
     </build>
     <profiles>
-        <!--
-            Debug profile: ./mvnw javafx:run -Pdebug
-            Enables developer diagnostics (F3 aura HUD + audio-debug.csv recording).
-            Never active in the normal run or the MSI build.
-        -->
         <profile>
             <id>debug</id>
             <build>

@@ -1,7 +1,5 @@
 name: Build installer and release
 
-# Tag push (vX.Y.Z): build the Windows installer and publish a GitHub Release with it.
-# Pull request / manual run: build only; the installer is uploaded as a workflow artifact.
 on:
   push:
     tags: ['v*']
@@ -17,13 +15,8 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  # Official JavaFX 21.0.2 Windows jmods from Gluon; the .sha256 published next to the zip and a local
-  # download both gave this hash.
   JAVAFX_JMODS_URL: https://download2.gluonhq.com/openjfx/21.0.2/openjfx-21.0.2_windows-x64_bin-jmods.zip
   JAVAFX_JMODS_SHA256: de0dd27cc237897481f58cfb90855825d0ad36682838eed27b79e061eeb79d68
-  # BtbN FFmpeg-Builds, release autobuild-2026-09-30-13-08, FFmpeg n8.1.3 GPL shared build (GPL: libx264 and
-  # libmp3lame are required by the boomerang bake and by yt-dlp's MP3 extraction). The hash matches that
-  # release's checksums.sha256 and a local download.
   FFMPEG_URL: https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-30-13-08/ffmpeg-n8.1.3-9-g29e619e767-win64-gpl-shared-8.1.zip
   FFMPEG_SHA256: dfe81c3aa0a546ee81980b1b824486dd0fe0a1d452f00cb55135379a74be7bcf
 
@@ -52,7 +45,6 @@ jobs:
               exit 1
             fi
           else
-            # jpackage needs a numeric x.y.z; CI builds sort below every real release
             VERSION="0.0.${GITHUB_RUN_NUMBER}"
           fi
           echo "APP_VERSION=$VERSION" >> "$GITHUB_ENV"
@@ -62,7 +54,6 @@ jobs:
         shell: bash
         run: ./mvnw -B test
 
-      # -DskipInstaller bypasses the legacy WiX/MSI execution of jpackage-maven-plugin
       - name: Package application jars
         shell: bash
         run: ./mvnw -B package -DskipTests -DskipInstaller=true
@@ -106,7 +97,6 @@ jobs:
           $root = 'target/app-image/DynamicMusic'
           if (-not (Test-Path "$root/DynamicMusic.exe")) { throw 'DynamicMusic.exe missing from the app image' }
           Get-Content "$root/app/DynamicMusic.cfg"
-          # jpackage strips java.exe from the runtime, so read the module list jlink records in 'release'
           $line = Select-String -Path "$root/runtime/release" -Pattern '^MODULES=' | Select-Object -First 1
           if (-not $line) { throw 'Runtime image has no MODULES entry in its release file' }
           $modules = $line.Line.Substring('MODULES='.Length).Trim('"').Split(' ')
@@ -124,7 +114,6 @@ jobs:
           if ($hash -ne $env:FFMPEG_SHA256) { throw "ffmpeg SHA-256 mismatch: $hash" }
           Expand-Archive "$env:RUNNER_TEMP\ffmpeg.zip" -DestinationPath "$env:RUNNER_TEMP\ffmpeg-src"
           $src = (Get-ChildItem "$env:RUNNER_TEMP\ffmpeg-src" -Directory | Select-Object -First 1).FullName
-          # Bundle layout expected by FfmpegLocator: <install dir>\ffmpeg\ffmpeg.exe (+ ffprobe.exe for yt-dlp)
           $bundle = Join-Path $PWD 'target/ffmpeg-bundle'
           New-Item -ItemType Directory -Force $bundle | Out-Null
           Get-ChildItem "$src/bin" | Where-Object { $_.Name -ne 'ffplay.exe' } | Copy-Item -Destination $bundle
@@ -173,7 +162,6 @@ jobs:
             installer/DynamicMusic.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      # Format "<hex>  <file name>", the one the in-app updater parses
       - name: Compute SHA-256
         shell: bash
         working-directory: target/installer

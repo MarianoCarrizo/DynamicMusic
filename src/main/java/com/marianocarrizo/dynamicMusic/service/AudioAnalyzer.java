@@ -1,78 +1,45 @@
 package com.marianocarrizo.dynamicMusic.service;
 
-/**
- * Turns raw spectrum bands (dBFS) into stable, audio-reactive features:
- * three bands with adaptive normalization, attack/release envelopes and a
- * bass onset (beat) detector based on spectral flux against an adaptive threshold.
- *
- * process() is called from the media thread (one call per spectrum interval),
- * current() may be called from any thread (typically the FX thread each frame).
- */
 public final class AudioAnalyzer {
 
-    /*
-     * Band split over the JavaFX spectrum, which uses equal-width LINEAR bands from 0 Hz to
-     * Nyquist. With 32 bands each one was ~690 Hz wide, so "bass" (bands 0-3) covered
-     * 0-2.7 kHz: the kick was only ~15% of it and the level barely moved. With 256 bands
-     * (~86 Hz each at 44.1 kHz) the split below follows real frequency ranges.
-     */
     public static final int NUM_BANDS = 256;
-    private static final int BASS_END = 3;    // ~0-260 Hz: kick and bass guitar
-    private static final int MID_END  = 24;   // ~260 Hz-2 kHz: body of the mix
-    private static final int HIGH_END = 94;   // ~2-8 kHz: snare crack, cymbals; above is mostly air
+    private static final int BASS_END = 3;
+    private static final int MID_END  = 24;
+    private static final int HIGH_END = 94;
 
-    /*
-     * Percussive/tonal split (causal HPSS, after FitzGerald 2010). Band index = freq / 86.13 Hz,
-     * assuming a 44.1 kHz source (Nyquist 22050 Hz over 256 bands), same as the constants above.
-     */
-    private static final int KICK_END    = BASS_END;  // bands 0-2: ~0-260 Hz
-    private static final int SNARE_START = 17;        // ~1.5 kHz
-    private static final int SNARE_END   = 59;        // ~5 kHz (exclusive)
-    private static final int TONAL_START = BASS_END;  // ~260 Hz
-    private static final int TONAL_END   = MID_END;   // ~2 kHz (exclusive)
-    private static final int HPSS_FRAMES = 9;         // harmonic median over time: ~225 ms
-    private static final int HPSS_HALF_WIDTH = 2;     // percussive median over frequency: 5 bands (17 smeared kicks into the neighbours)
+    private static final int KICK_END    = BASS_END;
+    private static final int SNARE_START = 17;
+    private static final int SNARE_END   = 59;
+    private static final int TONAL_START = BASS_END;
+    private static final int TONAL_END   = MID_END;
+    private static final int HPSS_FRAMES = 9;
+    private static final int HPSS_HALF_WIDTH = 2;
     private static final double HPSS_EPS = 1e-12;
-    // Per-feature rolling-peak floors (kick, snare, tonal); percussive parts are quiet
     private static final double[] PF_FLOOR = {0.004, 0.0006, 0.002};
-    private static final double TONAL_ATTACK  = 1 - Math.exp(-0.025 / 0.3);  // ~0.3 s
-    private static final double TONAL_RELEASE = 1 - Math.exp(-0.025 / 0.8);  // ~0.8 s
-    // Hit envelopes: jump to the onset strength, then decay with this time constant
+    private static final double TONAL_ATTACK  = 1 - Math.exp(-0.025 / 0.3);
+    private static final double TONAL_RELEASE = 1 - Math.exp(-0.025 / 0.8);
     private static final double KICK_HIT_DECAY  = Math.exp(-0.025 / 0.150);
     private static final double SNARE_HIT_DECAY = Math.exp(-0.025 / 0.120);
     private static final long   SNARE_REFRACTORY_NS = 100_000_000L;
-    private static final double MIN_PERC_LEVEL = 0.20;  // shaped level an onset must reach
+    private static final double MIN_PERC_LEVEL = 0.20;
 
-    // Linear magnitude below this is treated as silence (-60 dB reads as 0.001)
-    private static final double NOISE_GATE = 0.0004;  // ~-68 dB; spectrum threshold is -75 dB
-    // Lowest value the rolling peak may decay to, so quiet noise is not blown up to 1.0
-    // Per band (bass, mid, high): the high band is naturally ~20 dB quieter, and a shared floor
-    // of 0.006 kept it pinned near 0 (measured p50 0.02), so embers never flickered
+    private static final double NOISE_GATE = 0.0004;
     private static final double[] PEAK_FLOOR = {0.006, 0.003, 0.0008};
-    // Per-tick (25 ms) peak decay: half-life of roughly 2.3 seconds, so quiet passages after
-    // a loud hit are normalized up again quickly instead of staying flat for ~4 s
     private static final double PEAK_DECAY = 0.9925;
-    // Shapes the normalized value; lower = mid-level music still moves visibly
     private static final double SHAPE_EXPONENT = 1.25;
 
-    // Envelope smoothing per tick. Kept light: the renderer smooths again, and stacking two
-    // slow envelopes made the visuals lag the music
     private static final double ATTACK        = 0.85;
-    private static final double RELEASE       = 0.30;  // ~70 ms: bass must dip between kicks at ~190 bpm
+    private static final double RELEASE       = 0.30;
     private static final double RELEASE_STALE = 0.10;
 
-    // Beat detection
-    private static final int    HISTORY_SIZE   = 60;      // ~1.5 s of flux values
-    private static final double THRESHOLD_K    = 1.25;    // mean + K * stddev
-    private static final double MIN_FLUX       = 0.06;    // absolute minimum jump to count as a beat
-    private static final long   REFRACTORY_NS  = 100_000_000L;  // allows fast double-bass (up to ~10 hits/s)
-    private static final double BEAT_DECAY     = 0.905;   // per tick (0.82 per 50 ms)
-    private static final int    WARMUP_TICKS   = 12;      // ignore beats right after a reset
-    // An onset must also reach this fraction of the recent strongest flux, so weak events next to
-    // a loud hit (bass notes, ghost notes) do not count as beats
+    private static final int    HISTORY_SIZE   = 60;
+    private static final double THRESHOLD_K    = 1.25;
+    private static final double MIN_FLUX       = 0.06;
+    private static final long   REFRACTORY_NS  = 100_000_000L;
+    private static final double BEAT_DECAY     = 0.905;
+    private static final int    WARMUP_TICKS   = 12;
     private static final double PEAK_FRAC      = 0.4;
 
-    // Must match MusicService's spectrum interval
     private static final long TICK_NS  = 25_000_000L;
     private static final long STALE_NS = 120_000_000L;
 
@@ -81,14 +48,12 @@ public final class AudioAnalyzer {
     private final Onset kickOnset = new Onset(REFRACTORY_NS);
     private final Onset snareOnset = new Onset(SNARE_REFRACTORY_NS);
     private long lastTickNs;
-    // HPSS state: ring of the last frames (linear magnitudes) and scratch arrays, all preallocated
     private final double[][] frames = new double[HPSS_FRAMES][HIGH_END];
     private int frameHead;
     private int frameFill;
     private final double[] cur = new double[HIGH_END];
     private final double[] perc = new double[HIGH_END];
     private final double[] medBuf = new double[Math.max(HPSS_FRAMES, 2 * HPSS_HALF_WIDTH + 1)];
-    // kick, snare, tonal: rolling peak and smoothed level
     private final double[] pfPeak = new double[3];
     private final double[] pfEnv = new double[3];
     private double kickHit, snareHit;
@@ -96,26 +61,22 @@ public final class AudioAnalyzer {
     private double beatStrength;
     private int warmup;
 
-    // Diagnostics only: last shaped (pre-envelope) bass and spectrum timestamp
     private double lastRawBass = 0;
     private double lastMediaTime = 0;
 
     private volatile AudioFeatures snapshot = AudioFeatures.SILENT;
 
-    // Time source in nanoseconds; replaceable in tests for deterministic refractory/staleness handling
     private final java.util.function.LongSupplier clock;
 
     public AudioAnalyzer() {
         this(System::nanoTime);
     }
 
-    /** Test seam: injects the nanosecond clock. */
     AudioAnalyzer(java.util.function.LongSupplier clock) {
         this.clock = clock;
         reset();
     }
 
-    /** Clears all adaptive state (call on track change). The beat counter stays monotonic. */
     public synchronized void reset() {
         for (int i = 0; i < 3; i++) { peak[i] = PEAK_FLOOR[i]; env[i] = 0; }
         kickOnset.reset();
@@ -131,12 +92,10 @@ public final class AudioAnalyzer {
         publish();
     }
 
-    /** Feeds one spectrum frame (dBFS per band). Returns the new snapshot. */
     public synchronized AudioFeatures process(float[] magnitudes) {
         return process(magnitudes, lastMediaTime);
     }
 
-    /** Feeds one spectrum frame with its media timestamp (seconds), kept for diagnostics. */
     public synchronized AudioFeatures process(float[] magnitudes, double mediaTime) {
         lastMediaTime = mediaTime;
         long now = clock.getAsLong();
@@ -169,10 +128,6 @@ public final class AudioAnalyzer {
         return publish();
     }
 
-    /**
-     * Latest snapshot. If no spectrum frames arrived recently (paused, stopped),
-     * levels are decayed here so the visuals fade out instead of freezing.
-     */
     public synchronized AudioFeatures current() {
         long now = clock.getAsLong();
         if (now - lastTickNs > STALE_NS) {
@@ -192,11 +147,6 @@ public final class AudioAnalyzer {
         return snapshot;
     }
 
-    /**
-     * Causal HPSS on the current frame: harmonic = median over the last frames per band,
-     * percussive = median over neighbouring bands of this frame; soft mask P^2/(H^2+P^2).
-     * Then derives the kick/snare/tonal features and their onsets.
-     */
     private void analyzePercussion(long now) {
         System.arraycopy(cur, 0, frames[frameHead], 0, HIGH_END);
         frameHead = (frameHead + 1) % HPSS_FRAMES;
@@ -248,7 +198,6 @@ public final class AudioAnalyzer {
         return Math.pow(Math.min(1.0, v / pfPeak[i]), SHAPE_EXPONENT);
     }
 
-    /** Median of the first n values (insertion sort, in place; n is at most 17). */
     private static double median(double[] a, int n) {
         for (int i = 1; i < n; i++) {
             double x = a[i];
@@ -259,7 +208,6 @@ public final class AudioAnalyzer {
         return (n & 1) == 1 ? a[n / 2] : 0.5 * (a[n / 2 - 1] + a[n / 2]);
     }
 
-    /** Spectral-flux onset detector on a 0..1 level: adaptive threshold mean + K*std. */
     private static final class Onset {
         private final double[] history = new double[HISTORY_SIZE];
         private final long refractoryNs;
@@ -271,7 +219,6 @@ public final class AudioAnalyzer {
 
         void reset() { count = 0; index = 0; prev = 0; fluxPeak = 0; lastNs = 0; }
 
-        /** Returns the onset strength (0.45..1) or 0 when there is no onset. */
         double check(double level, long now, boolean armed) {
             double flux = Math.max(0.0, level - prev);
             prev = level;

@@ -96,7 +96,6 @@
     -fx-text-fill: #ffffff;
     -fx-background-color: transparent;
 }
-/* The combo button cell is a "selected" list cell: beat the per-mood #window-* selected colors */
 .combo-box > .list-cell:filled:selected, .combo-box > .list-cell:filled {
     -fx-background-color: transparent !important;
     -fx-text-fill: #ffffff !important;
@@ -120,7 +119,6 @@
     -fx-cursor: hand;
 }
 
-/* Dropdown lists and menus: neutral dark gray */
 .combo-box-popup > .list-view {
     -fx-background-color: #2a2a32;
     -fx-border-color: #4f4f5c;
@@ -148,7 +146,6 @@
     -fx-text-fill: #ffffff;
 }
 
-/* Form controls used by the scene editor */
 .check-box {
     -fx-text-fill: #e0e0e0;
 }
@@ -229,7 +226,6 @@
     -fx-background-color: #4f4f5c;
 }
 
-/* Update notice under the window header */
 .update-bar {
     -fx-background-color: #23303f;
     -fx-border-color: transparent transparent #2d2d35 transparent;
@@ -239,7 +235,6 @@
     -fx-text-fill: #cfe3ff;
 }
 
-/* Scene bar under the window header */
 .scene-bar {
     -fx-background-color: #1a1a20;
     -fx-border-color: transparent transparent #2d2d35 transparent;
@@ -257,7 +252,6 @@
     -fx-border-width: 2px;
     -fx-cursor: hand;
 }
-/* Mood card lines: labels follow the button text color (active card flips it) */
 .btn-phase .label {
     -fx-text-fill: inherit;
 }
@@ -278,7 +272,6 @@
     -fx-font-weight: normal;
     -fx-opacity: 0.8;
 }
-/* Empty card: still enabled (it is a drop target), just dimmed */
 .btn-phase-empty {
     -fx-opacity: 0.6;
     -fx-border-style: segments(6, 4);

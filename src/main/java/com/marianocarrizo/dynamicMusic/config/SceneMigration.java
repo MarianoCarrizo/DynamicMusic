@@ -10,24 +10,13 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-/**
- * One-shot migration from the pre-scenes session.json shape to a single "Default" scene.
- * Idempotent: does nothing when scenes already exist. Never throws.
- */
 final class SceneMigration {
 
     private SceneMigration() {}
 
-    /**
-     * Ensures {@code cfg} has at least one scene.
-     *
-     * @param sessionFile the on-disk session file (backed up to .bak before migrating, if it exists)
-     * @return true if the config was changed and should be saved
-     */
     static boolean migrate(SessionConfig cfg, Path sessionFile) {
         try {
             if (cfg.hasScenes()) {
-                // Already in the new shape: just make sure the active id and auras are valid.
                 cfg.getActiveScene().ensureAuras();
                 return false;
             }
@@ -39,7 +28,7 @@ final class SceneMigration {
                 aura.setReactivity(cfg.getMoodSensitivity(t) / 4.0);
                 scene.setAura(AuraSlot.of(t), aura);
             }
-            scene.ensureAuras(); // ON_DEMAND = NEUTRAL
+            scene.ensureAuras();
             cfg.installMigratedScene(scene);
             return true;
         } catch (RuntimeException e) {
@@ -48,7 +37,6 @@ final class SceneMigration {
         }
     }
 
-    /** Maps a legacy particle effect name (the old EffectType enum) to an aura preset. */
     private static AuraPreset presetFor(String legacyEffect) {
         if (legacyEffect == null) return AuraPreset.NEUTRAL;
         return switch (legacyEffect) {
@@ -60,7 +48,6 @@ final class SceneMigration {
         };
     }
 
-    /** Copies session.json to session.json.bak, never overwriting an existing backup. */
     private static void backup(Path sessionFile) {
         try {
             if (sessionFile == null || !Files.exists(sessionFile)) return;

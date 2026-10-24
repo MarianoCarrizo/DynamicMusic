@@ -13,7 +13,6 @@
             <Insets top="12" right="12" bottom="12" left="12"/>
         </padding>
 
-        <!-- Header: scene name + delete -->
         <HBox spacing="8" alignment="CENTER_LEFT">
             <Label text="Scene name" styleClass="lbl-session-title"/>
             <TextField fx:id="txtSceneName" HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
@@ -21,7 +20,6 @@
                     styleClass="btn-secondary"/>
         </HBox>
 
-        <!-- Mood tabs (Paused ... On demand) are inserted in code before this one -->
         <TabPane fx:id="tabPane" VBox.vgrow="ALWAYS" tabClosingPolicy="UNAVAILABLE">
             <Tab fx:id="tabBackground" text="Background">
                 <content>

@@ -12,7 +12,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SessionConfigManagerTest {
 
@@ -77,7 +79,6 @@ class SessionConfigManagerTest {
         assertFalse(onDisk.has("backgroundImagePath"));
         assertFalse(onDisk.has("moodEffects"));
 
-        // second load: already migrated, same scene id, backup untouched
         SessionConfig second = mgr.load();
         assertEquals(1, second.getScenes().size());
         assertEquals(first.getActiveSceneId(), second.getActiveSceneId());

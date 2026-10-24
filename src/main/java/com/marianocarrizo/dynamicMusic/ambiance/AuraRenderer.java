@@ -19,71 +19,44 @@ import javafx.scene.text.Font;
 import java.util.Random;
 import java.util.function.Supplier;
 
-/**
- * Draws the boss-aura overlay on a transparent canvas: vignette, bottom/side edge glow and a
- * small set of embers, all kept to the edges so the center stays clean. It also drives a subtle
- * zoom + brightness pulse on the background node through {@link BackgroundPulse}.
- *
- * <p>Everything runs on the FX thread. The audio source is polled every frame; levels are
- * smoothed here with a quick attack and a slow release so motion stays calm. Looks are held as
- * flat arrays ({@link AuraLook}); changing the aura crossfades the displayed look to the new one.
- *
- * <p>Gradients are built in unit space and positioned with a transform, so they only get rebuilt
- * when a color changes (quantized), never per frame and never on resize.
- */
 final class AuraRenderer {
 
-    /** Receives the scale (1.0 = none) and brightness lift (0.0 = none) for the background node. */
     interface BackgroundPulse {
         void apply(double scale, double brightness);
     }
 
-    // --- Timing ---
-    /** Crossfade for mood, slot and scene changes. */
     static final double LONG_BLEND_SEC = 1.5;
-    /** Crossfade for live edits in the scene editor. */
     static final double SHORT_BLEND_SEC = 0.2;
     private static final double MAX_DT = 0.05;
 
-    // --- Audio smoothing (rates in 1/s; higher = faster) ---
     private static final double ATTACK_RATE = 35.0;
     private static final double RELEASE_RATE = 7.0;
     private static final double BEAT_ATTACK_RATE = 50.0;
     private static final double MIN_BEAT_STRENGTH = 0.4;
-    /*
-     * Reactivity scales how far the aura swings around its recent average level, not the level
-     * itself. Multiplying the (already normalized) bands by a gain pinned loud music at the 1.0
-     * clamp, so higher reactivity looked flatter instead of pulsing more.
-     */
-    private static final double DEPTH_MIN = 0.5;   // swing multiplier at reactivity 0
-    private static final double DEPTH_SPAN = 3.0;  // reactivity 1 gives 3.5x swings
-    private static final double REST_SHARE = 0.55; // share of the average level always shown
-    private static final double AVG_RATE = 0.8;    // 1/s: how fast the reference average follows
+    private static final double DEPTH_MIN = 0.5;
+    private static final double DEPTH_SPAN = 3.0;
+    private static final double REST_SHARE = 0.55;
+    private static final double AVG_RATE = 0.8;
     private static final double BEAT_GAIN_MIN = 0.4;
     private static final double BEAT_GAIN_SPAN = 1.2;
 
-    // --- Layout (fractions of the canvas) ---
     private static final double GLOW_HEIGHT = 0.34;
     private static final double SIDE_GLOW_WIDTH = 0.12;
     private static final double SIDE_GLOW_SHARE = 0.35;
     private static final double EDGE_LINE_HEIGHT = 0.012;
     private static final double VIGNETTE_MAX_ALPHA = 0.92;
 
-    // --- Embers ---
     private static final int MAX_EMBERS = 60;
     private static final int MIN_EMBERS = 15;
-    /** Rise speed in canvas heights per second at flavor speed 1.0 and medium energy. */
     private static final double EMBER_RISE = 0.075;
-    /** Embers spawn inside the outer EMBER_SIDE_BAND of each side; the middle third stays clear. */
     private static final double EMBER_SIDE_BAND = 0.34;
-    private static final double EMBER_BASE_RADIUS = 3.0;   // px at 1080p, plus up to EMBER_RADIUS_VAR
+    private static final double EMBER_BASE_RADIUS = 3.0;
     private static final double EMBER_RADIUS_VAR = 3.5;
-    private static final double EMBER_SPRITE_SCALE = 4.0;  // drawn diameter = radius * this (includes halo)
-    private static final double EMBER_SWAY_PX = 18.0;      // at 1080p
+    private static final double EMBER_SPRITE_SCALE = 4.0;
+    private static final double EMBER_SWAY_PX = 18.0;
     private static final int SPRITE_SIZE = 48;
-    private static final int SPRITE_STEPS = 6;             // primary..secondary color mixes
+    private static final int SPRITE_STEPS = 6;
 
-    // --- Background pulse ---
     private static final double ZOOM_MAX = 0.022;
     private static final double BRIGHTNESS_MAX = 0.06;
 
@@ -95,27 +68,23 @@ final class AuraRenderer {
     private Canvas canvas;
     private GraphicsContext gc;
 
-    // Look state: displayed = lerp(from, target, ease(blendT))
     private double[] displayed;
     private double[] from;
     private double[] target;
     private double blendT = 1.0;
     private double blendSec = LONG_BLEND_SEC;
 
-    // Smoothed audio
     private double bass, mid, high, energy;
     private double kick, tonal, kickHitVis, snareHitVis;
-    // Slow reference levels the swings are measured against
     private double bassAvg, midAvg, highAvg, energyAvg, tonalAvg;
 
-    // Diagnostics HUD (F3 in the ambiance window) and its CSV recording
     private boolean debug = false;
     private final AuraDebugRecorder recorder = new AuraDebugRecorder();
     private AudioFeatures lastFeatures = AudioFeatures.SILENT;
     private double fps = 0;
     private double beatLamp = 0;
-    private double beat;       // raw beat accent, decays
-    private double beatVis;    // quick-attack follower of beat, drives visuals
+    private double beat;
+    private double beatVis;
     private long lastBeatCount = -1;
 
     private long lastNs;
@@ -126,9 +95,7 @@ final class AuraRenderer {
     private double lastScale = 1.0;
     private double lastBrightness = 0.0;
 
-    // Embers (struct of arrays)
     private final boolean[] eAlive = new boolean[MAX_EMBERS];
-    // Positions are fractions of the canvas, so a resize never leaves embers misplaced
     private final double[] eBaseX = new double[MAX_EMBERS];
     private final double[] eY = new double[MAX_EMBERS];
     private final double[] eStartY = new double[MAX_EMBERS];
@@ -139,9 +106,8 @@ final class AuraRenderer {
     private final double[] eSwayPhase = new double[MAX_EMBERS];
     private final double[] eFlickFreq = new double[MAX_EMBERS];
     private final double[] eFlickPhase = new double[MAX_EMBERS];
-    private final double[] eMix = new double[MAX_EMBERS];   // 0..1 share of the secondary color
+    private final double[] eMix = new double[MAX_EMBERS];
 
-    // Cached paints / sprites, rebuilt only when their (quantized) inputs change
     private long vignetteKey = -1;
     private Paint vignettePaint;
     private long glowKey = -1;
@@ -159,11 +125,6 @@ final class AuraRenderer {
         };
     }
 
-    // =========================================================================
-    // Public API (FX thread)
-    // =========================================================================
-
-    /** Binds the renderer to a (new) canvas. Stops rendering; call {@link #start()} afterwards. */
     void attach(Canvas newCanvas) {
         stop();
         canvas = newCanvas;
@@ -174,10 +135,6 @@ final class AuraRenderer {
         audio = source != null ? source : () -> AudioFeatures.SILENT;
     }
 
-    /**
-     * Sets the aura to show. The first call snaps; later calls crossfade from whatever is
-     * currently displayed, over {@link #LONG_BLEND_SEC} or {@link #SHORT_BLEND_SEC}.
-     */
     void setTarget(AuraConfig aura, boolean longTransition, boolean calm) {
         double[] next = AuraLook.resolve(aura, calm);
         if (displayed == null) {
@@ -193,7 +150,6 @@ final class AuraRenderer {
         blendSec = longTransition ? LONG_BLEND_SEC : SHORT_BLEND_SEC;
     }
 
-    /** Toggles the diagnostics HUD; recording to audio-debug.csv runs while it is on. */
     void setDebug(boolean on) {
         if (on == debug) return;
         debug = on;
@@ -209,12 +165,11 @@ final class AuraRenderer {
         if (running || canvas == null) return;
         running = true;
         lastNs = 0;
-        lastBeatCount = -1; // re-baseline so beats that happened while hidden do not fire
+        lastBeatCount = -1;
         cleared = false;
         timer.start();
     }
 
-    /** Stops rendering, clears the canvas and returns the background to rest. */
     void stop() {
         if (running) timer.stop();
         running = false;
@@ -222,10 +177,6 @@ final class AuraRenderer {
         cleared = true;
         applyPulse(1.0, 0.0, true);
     }
-
-    // =========================================================================
-    // Frame
-    // =========================================================================
 
     private void frame(long now) {
         if (lastNs == 0) { lastNs = now; return; }
@@ -245,7 +196,6 @@ final class AuraRenderer {
         double highG = swing(high, highAvg, depth);
         double energyG = swing(energy, energyAvg, depth);
         double tonalG = swing(tonal, tonalAvg, depth);
-        // Percussive punches: reactivity scales them, PERC (calm) mutes them
         double percGain = (BEAT_GAIN_MIN + BEAT_GAIN_SPAN * reactivity) * v[AuraLook.PERC];
         double kickG = Math.min(1, Math.max(beatVis, kickHitVis) * percGain);
         double snareG = Math.min(1, snareHitVis * percGain);
@@ -268,8 +218,6 @@ final class AuraRenderer {
             cleared = true;
         }
 
-        // Background pulse: zoom follows kick punches (+ a little kick level and tonal breath),
-        // brightness lifts on kick punches
         double wp = v[AuraLook.W_PULSE];
         double drive = Math.min(1, 0.9 * kickG + 0.25 * kickLvlG + 0.12 * tonalG);
         double scale = 1.0 + wp * ZOOM_MAX * drive;
@@ -289,10 +237,6 @@ final class AuraRenderer {
                     kickLvlG, snareG, tonalG, kickG);
         }
     }
-
-    // =========================================================================
-    // Diagnostics HUD
-    // =========================================================================
 
     private void drawHud(double[] v, double w, double h, double tonalG, double kickLvlG, double snareG,
                          double kickG, double midG, double highG, double energyG, double scale) {
@@ -322,13 +266,12 @@ final class AuraRenderer {
             gc.setFill(Color.color(1, 1, 1, 0.12));
             gc.fillRect(bx, ry, bw - 70, 6);
             gc.fillRect(bx, ry + 8, bw - 70, 6);
-            gc.setFill(Color.web("#4FC3FF"));          // analyzer output
+            gc.setFill(Color.web("#4FC3FF"));
             gc.fillRect(bx, ry, (bw - 70) * clamp01(rows[i][0]), 6);
-            gc.setFill(Color.web("#2fbf71"));          // what the aura draws with
+            gc.setFill(Color.web("#2fbf71"));
             gc.fillRect(bx, ry + 8, (bw - 70) * clamp01(rows[i][1]), 6);
         }
 
-        // Beat lamp: flashes on every detected beat
         if (f.beatCount() != (long) beatLampCount) { beatLamp = 1.0; beatLampCount = f.beatCount(); }
         beatLamp *= 0.85;
         double ly = y + rows.length * rowH;
@@ -356,7 +299,7 @@ final class AuraRenderer {
     private void advanceBlend(double dt) {
         if (blendT >= 1.0) return;
         blendT = Math.min(1.0, blendT + dt / blendSec);
-        double e = blendT * blendT * (3 - 2 * blendT); // smoothstep
+        double e = blendT * blendT * (3 - 2 * blendT);
         for (int i = 0; i < displayed.length; i++) {
             displayed[i] = from[i] + (target[i] - from[i]) * e;
         }
@@ -371,7 +314,6 @@ final class AuraRenderer {
         bass = follow(bass, f.bass(), dt);
         kick = follow(kick, f.kick(), dt);
         tonal = follow(tonal, f.tonal(), dt);
-        // Hit envelopes already decay in the analyzer; only the attack is softened here
         kickHitVis = followHit(kickHitVis, f.kickHit(), dt);
         snareHitVis = followHit(snareHitVis, f.snareHit(), dt);
         mid = follow(mid, f.mid(), dt);
@@ -395,7 +337,6 @@ final class AuraRenderer {
         else beatVis = beat;
     }
 
-    /** Steady share of the average plus the deviation from it, amplified by depth. */
     private static double swing(double value, double avg, double depth) {
         return Math.max(0, Math.min(1, REST_SHARE * avg + (value - avg) * depth));
     }
@@ -416,11 +357,6 @@ final class AuraRenderer {
         if (pulse != null) pulse.apply(scale, brightness);
     }
 
-    // =========================================================================
-    // Layers
-    // =========================================================================
-
-    /** Darkened/tinted edges: ellipse that reaches the middle of each edge at radius 1. */
     private void drawVignette(double[] v, double w, double h, double iMul, double tonalG, double kickG) {
         double weight = v[AuraLook.W_VIGNETTE];
         if (weight < 0.003) return;
@@ -436,7 +372,6 @@ final class AuraRenderer {
         gc.restore();
     }
 
-    /** Light rising from the bottom edge, faintly from the sides, lifting on beats. */
     private void drawGlow(double[] v, double w, double h, double iMul,
                           double tonalG, double energyG, double snareG, double kickG) {
         double weight = v[AuraLook.W_GLOW];
@@ -534,7 +469,7 @@ final class AuraRenderer {
     }
 
     private void spawnEmber(int i, boolean initial, double secondaryMax) {
-        double offset = Math.pow(rnd.nextDouble(), 1.5) * EMBER_SIDE_BAND; // denser toward the outer edge
+        double offset = Math.pow(rnd.nextDouble(), 1.5) * EMBER_SIDE_BAND;
         eBaseX[i] = rnd.nextBoolean() ? offset : 1.0 - offset;
         eStartY[i] = 1.02 + rnd.nextDouble() * 0.05;
         eTravel[i] = 0.35 + 0.45 * rnd.nextDouble();
@@ -553,10 +488,6 @@ final class AuraRenderer {
         double c = Math.max(0, Math.min(1, t));
         return c * c * (3 - 2 * c);
     }
-
-    // =========================================================================
-    // Cached paints and sprites
-    // =========================================================================
 
     private void ensureVignettePaint(double[] v) {
         long key = colorKey(v) << 5 | (long) Math.round(v[AuraLook.V_RIM_DARKEN] * 31);
@@ -594,7 +525,6 @@ final class AuraRenderer {
                 new Stop(1.0, withAlpha(hot, 0.0)));
     }
 
-    /** Pre-renders the glow sprites (primary to secondary mixes) when the colors change. */
     private void ensureSprites(double[] v) {
         long key = colorKey(v);
         if (key == spriteKey) return;
@@ -617,7 +547,7 @@ final class AuraRenderer {
                 double d = Math.hypot(x - c, y - c) / c;
                 if (d >= 1.0) { pw.setArgb(x, y, 0); continue; }
                 double alpha = Math.pow(1 - d, 2.2);
-                double hot = 0.6 * Math.pow(Math.max(0, 1 - d * 2.5), 2); // whiter core
+                double hot = 0.6 * Math.pow(Math.max(0, 1 - d * 2.5), 2);
                 int ia = (int) Math.round(alpha * 255);
                 int ir = (int) Math.round((r + (1 - r) * hot) * 255);
                 int ig = (int) Math.round((g + (1 - g) * hot) * 255);
@@ -628,7 +558,6 @@ final class AuraRenderer {
         return img;
     }
 
-    /** Primary + secondary color quantized to 4 bits per channel (24 bits), so tiny drifts do not rebuild. */
     private static long colorKey(double[] v) {
         long key = 0;
         for (int i = AuraLook.PR; i <= AuraLook.SB; i++) {

@@ -168,10 +168,6 @@ public class PlaylistManager {
         }
     }
 
-    /**
-     * Appends a fully-constructed {@link PlaylistItem} (e.g. a YouTube-sourced track)
-     * to the named playlist. Rebuilds the playback order if the playlist is active.
-     */
     public void addItem(String playlistName, PlaylistItem item) {
         findByName(playlistName).ifPresent(pl -> {
             pl.addItem(item);

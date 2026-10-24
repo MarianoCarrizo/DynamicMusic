@@ -17,15 +17,6 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * Offline evaluation of the kick detector against a multi-genre corpus. Not part of the default
- * test run (surefire excludes the "corpus" group).
- *
- * Run: ./mvnw test -Dtest=AudioAnalyzerCorpusTest -Dgroups=corpus -DexcludedGroups=none -Dcorpus.dir=<dir>
- * (also reads the CORPUS_DIR environment variable). Corpus layout: {@code <i>.bin} holds raw
- * little-endian float32 frames x 256 bands in dB (clamped to [-75, 0], 25 ms per frame) and
- * {@code <i>.ref} holds reference kick onset times in seconds, one per line.
- */
 @Tag("corpus")
 class AudioAnalyzerCorpusTest {
 
@@ -33,10 +24,8 @@ class AudioAnalyzerCorpusTest {
     private static final double TOLERANCE_S = 0.070;
     private static final int MAX_LAG_MS = 75;
     private static final int LAG_STEP_MS = 5;
-    // Detections farther than this from any reference onset are outside the proxy's coverage
     private static final double COVERAGE_S = 2.0;
 
-    /** Per-track result at the best constant lag. */
     record Result(int track, double seconds, double beatsPerSec, double refPerSec,
                   double ratioCovered, double precision, double recall, double f1, double f1Covered, int lagMs,
                   double hit10, double hit50, double hit90) {}
@@ -52,7 +41,6 @@ class AudioAnalyzerCorpusTest {
         assertTrue(mean > 0, "mean F1 should be positive");
     }
 
-    /** Standalone entry point for quick iteration without Maven: args = corpus dir. */
     public static void main(String[] args) throws IOException {
         print(evaluate(Path.of(args[0])));
     }
@@ -117,7 +105,6 @@ class AudioAnalyzerCorpusTest {
         return best;
     }
 
-    /** Greedy one-to-one matching of sorted detections to sorted references within the tolerance. */
     private static int match(double[] det, double[] ref) {
         int i = 0, j = 0, tp = 0;
         while (i < det.length && j < ref.length) {

@@ -6,7 +6,14 @@ import com.marianocarrizo.dynamicMusic.model.AuraSlot;
 import com.marianocarrizo.dynamicMusic.model.Scene;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SessionConfigTest {
 
@@ -52,7 +59,6 @@ class SessionConfigTest {
         assertEquals("C:/music/raged.mp3", copy.getAssignments().get(TrackType.RAGED));
         assertEquals(0.9, copy.getAura(AuraSlot.RAGED).getIntensity(), 1e-9);
 
-        // mutating the copy must not leak into the original
         copy.getBackground().setPath("C:/other.png");
         copy.getAura(AuraSlot.RAGED).setIntensity(0.1);
         copy.setAssignment(TrackType.RAGED, "C:/music/other.mp3");
@@ -145,7 +151,7 @@ class SessionConfigTest {
         loaded.setActiveScene(second.getId());
 
         SessionConfig target = new SessionConfig();
-        target.getActiveScene(); // fresh "Default" that must be replaced
+        target.getActiveScene();
         target.adoptScenesFrom(loaded);
 
         assertEquals(2, target.getScenes().size());
