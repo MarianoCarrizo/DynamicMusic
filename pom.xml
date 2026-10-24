@@ -272,6 +272,9 @@
                     <type>MSI</type>
                     <!-- Formato módulo/clase principal para jlink interno de jpackage -->
                     <module>com.marianocarrizo.dynamicMusic/com.marianocarrizo.dynamicMusic.MusicServiceStarter</module>
+                    <addModules>
+                        <addModule>jdk.crypto.ec</addModule>
+                    </addModules>
                     <modulePaths>
                         <!-- jflac con descriptor sintético generado por moditect -->
                         <modulePath>${project.build.directory}/modules</modulePath>
