@@ -356,10 +356,11 @@ public final class YtDlpManager {
             if (Files.size(tmp) <= MIN_BINARY_BYTES) throw new IOException("downloaded file is too small");
             verify(tmp, sumsResp.body(), asset);
 
-            Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-            if (!isWindows(osName) && !target.toFile().setExecutable(true, false)) {
+            // Mark executable before the move so only a verified, runnable file ever lands at the target
+            if (!isWindows(osName) && !tmp.toFile().setExecutable(true, false)) {
                 throw new IOException("could not mark yt-dlp as executable");
             }
+            Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
         } finally {
             try { Files.deleteIfExists(tmp); } catch (IOException ignored) {}
         }

@@ -91,7 +91,8 @@ public final class YouTubeDownloader {
     private static volatile boolean availableCached;
     private static volatile long    unavailableUntilMs;
 
-    private static final long SETUP_WAIT_SECONDS = 120;
+    // Covers the first setup's checksum (30 s) and binary (120 s) request timeouts plus margin
+    private static final long SETUP_WAIT_SECONDS = 180;
 
     /** Daemon pool for YouTube work; tasks may block for minutes (setup wait, subprocess), so not the common pool. */
     private static final ExecutorService EXECUTOR = Executors.newCachedThreadPool(r -> {
@@ -308,6 +309,14 @@ public final class YouTubeDownloader {
             out = cacheDir().resolve(videoId + ".mp3");
         } catch (IOException e) {
             onFailure.accept("Cannot resolve cache directory: " + e.getMessage());
+            return;
+        }
+
+        // A running download of this id may already have created <id>.mp3 while ffmpeg is still
+        // writing it, so join it before trusting the file as a cache hit
+        CompletableFuture<PlaylistItem> inFlight = IN_FLIGHT.get(videoId);
+        if (inFlight != null) {
+            subscribe(inFlight, onSuccess, onFailure);
             return;
         }
 
