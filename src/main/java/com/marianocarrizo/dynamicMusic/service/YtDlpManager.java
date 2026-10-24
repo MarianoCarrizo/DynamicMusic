@@ -11,14 +11,21 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
+import java.util.HexFormat;
 import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * Owns a private, self-updating copy of yt-dlp under {@code <appDir>/bin}.
@@ -27,14 +34,19 @@ import java.util.function.Consumer;
  */
 public final class YtDlpManager {
 
-    private static final String DOWNLOAD_URL =
-            "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe";
+    private static final String RELEASE_BASE =
+            "https://github.com/yt-dlp/yt-dlp/releases/latest/download/";
+    private static final String CHECKSUMS_ASSET = "SHA2-256SUMS";
+    static final String VERIFY_FAILED = "Could not verify yt-dlp download";
+    /** Platform-independent zipapp; needs python3, so only used when no native asset matches. */
+    static final String ZIPAPP_ASSET = "yt-dlp";
     private static final long MIN_BINARY_BYTES   = 1_000_000L;
     private static final long CHECK_INTERVAL_MS  = TimeUnit.HOURS.toMillis(24);
     private static final long UPDATE_TIMEOUT_SEC = 120;
     private static final long PROBE_TIMEOUT_SEC  = 10;
 
-    private static final YtDlpManager INSTANCE = new YtDlpManager();
+    private static final YtDlpManager INSTANCE = new YtDlpManager(YouTubeDownloader::appDir,
+            System.getProperty("os.name", ""), System.getProperty("os.arch", ""));
 
     public static YtDlpManager get() { return INSTANCE; }
 
@@ -106,13 +118,26 @@ public final class YtDlpManager {
     private final Object lock = new Object();
     private volatile Consumer<String> statusListener;
     private volatile List<String> jsArgs;       // cached once
-    private boolean asyncStarted;
+    private boolean checkedThisSession;
+    private CompletableFuture<Void> setup;      // guarded by lock; the latest setup attempt
     private final Object updateLock = new Object();
     private final Object jsLock = new Object();
 
-    private YtDlpManager() {}
+    private final Supplier<Path> appDirSupplier;
+    private final String osName;
+    private final String osArch;
+
+    /** Package-private so tests can point the manager at a temp dir and a fake OS. */
+    YtDlpManager(Supplier<Path> appDirSupplier, String osName, String osArch) {
+        this.appDirSupplier = appDirSupplier;
+        this.osName = osName;
+        this.osArch = osArch;
+    }
 
     public void setStatusListener(Consumer<String> listener) { this.statusListener = listener; }
+
+    /** Pushes a status message to the listener (also used by callers that wait for setup). */
+    void announce(String msg) { status(msg); }
 
     private void status(String msg) {
         Consumer<String> l = statusListener;
@@ -122,9 +147,84 @@ public final class YtDlpManager {
 
     // --- Paths ---
 
-    private static Path binDir()        { return YouTubeDownloader.appDir().resolve("bin"); }
-    private static Path managedPath()   { return binDir().resolve("yt-dlp.exe"); }
-    private static Path lastCheckPath() { return binDir().resolve("yt-dlp.lastcheck"); }
+    // --- Platform selection (pure) ---
+
+    static boolean isWindows(String osName) {
+        return osName != null && osName.toLowerCase(Locale.ROOT).contains("win");
+    }
+
+    /**
+     * Official release asset for the given {@code os.name}/{@code os.arch}: Windows yt-dlp.exe,
+     * macOS yt-dlp_macos, Linux x86_64 yt-dlp_linux, Linux aarch64 yt-dlp_linux_aarch64,
+     * otherwise the python zipapp.
+     */
+    static String assetFor(String osName, String osArch) {
+        String os = osName == null ? "" : osName.toLowerCase(Locale.ROOT);
+        String arch = osArch == null ? "" : osArch.toLowerCase(Locale.ROOT);
+        if (os.contains("win")) return "yt-dlp.exe";
+        if (os.contains("mac") || os.contains("darwin")) return "yt-dlp_macos";
+        if (os.contains("linux")) {
+            if (arch.equals("amd64") || arch.equals("x86_64")) return "yt-dlp_linux";
+            if (arch.equals("aarch64") || arch.equals("arm64")) return "yt-dlp_linux_aarch64";
+        }
+        return ZIPAPP_ASSET;
+    }
+
+    /** File name of the managed binary on disk: yt-dlp.exe on Windows, yt-dlp elsewhere. */
+    static String binaryNameFor(String osName) {
+        return isWindows(osName) ? "yt-dlp.exe" : "yt-dlp";
+    }
+
+    // --- Checksums (pure) ---
+
+    /**
+     * Finds the SHA-256 for {@code assetName} in a {@code SHA2-256SUMS} text
+     * ({@code <hex>  <name>} per line, optional {@code *} binary marker). Returns lower-case hex.
+     */
+    static Optional<String> parseChecksum(String sums, String assetName) {
+        if (sums == null) return Optional.empty();
+        for (String line : sums.split("\\R")) {
+            String t = line.strip();
+            if (t.isEmpty()) continue;
+            String[] parts = t.split("\\s+", 2);
+            if (parts.length != 2) continue;
+            String name = parts[1].strip();
+            if (name.startsWith("*")) name = name.substring(1);
+            if (name.equals(assetName) && parts[0].matches("[0-9a-fA-F]{64}")) {
+                return Optional.of(parts[0].toLowerCase(Locale.ROOT));
+            }
+        }
+        return Optional.empty();
+    }
+
+    /** Lower-case hex SHA-256 of a file's contents. */
+    static String sha256(Path file) throws IOException {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            try (InputStream in = Files.newInputStream(file)) {
+                byte[] buf = new byte[64 * 1024];
+                int n;
+                while ((n = in.read(buf)) > 0) md.update(buf, 0, n);
+            }
+            return HexFormat.of().formatHex(md.digest());
+        } catch (NoSuchAlgorithmException e) {
+            throw new IOException("SHA-256 not available", e);
+        }
+    }
+
+    /** Throws {@link IOException} ({@link #VERIFY_FAILED}) unless {@code file} matches the hash listed for the asset. */
+    static void verify(Path file, String sums, String assetName) throws IOException {
+        Optional<String> expected = parseChecksum(sums, assetName);
+        if (expected.isEmpty() || !expected.get().equals(sha256(file))) {
+            throw new IOException(VERIFY_FAILED);
+        }
+    }
+
+    // --- Paths ---
+
+    private Path binDir()        { return appDirSupplier.get().resolve("bin"); }
+    private Path managedPath()   { return binDir().resolve(binaryNameFor(osName)); }
+    private Path lastCheckPath() { return binDir().resolve("yt-dlp.lastcheck"); }
 
     /** True when the managed binary exists and is large enough to be real. */
     public boolean hasManagedBinary() {
@@ -143,11 +243,19 @@ public final class YtDlpManager {
 
     // --- Public update API ---
 
-    /** Starts the download/update check on a background thread. Safe to call repeatedly; runs once per session. */
+    /**
+     * Starts the download/update check on a background thread. Safe to call repeatedly: no-op while a setup
+     * is running, and once the managed binary exists it runs once per session. If an earlier attempt failed
+     * (offline) and the binary is still missing, the next call retries.
+     */
     public void ensureReadyAsync() {
+        CompletableFuture<Void> done;
         synchronized (lock) {
-            if (asyncStarted) return;
-            asyncStarted = true;
+            if (setup != null && !setup.isDone()) return;
+            if (checkedThisSession && hasManagedBinary()) return;
+            checkedThisSession = true;
+            done = new CompletableFuture<>();
+            setup = done;
         }
         Thread t = new Thread(() -> {
             try {
@@ -159,10 +267,22 @@ public final class YtDlpManager {
             } catch (Throwable e) {
                 System.err.println("[yt-dlp] ensureReady failed: " + e);
                 status("Could not update yt-dlp: " + e.getMessage());
+            } finally {
+                done.complete(null);
             }
         }, "yt-dlp-ensure-ready");
         t.setDaemon(true);
         t.start();
+    }
+
+    /** True while the download / update check started by {@link #ensureReadyAsync} is still running. */
+    public boolean isSetupRunning() {
+        synchronized (lock) { return setup != null && !setup.isDone(); }
+    }
+
+    /** Completes when the current setup finishes (already complete when none is running). Never fails. */
+    public CompletableFuture<Void> readiness() {
+        synchronized (lock) { return setup != null ? setup : CompletableFuture.completedFuture(null); }
     }
 
     /** Synchronous update (download if missing, else {@code -U}). Used for retry after a failure. */
@@ -180,7 +300,7 @@ public final class YtDlpManager {
             // Serialize concurrent updaters; a second caller waits for the first to finish.
             synchronized (updateLock) {
                 if (!hasManagedBinary()) {
-                    status("Updating yt-dlp...");
+                    status("Downloading yt-dlp...");
                     download();
                     writeLastCheck();
                     status("yt-dlp updated");
@@ -210,27 +330,42 @@ public final class YtDlpManager {
         else status("yt-dlp updated");
     }
 
+    /** Downloads the platform asset, verifies it against the release's SHA2-256SUMS, then moves it into place. */
     private void download() throws IOException, InterruptedException {
         Files.createDirectories(binDir());
-        Path tmp = binDir().resolve("yt-dlp.exe.tmp");
+        String asset = assetFor(osName, osArch);
+        Path target = managedPath();
+        Path tmp = binDir().resolve(target.getFileName() + ".tmp");
         try {
             HttpClient client = HttpClient.newBuilder()
                     .followRedirects(HttpClient.Redirect.NORMAL) // never downgrade https to http
                     .connectTimeout(Duration.ofSeconds(15))
                     .build();
-            HttpRequest req = HttpRequest.newBuilder(URI.create(DOWNLOAD_URL))
+
+            HttpResponse<String> sumsResp = client.send(
+                    HttpRequest.newBuilder(URI.create(RELEASE_BASE + CHECKSUMS_ASSET))
+                            .timeout(Duration.ofSeconds(30)).GET().build(),
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            if (sumsResp.statusCode() != 200) throw new IOException(VERIFY_FAILED);
+
+            HttpRequest req = HttpRequest.newBuilder(URI.create(RELEASE_BASE + asset))
                     .timeout(Duration.ofSeconds(120))
                     .GET().build();
             HttpResponse<Path> resp = client.send(req, HttpResponse.BodyHandlers.ofFile(tmp));
             if (resp.statusCode() != 200) throw new IOException("HTTP " + resp.statusCode() + " downloading yt-dlp");
             if (Files.size(tmp) <= MIN_BINARY_BYTES) throw new IOException("downloaded file is too small");
-            Files.move(tmp, managedPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            verify(tmp, sumsResp.body(), asset);
+
+            Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            if (!isWindows(osName) && !target.toFile().setExecutable(true, false)) {
+                throw new IOException("could not mark yt-dlp as executable");
+            }
         } finally {
             try { Files.deleteIfExists(tmp); } catch (IOException ignored) {}
         }
     }
 
-    private static long readLastCheck() {
+    private long readLastCheck() {
         try {
             return Long.parseLong(Files.readString(lastCheckPath()).trim());
         } catch (IOException | NumberFormatException e) {
@@ -238,7 +373,7 @@ public final class YtDlpManager {
         }
     }
 
-    private static void writeLastCheck() {
+    private void writeLastCheck() {
         try {
             Files.createDirectories(binDir());
             Files.writeString(lastCheckPath(), Long.toString(System.currentTimeMillis()));

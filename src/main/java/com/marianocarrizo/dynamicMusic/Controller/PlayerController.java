@@ -1434,12 +1434,7 @@ public class PlayerController implements SceneHost {
             return;
         }
 
-        if (!YouTubeDownloader.isYtDlpAvailable()) {
-            new Alert(Alert.AlertType.ERROR,
-                    "yt-dlp not found on PATH. Install it to use this feature.").showAndWait();
-            return;
-        }
-
+        // yt-dlp availability (and the first-run download wait) is handled off the FX thread by downloadAsync.
         final String capturedUrl = url;
         final String capturedVid = vid.get();
         final String placeholderText = "⬇ Downloading... (" + capturedVid + ")";
@@ -1479,11 +1474,6 @@ public class PlayerController implements SceneHost {
             showYoutubeError("Not a valid YouTube URL.");
             return;
         }
-        if (!YouTubeDownloader.isYtDlpAvailable()) {
-            new Alert(Alert.AlertType.ERROR,
-                    "yt-dlp not found on PATH. Install it to use this feature.").showAndWait();
-            return;
-        }
         if (btnPlayYoutube != null) btnPlayYoutube.setDisable(true);
         showYtDlpStatus("Downloading track...");
         youTubeDownloader.downloadAsync(url, vid.get(),
@@ -1502,11 +1492,7 @@ public class PlayerController implements SceneHost {
 
     @FXML
     private void onBrowseYouTube() {
-        if (!YouTubeDownloader.isYtDlpAvailable()) {
-            new Alert(Alert.AlertType.ERROR,
-                    "yt-dlp not found on PATH. Install it to use this feature.").showAndWait();
-            return;
-        }
+        // searchAsync waits for the yt-dlp setup off the FX thread and reports failures in the picker.
         Stage owner = (Stage) btnBrowseYoutube.getScene().getWindow();
         YoutubePicker.show(owner, youTubeDownloader, result -> {
             playYoutubeNow(result.url());
