@@ -59,8 +59,6 @@ public class AmbianceStage {
     private StackPane root;
     private Scene     scene;
     private ImageView imageView;
-    // Default background layers (below the user's one): the base shows the current default,
-    // the top one fades in over it when the preset changes
     private ImageView defaultBase;
     private ImageView defaultTop;
     private MediaView mediaView;
@@ -74,14 +72,12 @@ public class AmbianceStage {
     private AuraSlot activeSlot = AuraSlot.NORMAL;
     private final ColorAdjust pulseAdjust = new ColorAdjust();
 
-    // Default background state. A user background (image/video) hides the defaults; clearing it
-    // brings them back. All of it is reset with the scene graph in buildScene().
     private boolean    userBackgroundActive = false;
-    private AuraPreset targetPreset = null;   // preset the default layers are heading to (null = none)
-    private AuraPreset shownPreset  = null;   // preset fully shown on defaultBase
-    private AuraPreset topPreset    = null;   // preset fading in on defaultTop
+    private AuraPreset targetPreset = null;
+    private AuraPreset shownPreset  = null;
+    private AuraPreset topPreset    = null;
     private Timeline   defaultFade  = null;
-    private int        defaultGeneration = 0; // invalidates pending image-load callbacks
+    private int        defaultGeneration = 0;
 
     // Estado de decoración actual (null = ventana no abierta todavía)
     private StageStyle currentStyle = null;
@@ -236,7 +232,6 @@ public class AmbianceStage {
         scene.widthProperty().addListener((obs, o, n) -> recomputeFillViewportIfActive());
         scene.heightProperty().addListener((obs, o, n) -> recomputeFillViewportIfActive());
 
-        // Nothing user-defined on screen yet: show the default for the current aura, if known
         refreshDefaultBackground();
     }
 
@@ -522,7 +517,7 @@ public class AmbianceStage {
         auras.put(slot, aura);
         if (slot == activeSlot) {
             showActiveAura(false);
-            refreshDefaultBackground(); // the edit may have switched the preset
+            refreshDefaultBackground();
         }
     }
 
@@ -565,13 +560,6 @@ public class AmbianceStage {
         }
     }
 
-    // --- Default background (shown only while there is no user background) ---
-
-    /**
-     * Points the default layers at the preset of the aura on screen, or hides them while a user
-     * background is active. No-op when the target did not change; otherwise the new image is
-     * decoded (first use) and crossfaded in with the same ~1.5 s as the aura.
-     */
     private void refreshDefaultBackground() {
         AuraPreset wanted = null;
         if (!userBackgroundActive) {
@@ -599,7 +587,6 @@ public class AmbianceStage {
     private void showDefault(AuraPreset preset, Image img) {
         if (preset == shownPreset) return;
         if (shownPreset == null) {
-            // Nothing shown yet (first default, or back from a user background): no fade needed
             defaultBase.setImage(img);
             defaultBase.setOpacity(1.0);
             defaultBase.setVisible(true);
@@ -621,7 +608,6 @@ public class AmbianceStage {
         defaultFade.play();
     }
 
-    /** Makes the fading-in layer the settled one and hides it. */
     private void promoteTopToBase() {
         if (topPreset != null && defaultTop.getImage() != null) {
             defaultBase.setImage(defaultTop.getImage());
@@ -633,7 +619,6 @@ public class AmbianceStage {
         defaultTop.setImage(null);
     }
 
-    /** Cancels a running fade; a layer that was already mostly visible is kept as the base. */
     private void stopDefaultFade() {
         if (defaultFade != null) {
             defaultFade.stop();
@@ -648,7 +633,6 @@ public class AmbianceStage {
         defaultTop.setImage(null);
     }
 
-    /** Runs {@code action} once the image is fully decoded (immediately when it already is). */
     private static void whenLoaded(Image img, Runnable action) {
         if (img.isError()) return;
         if (img.getProgress() >= 1.0) {
@@ -698,7 +682,6 @@ public class AmbianceStage {
     }
 
     /**
-     * Aplica {@code currentFitMode} al ImageView indicado (fondo del usuario o capa por defecto).
      * Siempre desvincula fitWidth/fitHeight antes de reasignar (regla unbind-first).
      */
     private void applyFitToImageView(ImageView imageView) {

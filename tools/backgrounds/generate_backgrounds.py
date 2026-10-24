@@ -1,15 +1,4 @@
 #!/usr/bin/env python3
-"""Procedural default backgrounds for the ambiance window, one per aura preset.
-
-Regenerate (needs python3 + numpy + ffmpeg on PATH), from the repository root:
-
-    python tools/backgrounds/generate_backgrounds.py            # writes src/main/resources/backgrounds/*.png
-    python tools/backgrounds/generate_backgrounds.py out_dir    # or into another folder
-    python tools/backgrounds/generate_backgrounds.py out_dir fire holy   # only some scenes
-
-Everything is drawn from fixed seeds, so the output is deterministic. All images are 1920x1080
-and keep the centre calm: the aura overlay lives at the edges of the screen.
-"""
 import subprocess
 import sys
 from pathlib import Path
@@ -21,12 +10,10 @@ PRESETS = ["fire", "shadow", "electric", "holy", "neutral"]
 DEFAULT_OUT = Path(__file__).resolve().parents[2] / "src" / "main" / "resources" / "backgrounds"
 
 YY, XX = np.mgrid[0:H, 0:W].astype(np.float64)
-Y = YY / (H - 1)          # 0 top .. 1 bottom
-X = XX / (W - 1)          # 0 left .. 1 right
+Y = YY / (H - 1)
+X = XX / (W - 1)
 ASPECT = W / H
 
-
-# ---------------------------------------------------------------- helpers
 
 def smoothstep(t):
     t = np.clip(t, 0.0, 1.0)
@@ -34,7 +21,6 @@ def smoothstep(t):
 
 
 def vgradient(stops):
-    """Vertical colour gradient from (position, (r, g, b)) stops; returns H x W x 3."""
     pos = np.array([s[0] for s in stops])
     col = np.array([s[1] for s in stops], dtype=np.float64)
     column = np.stack([np.interp(Y[:, 0], pos, col[:, k]) for k in range(3)], axis=-1)
@@ -42,7 +28,6 @@ def vgradient(stops):
 
 
 def vnoise(cells_y, cells_x, rng):
-    """Smooth value noise over the whole frame, in [0, 1]."""
     g = rng.random((cells_y + 2, cells_x + 2))
     ys = np.linspace(0, cells_y, H)
     xs = np.linspace(0, cells_x, W)
@@ -68,7 +53,6 @@ def fbm(cells_y, cells_x, seed, octaves=5, gain=0.5):
 
 
 def ridge(seed, base, amp, octaves=7, roughness=0.55, x_scale=3):
-    """Fractal ridge line: y position (in pixels) of the top of a mountain layer, per column."""
     rng = np.random.default_rng(seed)
     xs = np.linspace(0, 1, W)
     h = np.zeros(W)
@@ -84,18 +68,15 @@ def ridge(seed, base, amp, octaves=7, roughness=0.55, x_scale=3):
 
 
 def over(img, color, coverage):
-    """Composite a flat/array colour over img using a coverage mask (H x W)."""
     cov = coverage[..., None]
     return img * (1 - cov) + np.asarray(color, dtype=np.float64) * cov
 
 
 def layer_mask(top):
-    """Anti-aliased mask of everything below a per-column ridge."""
     return np.clip(YY - top[None, :] + 0.5, 0, 1)
 
 
 def glow(cx, cy, radius, aspect=ASPECT):
-    """Gaussian blob centred at (cx, cy) in 0..1 coordinates."""
     d2 = ((X - cx) * aspect) ** 2 + (Y - cy) ** 2
     return np.exp(-d2 / (radius * radius))
 
@@ -105,7 +86,6 @@ def add_color(img, color, amount):
 
 
 def calm_center(strength=1.0):
-    """1 at the edges, 0 in the middle: used to keep detail away from the centre."""
     d = np.sqrt(((X - 0.5) * 1.1) ** 2 + ((Y - 0.45) * 1.6) ** 2)
     return smoothstep((d - 0.18) / 0.4) * strength + (1 - strength)
 
@@ -115,7 +95,7 @@ def stars(img, seed, count, ymax, brightness=1.0, tint=(255, 255, 255)):
     sx = rng.integers(0, W, count)
     sy = (rng.random(count) ** 1.6 * H * ymax).astype(int)
     b = (rng.random(count) ** 2.2 * 0.85 + 0.15) * brightness
-    keep = rng.random(count) < calm_center()[sy, sx] * 0.85 + 0.15  # fewer stars in the middle
+    keep = rng.random(count) < calm_center()[sy, sx] * 0.85 + 0.15
     for x, y, v in zip(sx[keep], sy[keep], b[keep]):
         fade = 1.0 - y / (H * ymax + 1)
         img[y, x] = np.maximum(img[y, x], np.asarray(tint) * v * fade)
@@ -123,7 +103,6 @@ def stars(img, seed, count, ymax, brightness=1.0, tint=(255, 255, 255)):
 
 
 def mountains(img, layers):
-    """layers: (seed, base, amp, color_top, color_bottom, roughness) back to front."""
     for seed, base, amp, c_top, c_bot, rough in layers:
         top = ridge(seed, base, amp, roughness=rough)
         mask = layer_mask(top)
@@ -142,8 +121,6 @@ def write_png(img, path):
         input=data.tobytes(), check=True)
 
 
-# ---------------------------------------------------------------- scenes
-
 def fire():
     rng = np.random.default_rng(7)
     img = vgradient([(0.0, (14, 8, 32)), (0.35, (56, 22, 70)), (0.58, (150, 46, 70)),
@@ -152,7 +129,6 @@ def fire():
     img = add_color(img, (255, 214, 150), sun * 0.95)
     img = add_color(img, (255, 120, 50), glow(0.64, 0.76, 0.30) * 0.30)
     img = add_color(img, (200, 60, 30), glow(0.64, 0.80, 0.75) * 0.18)
-    # faint dusk clouds, streaked horizontally, catching the sunset on their undersides
     clouds = fbm(3, 7, 31, 5)
     clouds = smoothstep((clouds - 0.52) / 0.2) * smoothstep(1 - np.abs(Y - 0.45) / 0.22) * calm_center(0.7)
     img = over(img, (232, 96, 70), clouds * 0.30)
@@ -167,7 +143,6 @@ def fire():
 
 
 def pine_profile(seed, base, height, count, width):
-    """Treeline: per-column top (px) made of overlapping triangular pines."""
     rng = np.random.default_rng(seed)
     top = np.full(W, base * H)
     xs = np.arange(W)
@@ -176,7 +151,7 @@ def pine_profile(seed, base, height, count, width):
         hh = height * (0.45 + rng.random() * 0.75)
         ww = width * (0.6 + rng.random() * 0.8)
         u = np.clip(1 - np.abs(xs - cx) / ww, 0, 1)
-        tier = 1 - 0.10 * np.mod(u * 7, 1.0)  # stepped branches along the flank
+        tier = 1 - 0.10 * np.mod(u * 7, 1.0)
         spike = base * H - hh * u ** 1.15 * tier
         top = np.minimum(top, spike)
     return top
@@ -189,11 +164,9 @@ def shadow():
     img = add_color(img, (150, 130, 235), np.exp(-(d / 420) ** 2) * 0.22)
     img = add_color(img, (190, 175, 255), np.exp(-(d / 150) ** 2) * 0.28)
     img = stars(img, 9, 1300, 0.62, 0.65, (210, 205, 255))
-    # thin violet cloud wisps lit by the moon
     wisps = fbm(2, 5, 77, 4)
     wisps = smoothstep((wisps - 0.55) / 0.2) * smoothstep(1 - np.abs(Y - 0.3) / 0.22) * calm_center(0.8)
     img = over(img, (96, 76, 170), wisps * 0.12 * (0.5 + 0.5 * np.exp(-(d / 700) ** 2)))
-    # moon disc: pale, with soft maria shading and a lit limb
     disc = np.clip(mr + 0.5 - d, 0, 1)
     nx = (XX - mx * W) / mr
     ny = (YY - my * H) / mr
@@ -201,7 +174,6 @@ def shadow():
     limb = np.clip(1.0 - 0.25 * (nx * nx + ny * ny), 0.7, 1.0)
     moon = np.stack([238 * shade, 236 * shade, 252 * shade], -1) * limb[..., None]
     img = img * (1 - disc[..., None]) + moon * disc[..., None]
-    # distant mountains, then two forest layers
     img = mountains(img, [
         (53, 0.72, 80, (46, 28, 86), (30, 18, 62), 0.55),
         (59, 0.80, 60, (28, 16, 56), (18, 10, 40), 0.55),
@@ -215,7 +187,6 @@ def shadow():
         depth = np.clip((YY - top[None, :]) / (H * 0.12), 0, 1)[..., None]
         color = np.asarray(c_top) * (1 - depth) + np.asarray(c_bot) * depth
         img = img * (1 - mask[..., None]) + color * mask[..., None]
-    # low violet mist between the layers
     mist = fbm(2, 6, 91, 4)
     mist = smoothstep((mist - 0.4) / 0.4) * smoothstep(1 - np.abs(Y - 0.84) / 0.07)
     img = over(img, (70, 44, 120), mist * 0.14)
@@ -223,7 +194,6 @@ def shadow():
 
 
 def bolt(glow_buf, rng, x0, y0, y1, drift, width=2.2):
-    """Adds a jagged lightning bolt (plus one branch) to a float buffer."""
     pts = [(x0, y0)]
     x, y = x0, y0
     while y < y1:
@@ -262,7 +232,6 @@ def bolt(glow_buf, rng, x0, y0, y1, drift, width=2.2):
 def electric():
     img = vgradient([(0.0, (3, 8, 18)), (0.4, (8, 28, 52)), (0.7, (16, 56, 86)), (1.0, (26, 78, 104))])
     edge = calm_center(0.85)
-    # two cloud decks: a dark heavy one and a brighter teal one with lit edges
     deck_a = fbm(3, 5, 101, 6)
     deck_b = fbm(4, 7, 202, 6)
     a = smoothstep((deck_a - 0.45) / 0.25) * smoothstep(1 - Y / 0.62) * edge
@@ -271,7 +240,6 @@ def electric():
     rim = np.clip(b - smoothstep((deck_b - 0.58) / 0.22) * smoothstep(1 - np.abs(Y - 0.3) / 0.3) * edge, 0, 1)
     img = over(img, (34, 104, 138), b * 0.55)
     img = over(img, (96, 190, 220), rim * 0.40)
-    # lightning, hugging the left and right edges
     rng = np.random.default_rng(404)
     bolts = np.zeros((H, W))
     bolt(bolts, rng, 0.10 * W, 0.12 * H, 0.80 * H, 2.0)
@@ -282,7 +250,6 @@ def electric():
     img = add_color(img, (90, 170, 230), halo * 0.20)
     img = add_color(img, (150, 210, 250), np.clip(bolts, 0, 1) * 0.42)
     img = add_color(img, (60, 140, 220), glow_blur(bolts) * 0.35)
-    # dark ridgeline with a cold rim light
     top1 = ridge(311, 0.86, 90, roughness=0.6)
     top2 = ridge(317, 0.94, 60, roughness=0.62)
     m1 = layer_mask(top1)
@@ -295,7 +262,6 @@ def electric():
 
 
 def glow_blur(buf):
-    """Cheap wide blur (separable box x3) used for bolt halos."""
     out = buf.copy()
     for _ in range(3):
         for axis in (0, 1):
@@ -311,7 +277,6 @@ def holy():
     sx, sy = 0.30, 0.72
     img = add_color(img, (255, 226, 170), glow(sx, sy, 0.09) * 0.55)
     img = add_color(img, (255, 200, 120), glow(sx, sy, 0.45) * 0.28)
-    # gentle rays fanning out from just below the horizon
     ang = np.arctan2(YY - sy * H, (XX - sx * W))
     rng = np.random.default_rng(55)
     n = 36
@@ -323,11 +288,9 @@ def holy():
     dist = np.sqrt(((XX - sx * W) ** 2) + ((YY - sy * H) * 1.0) ** 2) / W
     ray *= np.exp(-dist * 1.4) * smoothstep((sy - Y) / 0.06) * calm_center(0.85)
     img = add_color(img, (255, 240, 200), np.clip(ray, 0, 1) * 0.07)
-    # high thin clouds, tinted gold
     cl = fbm(2, 6, 88, 5)
     cl = smoothstep((cl - 0.52) / 0.2) * smoothstep(1 - np.abs(Y - 0.34) / 0.2) * calm_center(0.75)
     img = over(img, (255, 240, 214), cl * 0.30)
-    # pale distant hills, lighter and warmer toward the viewer
     img = mountains(img, [
         (61, 0.78, 38, (236, 214, 188), (246, 226, 192), 0.5),
         (67, 0.84, 34, (226, 198, 170), (240, 214, 180), 0.5),
@@ -340,7 +303,6 @@ def holy():
 def neutral():
     img = vgradient([(0.0, (66, 78, 94)), (0.4, (104, 118, 134)), (0.7, (148, 160, 172)), (1.0, (170, 180, 190))])
     img = add_color(img, (190, 200, 212), glow(0.5, 0.62, 0.55) * 0.20)
-    # pale disc barely visible through the haze
     img = add_color(img, (210, 218, 226), glow(0.66, 0.30, 0.05) * 0.18)
     specs = [(0.58, 50, (122, 136, 154)), (0.66, 56, (104, 119, 138)),
              (0.75, 60, (88, 103, 124)), (0.85, 62, (72, 88, 108)), (0.95, 48, (56, 70, 88))]
@@ -352,7 +314,6 @@ def neutral():
         color = np.asarray(col, dtype=np.float64) * (1 - depth * 0.25)
         color = color * (0.80 + 0.2 * depth) + fog_color * 0.0
         img = img * (1 - mask[..., None]) + color * mask[..., None]
-        # fog bank lying in front of this layer: wide, soft band modulated slowly along x
         xmod = np.interp(np.linspace(0, 4, W), np.arange(6), np.random.default_rng(500 + i).random(6))
         center = base + 0.06
         band = np.exp(-((Y - center) / 0.045) ** 2) * (0.35 + 0.65 * xmod[None, :])

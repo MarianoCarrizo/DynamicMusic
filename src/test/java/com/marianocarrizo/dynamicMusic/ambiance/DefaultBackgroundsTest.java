@@ -7,7 +7,10 @@ import java.io.InputStream;
 import java.util.HashSet;
 import java.util.Set;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DefaultBackgroundsTest {
 
@@ -17,7 +20,6 @@ class DefaultBackgroundsTest {
             String path = DefaultBackgrounds.resourcePath(p);
             try (InputStream in = DefaultBackgrounds.class.getResourceAsStream(path)) {
                 assertNotNull(in, p + " -> " + path + " is missing from the classpath");
-                // PNG signature
                 assertArrayEquals(new byte[]{(byte) 0x89, 'P', 'N', 'G'}, in.readNBytes(4), path);
             }
         }
