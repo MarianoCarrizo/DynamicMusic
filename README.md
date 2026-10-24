@@ -123,6 +123,12 @@ Para probar el script del instalador a mano hace falta Inno Setup 6.3 o superior
 
 La descarga de audio de YouTube es para uso personal. Respetar los derechos de autor y los términos de servicio de YouTube es responsabilidad de quien usa la app.
 
+## Apoyar el proyecto
+
+DynamicMusic es gratis y open source. Si te sirve en tus partidas, podés invitarme un cafecito:
+
+[![Invitame un café en cafecito.app](https://cdn.cafecito.app/imgs/buttons/button_1.svg)](https://cafecito.app/duhonha)
+
 ## Licencia
 
 [Apache 2.0](LICENSE)
