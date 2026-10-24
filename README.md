@@ -111,7 +111,7 @@ Para probar el script del instalador a mano hace falta Inno Setup 6.3 o superior
 
 ### MSI local (legado)
 
-`.\mvnw.cmd package -DskipTests` sigue generando un MSI con `jpackage-maven-plugin` si están WiX Toolset 3.x y los jmods de JavaFX 21 en `C:/javafx-jmods-21.0.2`. Este MSI no incluye ffmpeg ni la actualización automática. Para omitirlo, agregar `-DskipInstaller=true`.
+`.\mvnw.cmd package -DskipTests` sigue generando un MSI con `jpackage-maven-plugin` si están WiX Toolset 3.x y los jmods de JavaFX 21 en `C:/javafx-jmods-21.0.13`. Este MSI no incluye ffmpeg ni la actualización automática. Para omitirlo, agregar `-DskipInstaller=true`.
 
 ## Aviso sobre YouTube
 
