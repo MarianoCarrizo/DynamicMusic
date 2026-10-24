@@ -16,7 +16,6 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -27,7 +26,6 @@ import java.util.stream.Stream;
 public final class UpdateManager {
 
     static final String VERSION_PROPERTY = "dynamicmusic.version";
-    private static final long CHECK_INTERVAL_MS = TimeUnit.HOURS.toMillis(24);
     private static final Pattern INSTALLER_FILE = Pattern.compile("^DynamicMusic-Setup-(\\d+\\.\\d+\\.\\d+)\\.exe$");
 
     static final List<String> INSTALLER_ARGS =
@@ -63,11 +61,6 @@ public final class UpdateManager {
     }
 
     private Path updatesDir()    { return appDirSupplier.get().resolve("updates"); }
-    private Path lastCheckPath() { return appDirSupplier.get().resolve("update.lastcheck"); }
-
-    static boolean shouldCheck(long lastCheckMs, long nowMs) {
-        return lastCheckMs > nowMs || nowMs - lastCheckMs > CHECK_INTERVAL_MS;
-    }
 
     static Optional<Version> installerVersion(String fileName) {
         Matcher m = INSTALLER_FILE.matcher(fileName);
@@ -104,7 +97,6 @@ public final class UpdateManager {
         ReadyUpdate pending = cleanAndFindPending(dir, running);
         if (pending != null) onReady.accept(pending);
 
-        if (!shouldCheck(readLastCheck(), System.currentTimeMillis())) return;
         UpdateChecker.Lookup lookup;
         try {
             lookup = UpdateChecker.fetchLatest(client, api);
@@ -115,14 +107,10 @@ public final class UpdateManager {
         boolean nothingToDownload = found.isEmpty()
                 || !found.get().version().isNewerThan(running)
                 || (pending != null && !found.get().version().isNewerThan(pending.version()));
-        if (nothingToDownload) {
-            if (lookup.answered()) writeLastCheck();
-            return;
-        }
+        if (nothingToDownload) return;
 
         ReleaseInfo rel = found.get();
         Path installer = downloadAndVerify(client, rel, dir);
-        writeLastCheck();
         onReady.accept(new ReadyUpdate(rel.version(), installer));
     }
 
@@ -223,23 +211,6 @@ public final class UpdateManager {
             System.err.println("[update] could not start installer: " + e);
             launched.set(false);
             return false;
-        }
-    }
-
-    private long readLastCheck() {
-        try {
-            return Long.parseLong(Files.readString(lastCheckPath()).trim());
-        } catch (IOException | NumberFormatException e) {
-            return 0L;
-        }
-    }
-
-    private void writeLastCheck() {
-        try {
-            Files.createDirectories(lastCheckPath().getParent());
-            Files.writeString(lastCheckPath(), Long.toString(System.currentTimeMillis()));
-        } catch (IOException e) {
-            System.err.println("[update] could not record update check: " + e);
         }
     }
 
