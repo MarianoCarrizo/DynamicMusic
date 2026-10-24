@@ -26,10 +26,10 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '21'
@@ -172,7 +172,7 @@ jobs:
           ls -l
 
       - name: Upload installer artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: DynamicMusic-Setup-${{ env.APP_VERSION }}
           path: |
@@ -184,12 +184,12 @@ jobs:
   release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
       - name: Download installer artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
