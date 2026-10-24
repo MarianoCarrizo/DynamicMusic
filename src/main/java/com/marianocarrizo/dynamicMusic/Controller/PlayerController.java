@@ -567,7 +567,7 @@ public class PlayerController implements SceneHost {
         AuraConfig aura = sessionConfig.getActiveScene().getAura(liveSlot());
         updatingLiveAura = true;
         try {
-            lblLiveAura.setText("LIVE AURA · " + (onDemandActive() ? "ON DEMAND" : currentActiveType.name()));
+            lblLiveAura.setText("LIVE AURA · " + (usesOnDemandAura() ? "ON DEMAND" : currentActiveType.name()));
             ToggleButton tb = livePresetButtons.get(aura.getPreset());
             if (tb != null) tb.setSelected(true);
             sldLiveIntensity.setValue(aura.getIntensity());
@@ -660,13 +660,15 @@ public class PlayerController implements SceneHost {
 
     // --- Playback source (mood / playlist / on-demand) ---
 
-    private boolean onDemandActive() {
-        return musicService.getPlaybackMode() == MusicService.PlaybackMode.ON_DEMAND;
+    /** Music outside the moods (on-demand tracks and playlists) shares the scene's on-demand aura. */
+    private boolean usesOnDemandAura() {
+        MusicService.PlaybackMode mode = musicService.getPlaybackMode();
+        return mode == MusicService.PlaybackMode.ON_DEMAND || mode == MusicService.PlaybackMode.PLAYLIST;
     }
 
-    /** Aura slot shown by the ambiance and edited by the live strip: the on-demand aura while it plays, else the mood's. */
+    /** Aura slot shown by the ambiance and edited by the live strip: the on-demand aura outside moods, else the mood's. */
     private AuraSlot liveSlot() {
-        return onDemandActive() ? AuraSlot.ON_DEMAND : AuraSlot.of(currentActiveType);
+        return usesOnDemandAura() ? AuraSlot.ON_DEMAND : AuraSlot.of(currentActiveType);
     }
 
     /** Explicitly changes the audible source (never called from tab changes) and syncs the UI around it. */

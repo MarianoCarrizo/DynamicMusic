@@ -167,22 +167,6 @@
                                     </children>
                                 </GridPane>
 
-                                <!-- Live aura: quick edits to the active mood's aura -->
-                                <VBox spacing="6" styleClass="playback-panel">
-                                    <Label fx:id="lblLiveAura" text="LIVE AURA" styleClass="lbl-panel-title"/>
-                                    <HBox fx:id="livePresetBox" spacing="6" alignment="CENTER"/>
-                                    <HBox spacing="8" alignment="CENTER_LEFT">
-                                        <Label text="Intensity" minWidth="70" styleClass="lbl-session-title"/>
-                                        <Slider fx:id="sldLiveIntensity" min="0" max="1" HBox.hgrow="ALWAYS" styleClass="spotify-slider"/>
-                                        <Label fx:id="lblLiveIntensity" text="50%" minWidth="40" styleClass="lbl-time"/>
-                                    </HBox>
-                                    <HBox spacing="8" alignment="CENTER_LEFT">
-                                        <Label text="Reactivity" minWidth="70" styleClass="lbl-session-title"/>
-                                        <Slider fx:id="sldLiveReactivity" min="0" max="1" HBox.hgrow="ALWAYS" styleClass="spotify-slider"/>
-                                        <Label fx:id="lblLiveReactivity" text="50%" minWidth="40" styleClass="lbl-time"/>
-                                    </HBox>
-                                </VBox>
-
                                 <!-- Reproductor de mood -->
                                 <VBox spacing="8" alignment="CENTER" styleClass="playback-panel">
                                     <Label text="MOOD" styleClass="lbl-panel-title"/>
@@ -255,6 +239,22 @@
                     </Tab>
 
                 </TabPane>
+
+                <!-- Live aura: outside the tabs so it is reachable from Moods and Playlists; edits the aura on screen -->
+                <VBox spacing="6" styleClass="playback-panel">
+                    <Label fx:id="lblLiveAura" text="LIVE AURA" styleClass="lbl-panel-title"/>
+                    <HBox fx:id="livePresetBox" spacing="6" alignment="CENTER"/>
+                    <HBox spacing="8" alignment="CENTER_LEFT">
+                        <Label text="Intensity" minWidth="70" styleClass="lbl-session-title"/>
+                        <Slider fx:id="sldLiveIntensity" min="0" max="1" HBox.hgrow="ALWAYS" styleClass="spotify-slider"/>
+                        <Label fx:id="lblLiveIntensity" text="50%" minWidth="40" styleClass="lbl-time"/>
+                    </HBox>
+                    <HBox spacing="8" alignment="CENTER_LEFT">
+                        <Label text="Reactivity" minWidth="70" styleClass="lbl-session-title"/>
+                        <Slider fx:id="sldLiveReactivity" min="0" max="1" HBox.hgrow="ALWAYS" styleClass="spotify-slider"/>
+                        <Label fx:id="lblLiveReactivity" text="50%" minWidth="40" styleClass="lbl-time"/>
+                    </HBox>
+                </VBox>
 
             </VBox>
         </SplitPane>
