@@ -1,4 +1,7 @@
 module com.marianocarrizo.dynamicMusic {
+    // java.net.http: download of the managed yt-dlp binary
+    requires java.net.http;
+
     // Dependencias de JavaFX
     requires javafx.controls;
     requires javafx.fxml;

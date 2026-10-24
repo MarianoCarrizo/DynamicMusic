@@ -5,12 +5,7 @@ import com.google.gson.JsonParser;
 import com.marianocarrizo.dynamicMusic.model.PlaylistItem;
 import javafx.application.Platform;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -20,7 +15,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -87,25 +81,59 @@ public final class YouTubeDownloader {
 
     // --- yt-dlp availability ---
 
+    private static volatile boolean availableCached;
+    private static volatile long    unavailableUntilMs;
+
     /**
-     * Probes whether yt-dlp is available on PATH.
-     * Single-shot check with a 3-second timeout — mirrors {@code BoomerangBaker.isFfmpegAvailable()}.
+     * True when the managed yt-dlp exists or yt-dlp on PATH runs. A positive result is cached for the
+     * session; a negative one for 30 s, so repeated clicks on the FX thread never re-spawn a probe.
      */
     public static boolean isYtDlpAvailable() {
+        if (availableCached || YtDlpManager.get().hasManagedBinary()) return true;
+        if (System.currentTimeMillis() < unavailableUntilMs) return false;
+        boolean ok = false;
         try {
-            Process p = new ProcessBuilder("yt-dlp", "--version")
-                    .redirectErrorStream(true)
-                    .start();
-            p.getInputStream().transferTo(OutputStream.nullOutputStream());
-            boolean done = p.waitFor(3, TimeUnit.SECONDS);
-            if (!done) { p.destroyForcibly(); return false; }
-            return p.exitValue() == 0;
+            YtDlpManager.ProcResult r = YtDlpManager.run(List.of("yt-dlp", "--version"), 3);
+            ok = !r.timedOut() && r.exitCode() == 0;
         } catch (IOException e) {
-            return false;
+            ok = false;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            return false;
         }
+        if (ok) availableCached = true;
+        else unavailableUntilMs = System.currentTimeMillis() + 30_000;
+        return ok;
+    }
+
+    // --- Command execution with update-and-retry ---
+
+    private static boolean isRetryable(String output) {
+        return output.contains("HTTP Error 403")
+                || output.contains("older than 90 days")
+                || output.contains("Sign in to confirm")
+                || output.contains("nsig");
+    }
+
+    /**
+     * Runs yt-dlp with {@code args} (executable and JS runtime args are prepended). If it fails with a
+     * known "outdated yt-dlp" signature, updates yt-dlp once and retries once with the new executable.
+     * Each attempt is bounded by a watchdog.
+     */
+    private static YtDlpManager.ProcResult runYtDlp(List<String> args, long timeoutSec)
+            throws IOException, InterruptedException {
+        YtDlpManager mgr = YtDlpManager.get();
+        YtDlpManager.ProcResult r = YtDlpManager.run(buildCmd(mgr, args), timeoutSec);
+        if (r.timedOut() || r.exitCode() == 0 || !isRetryable(r.combined())) return r;
+        mgr.forceUpdate();
+        return YtDlpManager.run(buildCmd(mgr, args), timeoutSec);
+    }
+
+    private static List<String> buildCmd(YtDlpManager mgr, List<String> args) {
+        List<String> cmd = new ArrayList<>();
+        cmd.add(mgr.executable());
+        cmd.addAll(mgr.jsRuntimeArgs());
+        cmd.addAll(args);
+        return cmd;
     }
 
     // --- Async search ---
@@ -113,86 +141,66 @@ public final class YouTubeDownloader {
     public void searchAsync(String query, int maxResults,
                             Consumer<List<SearchResult>> onResults,
                             Consumer<String> onError) {
-        if (!isYtDlpAvailable()) {
-            Platform.runLater(() -> onError.accept("yt-dlp not found on PATH."));
-            return;
-        }
-
         CompletableFuture.runAsync(() -> {
-            Process proc = null;
             try {
-                List<String> cmd = List.of(
-                        "yt-dlp",
+                if (!isYtDlpAvailable()) {
+                    Platform.runLater(() -> onError.accept("yt-dlp not found."));
+                    return;
+                }
+                YtDlpManager.ProcResult r = runYtDlp(List.of(
                         "--flat-playlist",
                         "--dump-json",
                         "ytsearch" + maxResults + ":" + query
-                );
-                proc = new ProcessBuilder(cmd)
-                        .redirectErrorStream(false)
-                        .start();
+                ), SEARCH_TIMEOUT_SECONDS);
 
-                // Drain stderr to avoid blocking
-                final Process procFinal = proc;
-                Thread stderrDrainer = new Thread(
-                        () -> {
-                            try { procFinal.getErrorStream().transferTo(OutputStream.nullOutputStream()); }
-                            catch (IOException ignored) {}
-                        },
-                        "yt-dlp-stderr-drainer"
-                );
-                stderrDrainer.setDaemon(true);
-                stderrDrainer.start();
-
-                List<SearchResult> results = new ArrayList<>();
-                try (BufferedReader reader = new BufferedReader(
-                        new InputStreamReader(proc.getInputStream(), StandardCharsets.UTF_8))) {
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        if (line.isBlank()) continue;
-                        try {
-                            JsonObject obj = JsonParser.parseString(line).getAsJsonObject();
-
-                            if (!obj.has("id") || obj.get("id").isJsonNull()) continue;
-                            if (!obj.has("title") || obj.get("title").isJsonNull()) continue;
-
-                            String id    = obj.get("id").getAsString();
-                            String title = obj.get("title").getAsString();
-
-                            String channel = "";
-                            if (obj.has("channel") && !obj.get("channel").isJsonNull()) {
-                                channel = obj.get("channel").getAsString();
-                            } else if (obj.has("uploader") && !obj.get("uploader").isJsonNull()) {
-                                channel = obj.get("uploader").getAsString();
-                            }
-
-                            long duration = 0;
-                            if (obj.has("duration") && !obj.get("duration").isJsonNull()) {
-                                duration = (long) obj.get("duration").getAsDouble();
-                            }
-
-                            results.add(new SearchResult(id, title, channel, duration));
-                        } catch (Exception ignored) {
-                            // one bad line never aborts the batch
-                        }
-                    }
-                }
-
-                boolean finished = proc.waitFor(SEARCH_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-                if (!finished) {
-                    proc.destroyForcibly();
+                if (r.timedOut()) {
                     Platform.runLater(() -> onError.accept("Search timed out after " + SEARCH_TIMEOUT_SECONDS + "s"));
                     return;
                 }
 
-                final List<SearchResult> resultsFinal = results;
-                Platform.runLater(() -> onResults.accept(resultsFinal));
+                List<SearchResult> results = new ArrayList<>();
+                for (String line : r.stdout().split("\\R")) {
+                    if (line.isBlank()) continue;
+                    try {
+                        JsonObject obj = JsonParser.parseString(line).getAsJsonObject();
+
+                        if (!obj.has("id") || obj.get("id").isJsonNull()) continue;
+                        if (!obj.has("title") || obj.get("title").isJsonNull()) continue;
+
+                        String id    = obj.get("id").getAsString();
+                        String title = obj.get("title").getAsString();
+
+                        String channel = "";
+                        if (obj.has("channel") && !obj.get("channel").isJsonNull()) {
+                            channel = obj.get("channel").getAsString();
+                        } else if (obj.has("uploader") && !obj.get("uploader").isJsonNull()) {
+                            channel = obj.get("uploader").getAsString();
+                        }
+
+                        long duration = 0;
+                        if (obj.has("duration") && !obj.get("duration").isJsonNull()) {
+                            duration = (long) obj.get("duration").getAsDouble();
+                        }
+
+                        results.add(new SearchResult(id, title, channel, duration));
+                    } catch (Exception ignored) {
+                        // one bad line never aborts the batch
+                    }
+                }
+
+                if (results.isEmpty() && r.exitCode() != 0) {
+                    String t = tail(r.combined(), STDERR_TAIL_BYTES);
+                    Platform.runLater(() -> onError.accept(t.isBlank()
+                            ? "yt-dlp exited with code " + r.exitCode() : t));
+                    return;
+                }
+
+                Platform.runLater(() -> onResults.accept(results));
 
             } catch (IOException | InterruptedException e) {
                 if (e instanceof InterruptedException) Thread.currentThread().interrupt();
                 final String msg = e.getMessage();
                 Platform.runLater(() -> onError.accept(msg));
-            } finally {
-                if (proc != null && proc.isAlive()) proc.destroyForcibly();
             }
         }).exceptionally(ex -> {
             Platform.runLater(() -> onError.accept(ex.getMessage()));
@@ -257,34 +265,26 @@ public final class YouTubeDownloader {
 
         final Path outFinal = out;
         CompletableFuture.runAsync(() -> {
-            Process proc = null;
             try {
-                List<String> cmd = List.of(
-                        "yt-dlp",
+                YtDlpManager.ProcResult r = runYtDlp(List.of(
                         "-x",
                         "--audio-format", "mp3",
                         "--no-playlist",
                         "-o", outFinal.toString(),
                         "--", // end of options: a pasted string can never be parsed as a yt-dlp flag
                         url
-                );
-                proc = new ProcessBuilder(cmd)
-                        .redirectErrorStream(true)
-                        .start();
+                ), DOWNLOAD_TIMEOUT_SECONDS);
 
-                String stderrTail = drainAndTail(proc.getInputStream(), STDERR_TAIL_BYTES);
-
-                boolean finished = proc.waitFor(DOWNLOAD_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-                if (!finished) {
-                    proc.destroyForcibly();
+                if (r.timedOut()) {
+                    deletePartial(outFinal);
                     onFailure.accept("Download timed out after " + DOWNLOAD_TIMEOUT_SECONDS + "s");
                     return;
                 }
 
-                if (proc.exitValue() != 0) {
-                    onFailure.accept(stderrTail.isBlank()
-                            ? "yt-dlp exited with code " + proc.exitValue()
-                            : stderrTail);
+                if (r.exitCode() != 0) {
+                    deletePartial(outFinal);
+                    String t = tail(r.combined(), STDERR_TAIL_BYTES);
+                    onFailure.accept(t.isBlank() ? "yt-dlp exited with code " + r.exitCode() : t);
                     return;
                 }
 
@@ -301,14 +301,20 @@ public final class YouTubeDownloader {
 
             } catch (IOException | InterruptedException e) {
                 if (e instanceof InterruptedException) Thread.currentThread().interrupt();
+                deletePartial(outFinal);
                 onFailure.accept(e.getMessage());
-            } finally {
-                if (proc != null && proc.isAlive()) proc.destroyForcibly();
             }
         }).exceptionally(ex -> {
+            deletePartial(outFinal);
             onFailure.accept(ex.getMessage());
             return null;
         });
+    }
+
+    /** Removes a possibly truncated output (and yt-dlp's .part leftover) so it is never read as a cache hit. */
+    private static void deletePartial(Path out) {
+        try { Files.deleteIfExists(out); } catch (IOException ignored) {}
+        try { Files.deleteIfExists(Paths.get(out + ".part")); } catch (IOException ignored) {}
     }
 
     // --- Title fetch ---
@@ -316,16 +322,10 @@ public final class YouTubeDownloader {
     /** Runs {@code yt-dlp --get-title} and returns the trimmed output, or null on any failure. */
     private String fetchTitle(String url) {
         try {
-            Process p = new ProcessBuilder("yt-dlp", "--get-title", "--no-playlist", "--", url)
-                    .redirectErrorStream(false)
-                    .start();
-            // Drain stderr to avoid blocking
-            p.getErrorStream().transferTo(OutputStream.nullOutputStream());
-            byte[] stdout = p.getInputStream().readAllBytes();
-            boolean done = p.waitFor(TITLE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-            if (!done) { p.destroyForcibly(); return null; }
-            if (p.exitValue() != 0) return null;
-            String title = new String(stdout, StandardCharsets.UTF_8).trim();
+            YtDlpManager.ProcResult r = runYtDlp(
+                    List.of("--get-title", "--no-playlist", "--", url), TITLE_TIMEOUT_SECONDS);
+            if (r.timedOut() || r.exitCode() != 0) return null;
+            String title = r.stdout().trim();
             return title.isBlank() ? null : title;
         } catch (IOException | InterruptedException e) {
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();
@@ -363,13 +363,9 @@ public final class YouTubeDownloader {
 
     // --- Internal utility ---
 
-    private static String drainAndTail(InputStream in, int maxBytes) {
-        try {
-            byte[] all = in.readAllBytes();
-            if (all.length <= maxBytes) return new String(all, StandardCharsets.UTF_8);
-            return new String(all, all.length - maxBytes, maxBytes, StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            return "";
-        }
+    /** Last {@code maxChars} characters of {@code s}, trimmed. */
+    private static String tail(String s, int maxChars) {
+        String t = s.strip();
+        return t.length() <= maxChars ? t : t.substring(t.length() - maxChars);
     }
 }
