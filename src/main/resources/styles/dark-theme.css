@@ -229,6 +229,16 @@
     -fx-background-color: #4f4f5c;
 }
 
+/* Update notice under the window header */
+.update-bar {
+    -fx-background-color: #23303f;
+    -fx-border-color: transparent transparent #2d2d35 transparent;
+    -fx-border-width: 0 0 1px 0;
+}
+.update-label {
+    -fx-text-fill: #cfe3ff;
+}
+
 /* Scene bar under the window header */
 .scene-bar {
     -fx-background-color: #1a1a20;

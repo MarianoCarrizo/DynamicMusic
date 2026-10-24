@@ -16,6 +16,7 @@ import com.marianocarrizo.dynamicMusic.model.Scene;
 import com.marianocarrizo.dynamicMusic.service.MusicService;
 import com.marianocarrizo.dynamicMusic.service.PlaylistManager;
 import com.marianocarrizo.dynamicMusic.service.TrackLibrary;
+import com.marianocarrizo.dynamicMusic.service.UpdateManager;
 import com.marianocarrizo.dynamicMusic.service.YouTubeDownloader;
 import com.marianocarrizo.dynamicMusic.service.YtDlpManager;
 import javafx.animation.Animation;
@@ -138,6 +139,13 @@ public class PlayerController implements SceneHost {
     @FXML private Button btnBrowseYoutube;
     @FXML private Label lblYoutubeError;
 
+    // App update notice (shown only when a verified installer is ready)
+    @FXML private HBox   updateBar;
+    @FXML private Label  lblUpdate;
+    @FXML private Button btnUpdateNow;
+    @FXML private Button btnUpdateOnClose;
+    private UpdateManager.ReadyUpdate readyUpdate;
+
     private static final PseudoClass DROP_TARGET = PseudoClass.getPseudoClass("drop-target");
 
     private File rootFolder;
@@ -205,6 +213,7 @@ public class PlayerController implements SceneHost {
     @FXML
     public void initialize() {
         startYtDlpManager();
+        startUpdateCheck();
         buildMoodCards();
         buildLiveAura();
         refreshCards();
@@ -1542,6 +1551,65 @@ public class PlayerController implements SceneHost {
         }
     }
 
+    // --- App updates ---
+
+    /** Starts the background update check (installed Windows builds only); the notice never interrupts playback. */
+    private void startUpdateCheck() {
+        UpdateManager.get().checkAsync(update -> Platform.runLater(() -> showUpdateNotice(update)));
+    }
+
+    private void showUpdateNotice(UpdateManager.ReadyUpdate update) {
+        if (updateBar == null) return;
+        if (readyUpdate != null && !update.version().isNewerThan(readyUpdate.version())) return;
+        readyUpdate = update;
+        lblUpdate.setText("Version " + update.version() + " is ready");
+        btnUpdateNow.setDisable(false);
+        btnUpdateOnClose.setVisible(true);
+        btnUpdateOnClose.setManaged(true);
+        updateBar.setVisible(true);
+        updateBar.setManaged(true);
+    }
+
+    @FXML
+    private void onInstallUpdateNow() {
+        UpdateManager.ReadyUpdate update = readyUpdate;
+        if (update == null) return;
+        btnUpdateNow.setDisable(true);
+        // Re-hashing a large installer stays off the FX thread
+        CompletableFuture.supplyAsync(() -> UpdateManager.get().verify(update)).thenAccept(ok -> Platform.runLater(() -> {
+            if (!ok) {
+                lblUpdate.setText("The downloaded update is damaged. It will be downloaded again on the next start.");
+                btnUpdateOnClose.setVisible(false);
+                btnUpdateOnClose.setManaged(false);
+                return;
+            }
+            UpdateManager.get().installOnClose(update);
+            if (!UpdateManager.get().launchPendingInstaller()) {
+                // Keep the app open: closing without updating would only lose the user's place
+                lblUpdate.setText("The installer could not be started. Try again or install it on close.");
+                btnUpdateNow.setDisable(false);
+                return;
+            }
+            shutdownApp(); // saves the session and exits; the installer is already running
+        })).exceptionally(ex -> {
+            Platform.runLater(() -> {
+                lblUpdate.setText("The update could not be checked: " + ex.getMessage());
+                btnUpdateNow.setDisable(false);
+            });
+            return null;
+        });
+    }
+
+    @FXML
+    private void onInstallUpdateOnClose() {
+        UpdateManager.ReadyUpdate update = readyUpdate;
+        if (update == null) return;
+        UpdateManager.get().installOnClose(update);
+        lblUpdate.setText("Version " + update.version() + " will be installed when you close the app");
+        btnUpdateOnClose.setVisible(false);
+        btnUpdateOnClose.setManaged(false);
+    }
+
     private void showYoutubeError(String message) {
         if (lblYoutubeError != null) {
             ytDlpStatusClear.stop();
@@ -1792,11 +1860,17 @@ public class PlayerController implements SceneHost {
 
     @FXML
     private void onCloseWindow(ActionEvent event) {
+        shutdownApp();
+    }
+
+    /** Single exit path: flushes pending state, runs a requested update installer, then quits. */
+    private void shutdownApp() {
         if (sceneEditor != null) sceneEditor.dispose(); // releases the background preview player
         if (saveDebounce.getStatus() == Animation.Status.RUNNING) {
             saveDebounce.stop();
             manager.save(sessionConfig); // flush a pending editor save
         }
+        UpdateManager.get().launchPendingInstaller(); // no-op unless the user chose to install the update
         Platform.exit();
         System.exit(0);
     }
