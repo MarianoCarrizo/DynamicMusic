@@ -35,10 +35,11 @@
             <Label text="Scene" styleClass="lbl-session-title"/>
             <ComboBox fx:id="cmbScene" minWidth="160" prefWidth="180"/>
             <Button fx:id="btnEditScene" text="Edit scene" onAction="#onEditScene" styleClass="btn-secondary"/>
+            <Button text="Save as..." onAction="#onSaveSceneAs" styleClass="btn-secondary"/>
             <MenuButton fx:id="btnSceneMenu" text="+" styleClass="btn-menu">
                 <items>
                     <MenuItem text="New scene" onAction="#onNewScene"/>
-                    <MenuItem text="Duplicate scene" onAction="#onDuplicateScene"/>
+                    <MenuItem text="Save as new scene..." onAction="#onSaveSceneAs"/>
                 </items>
             </MenuButton>
             <Region HBox.hgrow="ALWAYS"/>

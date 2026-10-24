@@ -870,11 +870,21 @@ public class PlayerController implements SceneHost {
             switchScene(sessionConfig.addScene(name)));
     }
 
+    /**
+     * Saves the current setup (tracks, background, all auras including live tweaks) as a new
+     * named scene and switches to it; the original scene stays as it was.
+     */
     @FXML
-    private void onDuplicateScene() {
+    private void onSaveSceneAs() {
         Scene active = sessionConfig.getActiveScene();
-        Scene copy = sessionConfig.duplicateScene(active.getId(), active.getName() + " copy");
-        if (copy != null) switchScene(copy);
+        TextInputDialog d = new TextInputDialog(active.getName() + " copy");
+        d.setTitle("Save as new scene");
+        d.setHeaderText(null);
+        d.setContentText("Name:");
+        d.showAndWait().map(String::trim).filter(n -> !n.isEmpty()).ifPresent(name -> {
+            Scene copy = sessionConfig.duplicateScene(active.getId(), name);
+            if (copy != null) switchScene(copy);
+        });
     }
 
     @FXML
