@@ -14,6 +14,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
@@ -38,7 +39,9 @@ public final class BoomerangBaker {
      */
     public static boolean isFfmpegAvailable() {
         try {
-            Process p = new ProcessBuilder(FfmpegLocator.executable(), "-version")
+            Optional<String> ffmpeg = FfmpegLocator.executable();
+            if (ffmpeg.isEmpty()) return false;
+            Process p = new ProcessBuilder(ffmpeg.get(), "-version")
                     .redirectErrorStream(true)
                     .start();
             // Drenar salida para evitar bloqueo en el buffer del proceso
@@ -141,8 +144,14 @@ public final class BoomerangBaker {
         String startSec = String.format(Locale.ROOT, "%.3f", startMs / 1000.0);
         String endSec   = String.format(Locale.ROOT, "%.3f", endMs   / 1000.0);
 
+        Optional<String> ffmpeg = FfmpegLocator.executable();
+        if (ffmpeg.isEmpty()) {
+            onFailure.accept("ffmpeg is not available");
+            return;
+        }
+
         List<String> cmd = List.of(
-                FfmpegLocator.executable(), "-y",
+                ffmpeg.get(), "-y",
                 "-ss", startSec,
                 "-to", endSec,
                 "-i", srcAbsPath,

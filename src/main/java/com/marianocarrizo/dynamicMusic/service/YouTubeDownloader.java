@@ -104,8 +104,10 @@ public final class YouTubeDownloader {
     }
 
     private static boolean probePath() {
+        Optional<Path> exe = ExecutableResolver.find("yt-dlp");
+        if (exe.isEmpty()) return false;
         try {
-            YtDlpManager.ProcResult r = YtDlpManager.run(List.of("yt-dlp", "--version"), 3);
+            YtDlpManager.ProcResult r = YtDlpManager.run(List.of(exe.get().toString(), "--version"), 3);
             return !r.timedOut() && r.exitCode() == 0;
         } catch (IOException e) {
             return false;
@@ -154,9 +156,9 @@ public final class YouTubeDownloader {
         return YtDlpManager.run(buildCmd(mgr, args), timeoutSec);
     }
 
-    private static List<String> buildCmd(YtDlpManager mgr, List<String> args) {
+    private static List<String> buildCmd(YtDlpManager mgr, List<String> args) throws IOException {
         List<String> cmd = new ArrayList<>();
-        cmd.add(mgr.executable());
+        cmd.add(mgr.executable().orElseThrow(() -> new IOException(NOT_FOUND_MESSAGE)));
         cmd.addAll(mgr.jsRuntimeArgs());
         cmd.addAll(args);
         return cmd;

@@ -169,8 +169,9 @@ public final class YtDlpManager {
         }
     }
 
-    public String executable() {
-        return hasManagedBinary() ? managedPath().toString() : "yt-dlp";
+    public Optional<String> executable() {
+        if (hasManagedBinary()) return Optional.of(managedPath().toString());
+        return ExecutableResolver.find("yt-dlp").map(Path::toString);
     }
 
     public void ensureReadyAsync() {
@@ -313,12 +314,20 @@ public final class YtDlpManager {
         if (cached != null) return cached;
         synchronized (jsLock) {
             if (jsArgs == null) {
-                if (works("deno")) jsArgs = List.of();
-                else if (works("node")) jsArgs = List.of("--js-runtimes", "node");
-                else jsArgs = List.of();
+                jsArgs = detectJsRuntime();
             }
             return jsArgs;
         }
+    }
+
+    private static List<String> detectJsRuntime() {
+        for (String runtime : List.of("deno", "node")) {
+            Optional<Path> exe = ExecutableResolver.find(runtime);
+            if (exe.isPresent() && works(exe.get().toString())) {
+                return List.of("--js-runtimes", runtime + ":" + exe.get());
+            }
+        }
+        return List.of();
     }
 
     private static boolean works(String exe) {

@@ -14,12 +14,14 @@ public final class FfmpegLocator {
 
     private static final Path BUNDLED = detect();
 
-    public static String executable() {
-        return BUNDLED != null ? BUNDLED.resolve(binaryName(osName())).toString() : "ffmpeg";
+    public static Optional<String> executable() {
+        if (BUNDLED != null) return Optional.of(BUNDLED.resolve(binaryName(osName())).toString());
+        return ExecutableResolver.find("ffmpeg").map(Path::toString);
     }
 
     public static Optional<Path> directory() {
-        return Optional.ofNullable(BUNDLED);
+        if (BUNDLED != null) return Optional.of(BUNDLED);
+        return ExecutableResolver.find("ffmpeg").map(Path::getParent);
     }
 
     private static Path detect() {
