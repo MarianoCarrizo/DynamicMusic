@@ -3,9 +3,7 @@ package com.marianocarrizo.dynamicMusic.service;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URI;
 import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -264,20 +262,14 @@ public final class YtDlpManager {
 
             String sums;
             try {
-                sums = new String(BoundedDownload.toBytes(client,
-                        HttpRequest.newBuilder(URI.create(RELEASE_BASE + CHECKSUMS_ASSET))
-                                .timeout(Duration.ofSeconds(30)).GET().build(),
-                        BoundedDownload::isGitHubHost, BoundedDownload.MAX_TEXT_BYTES,
-                        Duration.ofSeconds(30), "yt-dlp checksums"), StandardCharsets.UTF_8);
+                sums = new String(BoundedDownload.toBytes(client, RELEASE_BASE + CHECKSUMS_ASSET,
+                        BoundedDownload::isGitHubHost, DownloadKind.YTDLP_SUMS), StandardCharsets.UTF_8);
             } catch (IOException e) {
                 throw new IOException(VERIFY_FAILED, e);
             }
 
-            BoundedDownload.toFile(client,
-                    HttpRequest.newBuilder(URI.create(RELEASE_BASE + asset))
-                            .timeout(Duration.ofSeconds(120)).GET().build(),
-                    tmp, BoundedDownload::isGitHubHost, BoundedDownload.MAX_YTDLP_BYTES,
-                    Duration.ofSeconds(120), "yt-dlp");
+            BoundedDownload.toFile(client, RELEASE_BASE + asset, tmp, BoundedDownload::isGitHubHost,
+                    DownloadKind.YTDLP_BINARY);
             if (Files.size(tmp) <= MIN_BINARY_BYTES) throw new IOException("downloaded file is too small");
             verify(tmp, sums, asset);
 

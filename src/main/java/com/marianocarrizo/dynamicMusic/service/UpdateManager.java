@@ -6,7 +6,6 @@ import com.marianocarrizo.dynamicMusic.service.UpdateChecker.Version;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -120,19 +119,12 @@ public final class UpdateManager {
     record DownloadPolicy(PublicKey key, Predicate<URI> trustedHost, long maxInstallerBytes) {
         static DownloadPolicy production() {
             return new DownloadPolicy(UpdateSignature.embeddedKey(), BoundedDownload::isGitHubHost,
-                    BoundedDownload.MAX_INSTALLER_BYTES);
+                    DownloadKind.INSTALLER.maxBytes());
         }
     }
 
     static Path downloadAndVerify(HttpClient client, ReleaseInfo rel, Path dir) throws IOException, InterruptedException {
         return downloadAndVerify(client, rel, dir, DownloadPolicy.production());
-    }
-
-    private static byte[] fetchSmall(HttpClient client, String url, DownloadPolicy policy, String what)
-            throws IOException, InterruptedException {
-        return BoundedDownload.toBytes(client,
-                HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(30)).GET().build(),
-                policy.trustedHost(), BoundedDownload.MAX_TEXT_BYTES, Duration.ofSeconds(30), what);
     }
 
     static Path downloadAndVerify(HttpClient client, ReleaseInfo rel, Path dir, DownloadPolicy policy)
@@ -143,16 +135,15 @@ public final class UpdateManager {
         Path sigFile = dir.resolve(rel.signatureName());
         Path part = dir.resolve(rel.installerName() + ".part");
         try {
-            byte[] sumsBytes = fetchSmall(client, rel.checksumUrl(), policy, "checksum");
-            byte[] sigBytes = fetchSmall(client, rel.signatureUrl(), policy, "signature");
+            byte[] sumsBytes = BoundedDownload.toBytes(client, rel.checksumUrl(), policy.trustedHost(), DownloadKind.CHECKSUM);
+            byte[] sigBytes = BoundedDownload.toBytes(client, rel.signatureUrl(), policy.trustedHost(), DownloadKind.SIGNATURE);
             if (!UpdateSignature.verify(sumsBytes, sigBytes, policy.key())) throw new IOException(SIGNATURE_FAILED);
             String sums = new String(sumsBytes, StandardCharsets.UTF_8);
             if (Checksums.parse(sums, rel.installerName()).isEmpty()) throw new IOException("checksum not listed");
 
-            BoundedDownload.toFile(client,
-                    HttpRequest.newBuilder(URI.create(rel.installerUrl()))
-                            .timeout(Duration.ofMinutes(15)).GET().build(),
-                    part, policy.trustedHost(), policy.maxInstallerBytes(), Duration.ofMinutes(15), "installer");
+            DownloadKind installerKind = DownloadKind.INSTALLER;
+            BoundedDownload.toFile(client, installerKind.request(rel.installerUrl()), part, policy.trustedHost(),
+                    policy.maxInstallerBytes(), installerKind.maxTime(), installerKind.label());
             if (!Checksums.matches(part, sums, rel.installerName())) throw new IOException(YtDlpManager.VERIFY_FAILED);
 
             Files.write(sumsFile, sumsBytes);

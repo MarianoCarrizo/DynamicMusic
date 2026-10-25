@@ -45,8 +45,9 @@ class BoundedDownloadTest {
 
     @Test
     void limitsMatchTheIntendedSizes() {
-        assertEquals(300L * 1024 * 1024, BoundedDownload.MAX_INSTALLER_BYTES);
-        assertEquals(100L * 1024 * 1024, BoundedDownload.MAX_YTDLP_BYTES);
+        assertEquals(300L * 1024 * 1024, DownloadKind.INSTALLER.maxBytes());
+        assertEquals(100L * 1024 * 1024, DownloadKind.YTDLP_BINARY.maxBytes());
+        assertEquals(1024L * 1024, DownloadKind.CHECKSUM.maxBytes());
     }
 
     @Test

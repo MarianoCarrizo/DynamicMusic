@@ -21,16 +21,22 @@ import java.util.function.Predicate;
 
 final class BoundedDownload {
 
-    static final long MAX_INSTALLER_BYTES = 300L * 1024 * 1024;
-    static final long MAX_YTDLP_BYTES = 100L * 1024 * 1024;
-    static final long MAX_TEXT_BYTES = 1024L * 1024;
-
     private BoundedDownload() {}
 
     static boolean isGitHubHost(URI uri) {
         if (uri == null || !"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null) return false;
         String host = uri.getHost().toLowerCase(Locale.ROOT);
         return host.equals("github.com") || host.endsWith(".githubusercontent.com");
+    }
+
+    static void toFile(HttpClient client, String url, Path target, Predicate<URI> trusted, DownloadKind kind)
+            throws IOException, InterruptedException {
+        toFile(client, kind.request(url), target, trusted, kind.maxBytes(), kind.maxTime(), kind.label());
+    }
+
+    static byte[] toBytes(HttpClient client, String url, Predicate<URI> trusted, DownloadKind kind)
+            throws IOException, InterruptedException {
+        return toBytes(client, kind.request(url), trusted, kind.maxBytes(), kind.maxTime(), kind.label());
     }
 
     static void toFile(HttpClient client, HttpRequest request, Path target, Predicate<URI> trusted,
