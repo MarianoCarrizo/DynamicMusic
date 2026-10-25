@@ -2,10 +2,24 @@ package com.marianocarrizo.dynamicMusic.service;
 
 import org.junit.jupiter.api.Test;
 
+import com.sun.net.httpserver.HttpServer;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.io.IOException;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Duration;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class BoundedDownloadTest {
@@ -33,5 +47,36 @@ class BoundedDownloadTest {
     void limitsMatchTheIntendedSizes() {
         assertEquals(300L * 1024 * 1024, BoundedDownload.MAX_INSTALLER_BYTES);
         assertEquals(100L * 1024 * 1024, BoundedDownload.MAX_YTDLP_BYTES);
+    }
+
+    @Test
+    void stalledBodyIsAbortedAtTheDeadlineAndTheFileDeleted(@TempDir Path dir) throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+        CountDownLatch release = new CountDownLatch(1);
+        server.createContext("/slow", ex -> {
+            ex.sendResponseHeaders(200, 1000);
+            ex.getResponseBody().write(new byte[10]);
+            ex.getResponseBody().flush();
+            try { release.await(10, TimeUnit.SECONDS); } catch (InterruptedException ignored) {}
+            ex.close();
+        });
+        server.start();
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest req = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/slow")).build();
+            Path target = dir.resolve("out.bin");
+
+            long start = System.nanoTime();
+            IOException e = assertThrows(IOException.class, () -> BoundedDownload.toFile(client, req, target,
+                    uri -> true, 1024, Duration.ofMillis(500), "slow file"));
+            long elapsedMs = (System.nanoTime() - start) / 1_000_000;
+
+            assertTrue(e.getMessage().contains("timed out"), e.getMessage());
+            assertTrue(elapsedMs < 5000, "took " + elapsedMs + " ms");
+            assertFalse(Files.exists(target));
+        } finally {
+            release.countDown();
+            server.stop(0);
+        }
     }
 }

@@ -12,6 +12,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Locale;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
 
 final class BoundedDownload {
@@ -65,17 +70,34 @@ final class BoundedDownload {
         }
     }
 
+    private static final ScheduledExecutorService WATCHDOG = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "download-watchdog");
+        t.setDaemon(true);
+        return t;
+    });
+
     private static void copyBounded(InputStream in, OutputStream out, long maxBytes, Duration maxTime, String what)
             throws IOException {
-        long deadline = System.nanoTime() + maxTime.toNanos();
+        AtomicBoolean expired = new AtomicBoolean();
+        ScheduledFuture<?> guard = WATCHDOG.schedule(() -> {
+            expired.set(true);
+            try { in.close(); } catch (IOException ignored) {}
+        }, maxTime.toNanos(), TimeUnit.NANOSECONDS);
         byte[] buf = new byte[64 * 1024];
         long total = 0;
-        int n;
-        while ((n = in.read(buf)) >= 0) {
-            total += n;
-            if (total > maxBytes) throw new IOException(what + " is larger than " + maxBytes + " bytes");
-            if (System.nanoTime() - deadline > 0) throw new IOException("timed out fetching " + what);
-            out.write(buf, 0, n);
+        try {
+            int n;
+            while ((n = in.read(buf)) >= 0) {
+                total += n;
+                if (total > maxBytes) throw new IOException(what + " is larger than " + maxBytes + " bytes");
+                out.write(buf, 0, n);
+            }
+        } catch (IOException e) {
+            if (expired.get()) throw new IOException("timed out fetching " + what, e);
+            throw e;
+        } finally {
+            guard.cancel(false);
         }
+        if (expired.get()) throw new IOException("timed out fetching " + what);
     }
 }
