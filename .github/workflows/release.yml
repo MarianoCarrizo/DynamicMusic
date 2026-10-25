@@ -26,10 +26,10 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
         with:
           distribution: temurin
           java-version: '21'
@@ -144,7 +144,7 @@ jobs:
             } catch { Write-Host "Could not read the ISCC version: $_" }
           }
           if (-not $ok) {
-            choco install innosetup -y --no-progress
+            choco install innosetup --version 6.7.1 -y --no-progress
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             $iscc = Find-Iscc
             if (-not $iscc) { throw 'ISCC.exe not found after installing Inno Setup' }
@@ -172,7 +172,7 @@ jobs:
           ls -l
 
       - name: Upload installer artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: DynamicMusic-Setup-${{ env.APP_VERSION }}
           path: |
@@ -190,14 +190,14 @@ jobs:
       contents: write
     steps:
       - name: Check out the update public key
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
           sparse-checkout: src/main/java/com/marianocarrizo/dynamicMusic/service/UpdateSignature.java
           sparse-checkout-cone-mode: false
 
       - name: Download installer artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           path: dist
           merge-multiple: true
