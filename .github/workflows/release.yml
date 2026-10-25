@@ -185,21 +185,73 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: build
     runs-on: ubuntu-24.04
+    environment: release
     permissions:
       contents: write
     steps:
+      - name: Check out the update public key
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          sparse-checkout: src/main/java/com/marianocarrizo/dynamicMusic/service/UpdateSignature.java
+          sparse-checkout-cone-mode: false
+
       - name: Download installer artifact
         uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
 
+      - name: Sign the checksum files
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$UPDATE_SIGNING_KEY" ]; then
+            echo "::error::UPDATE_SIGNING_KEY is empty or not available to this job"
+            exit 1
+          fi
+          umask 077
+          work="$(mktemp -d -p "$RUNNER_TEMP")"
+          trap 'rm -rf "$work"' EXIT
+
+          pub_b64="$(sed -n 's/.*PUBLIC_KEY_BASE64 = "\([^"]*\)".*/\1/p' \
+            src/main/java/com/marianocarrizo/dynamicMusic/service/UpdateSignature.java)"
+          if [ -z "$pub_b64" ]; then
+            echo "::error::Could not read PUBLIC_KEY_BASE64 from UpdateSignature.java"
+            exit 1
+          fi
+          printf '%s' "$pub_b64" | base64 -d > "$work/pub.der"
+          openssl pkey -pubin -inform DER -in "$work/pub.der" -out "$work/pub.pem"
+
+          printf '%s\n' "$UPDATE_SIGNING_KEY" > "$work/key.pem"
+
+          shopt -s nullglob
+          sums=(dist/DynamicMusic-Setup-*.exe.sha256)
+          if [ "${#sums[@]}" -eq 0 ]; then
+            echo "::error::No checksum files to sign in dist/"
+            exit 1
+          fi
+          for f in "${sums[@]}"; do
+            openssl pkeyutl -sign -inkey "$work/key.pem" -rawin -in "$f" -out "$f.sig"
+            if [ "$(wc -c < "$f.sig")" -ne 64 ]; then
+              echo "::error::Signature for $f is not 64 bytes"
+              exit 1
+            fi
+            if ! openssl pkeyutl -verify -pubin -inkey "$work/pub.pem" -rawin -in "$f" -sigfile "$f.sig" > /dev/null; then
+              echo "::error::Signature for $f does not verify against the public key in UpdateSignature.java"
+              exit 1
+            fi
+          done
+          rm -f "$work/key.pem"
+          ls -l dist
+
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           ls -l dist
-          gh release create "$GITHUB_REF_NAME" dist/DynamicMusic-Setup-*.exe dist/DynamicMusic-Setup-*.exe.sha256 \
+          gh release create "$GITHUB_REF_NAME" dist/DynamicMusic-Setup-*.exe dist/DynamicMusic-Setup-*.exe.sha256 dist/DynamicMusic-Setup-*.exe.sha256.sig \
             --repo "$GITHUB_REPOSITORY" \
             --title "DynamicMusic ${GITHUB_REF_NAME#v}" \
             --generate-notes \
