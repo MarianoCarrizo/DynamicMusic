@@ -22,6 +22,8 @@ public final class UpdateChecker {
     static final String LATEST_RELEASE_URL = "https://api.github.com/repos/" + REPO + "/releases/latest";
     static final String ASSET_URL_PREFIX = "https://github.com/" + REPO + "/releases/download/";
 
+    private static final Duration API_TIMEOUT = Duration.ofSeconds(20);
+
     private UpdateChecker() {}
 
     public record Version(int major, int minor, int patch) implements Comparable<Version> {
@@ -110,7 +112,7 @@ public final class UpdateChecker {
 
     static Lookup fetchLatest(HttpClient client, URI api) throws IOException, InterruptedException {
         HttpRequest req = HttpRequest.newBuilder(api)
-                .timeout(Duration.ofSeconds(20))
+                .timeout(API_TIMEOUT)
                 .header("User-Agent", "DynamicMusic-Updater")
                 .header("Accept", "application/vnd.github+json")
                 .GET().build();

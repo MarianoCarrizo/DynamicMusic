@@ -21,12 +21,18 @@ import java.util.function.Predicate;
 
 final class BoundedDownload {
 
+    private static final int BUFFER_BYTES = 64 * 1024;
+    private static final String GITHUB_SCHEME = "https";
+    private static final String GITHUB_HOST = "github.com";
+    private static final String GITHUB_ASSET_HOST_SUFFIX = ".githubusercontent.com";
+    private static final String WATCHDOG_THREAD_NAME = "download-watchdog";
+
     private BoundedDownload() {}
 
     static boolean isGitHubHost(URI uri) {
-        if (uri == null || !"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null) return false;
+        if (uri == null || !GITHUB_SCHEME.equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null) return false;
         String host = uri.getHost().toLowerCase(Locale.ROOT);
-        return host.equals("github.com") || host.endsWith(".githubusercontent.com");
+        return host.equals(GITHUB_HOST) || host.endsWith(GITHUB_ASSET_HOST_SUFFIX);
     }
 
     static void toFile(HttpClient client, String url, Path target, Predicate<URI> trusted, DownloadKind kind)
@@ -77,7 +83,7 @@ final class BoundedDownload {
     }
 
     private static final ScheduledExecutorService WATCHDOG = Executors.newSingleThreadScheduledExecutor(r -> {
-        Thread t = new Thread(r, "download-watchdog");
+        Thread t = new Thread(r, WATCHDOG_THREAD_NAME);
         t.setDaemon(true);
         return t;
     });
@@ -89,7 +95,7 @@ final class BoundedDownload {
             expired.set(true);
             try { in.close(); } catch (IOException ignored) {}
         }, maxTime.toNanos(), TimeUnit.NANOSECONDS);
-        byte[] buf = new byte[64 * 1024];
+        byte[] buf = new byte[BUFFER_BYTES];
         long total = 0;
         try {
             int n;

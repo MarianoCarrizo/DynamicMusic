@@ -32,6 +32,7 @@ public final class YtDlpManager {
     private static final long CHECK_INTERVAL_MS  = TimeUnit.HOURS.toMillis(24);
     private static final long UPDATE_TIMEOUT_SEC = 120;
     private static final long PROBE_TIMEOUT_SEC  = 10;
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(15);
 
     private static final YtDlpManager INSTANCE = new YtDlpManager(YouTubeDownloader::appDir,
             System.getProperty("os.name", ""), System.getProperty("os.arch", ""));
@@ -257,7 +258,7 @@ public final class YtDlpManager {
         try {
             HttpClient client = HttpClient.newBuilder()
                     .followRedirects(HttpClient.Redirect.NORMAL)
-                    .connectTimeout(Duration.ofSeconds(15))
+                    .connectTimeout(CONNECT_TIMEOUT)
                     .build();
 
             String sums;

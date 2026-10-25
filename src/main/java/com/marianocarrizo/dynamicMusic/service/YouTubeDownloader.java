@@ -30,6 +30,7 @@ import java.util.stream.Stream;
 
 public final class YouTubeDownloader {
 
+    private static final String WATCH_URL_PREFIX = "https://www.youtube.com/watch?v=";
     private static final int  MAX_CACHE_ENTRIES        = 20;
     private static final long DOWNLOAD_TIMEOUT_SECONDS = 120;
     private static final long TITLE_TIMEOUT_SECONDS    = 15;
@@ -68,7 +69,7 @@ public final class YouTubeDownloader {
     }
 
     static String canonicalUrl(String videoId) {
-        return "https://www.youtube.com/watch?v=" + videoId;
+        return WATCH_URL_PREFIX + videoId;
     }
 
     public static Optional<String> extractVideoId(String url) {

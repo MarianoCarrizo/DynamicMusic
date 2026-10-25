@@ -28,6 +28,7 @@ public final class UpdateManager {
     static final String VERSION_PROPERTY = "dynamicmusic.version";
     private static final Pattern INSTALLER_FILE = Pattern.compile("^DynamicMusic-Setup-(\\d+\\.\\d+\\.\\d+)\\.exe$");
 
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(15);
     static final String SIGNATURE_FAILED = "update signature verification failed";
 
     static final List<String> INSTALLER_ARGS =
@@ -87,7 +88,7 @@ public final class UpdateManager {
     private static HttpClient newClient() {
         return HttpClient.newBuilder()
                 .followRedirects(HttpClient.Redirect.NORMAL)
-                .connectTimeout(Duration.ofSeconds(15))
+                .connectTimeout(CONNECT_TIMEOUT)
                 .build();
     }
 

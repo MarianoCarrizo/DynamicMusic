@@ -9,10 +9,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
 
 public final class ExecutableResolver {
 
     private static final String DEFAULT_PATHEXT = ".COM;.EXE";
+    private static final String WINDOWS_PATH_SEPARATOR = ";";
+    private static final String EXE_EXTENSION = ".exe";
+    private static final Set<String> ALLOWED_EXTENSIONS = Set.of(EXE_EXTENSION, ".com");
 
     private ExecutableResolver() {}
 
@@ -25,7 +29,7 @@ public final class ExecutableResolver {
         if (name == null || name.isBlank() || pathEnv == null || pathEnv.isBlank()) return Optional.empty();
         if (name.indexOf('/') >= 0 || name.indexOf('\\') >= 0 || name.contains("..")) return Optional.empty();
         List<String> candidates = candidateNames(name, pathExt, windows);
-        String separator = windows ? ";" : File.pathSeparator;
+        String separator = windows ? WINDOWS_PATH_SEPARATOR : File.pathSeparator;
         for (String entry : pathEnv.split(separator, -1)) {
             Path dir = directory(entry);
             if (dir == null) continue;
@@ -69,11 +73,11 @@ public final class ExecutableResolver {
     private static List<String> executableExtensions(String pathExt) {
         String source = pathExt == null || pathExt.isBlank() ? DEFAULT_PATHEXT : pathExt;
         List<String> extensions = new ArrayList<>();
-        for (String ext : source.split(";")) {
+        for (String ext : source.split(WINDOWS_PATH_SEPARATOR)) {
             String e = ext.strip().toLowerCase(Locale.ROOT);
-            if ((e.equals(".exe") || e.equals(".com")) && !extensions.contains(e)) extensions.add(e);
+            if (ALLOWED_EXTENSIONS.contains(e) && !extensions.contains(e)) extensions.add(e);
         }
-        if (extensions.isEmpty()) extensions.add(".exe");
+        if (extensions.isEmpty()) extensions.add(EXE_EXTENSION);
         return extensions;
     }
 }
