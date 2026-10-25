@@ -34,7 +34,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class UpdateManagerTest {
 
-    private static final String NAME = "DynamicMusic-Setup-2.0.0.exe";
+    private static final String NAME = UpdateAsset.INSTALLER.fileName("2.0.0");
+    private static final String SUMS_NAME = UpdateAsset.CHECKSUM.fileName("2.0.0");
+    private static final String SIG_NAME = UpdateAsset.SIGNATURE.fileName("2.0.0");
     private static final byte[] PAYLOAD = "pretend installer".getBytes(StandardCharsets.UTF_8);
 
     private KeyPair keys;
@@ -93,10 +95,10 @@ class UpdateManagerTest {
 
     @Test
     void installerVersionFromFileName() {
-        assertEquals(Optional.of(new Version(1, 2, 3)), UpdateManager.installerVersion("DynamicMusic-Setup-1.2.3.exe"));
-        assertTrue(UpdateManager.installerVersion("DynamicMusic-Setup-1.2.3.exe.sha256").isEmpty());
-        assertTrue(UpdateManager.installerVersion("DynamicMusic-Setup-1.2.3.exe.sha256.sig").isEmpty());
-        assertTrue(UpdateManager.installerVersion("DynamicMusic-Setup-1.2.3.exe.part").isEmpty());
+        assertEquals(Optional.of(new Version(1, 2, 3)), UpdateManager.installerVersion(UpdateAsset.INSTALLER.fileName("1.2.3")));
+        assertTrue(UpdateManager.installerVersion(UpdateAsset.CHECKSUM.fileName("1.2.3")).isEmpty());
+        assertTrue(UpdateManager.installerVersion(UpdateAsset.SIGNATURE.fileName("1.2.3")).isEmpty());
+        assertTrue(UpdateManager.installerVersion(UpdateAsset.INSTALLER.fileName("1.2.3") + ".part").isEmpty());
         assertTrue(UpdateManager.installerVersion("other.exe").isEmpty());
     }
 
@@ -127,7 +129,7 @@ class UpdateManagerTest {
         assertEquals(updates.resolve(NAME), installer);
         assertArrayEquals(PAYLOAD, Files.readAllBytes(installer));
         assertFalse(Files.exists(updates.resolve(NAME + ".part")));
-        assertTrue(Files.exists(updates.resolve(NAME + ".sha256.sig")));
+        assertTrue(Files.exists(updates.resolve(SIG_NAME)));
         assertTrue(UpdateManager.verifyOnDisk(installer, key()));
         assertFalse(UpdateManager.verifyOnDisk(installer), "the embedded key must not accept a test signature");
 
@@ -136,8 +138,8 @@ class UpdateManagerTest {
         assertEquals(new Version(2, 0, 0), pending.version());
         assertNull(UpdateManager.cleanAndFindPending(updates, new Version(2, 0, 0), key()));
         assertFalse(Files.exists(installer), "installer for an already-installed version is cleaned up");
-        assertFalse(Files.exists(updates.resolve(NAME + ".sha256")));
-        assertFalse(Files.exists(updates.resolve(NAME + ".sha256.sig")));
+        assertFalse(Files.exists(updates.resolve(SUMS_NAME)));
+        assertFalse(Files.exists(updates.resolve(SIG_NAME)));
     }
 
     @Test
@@ -268,8 +270,8 @@ class UpdateManagerTest {
     void onDiskInstallerWithoutValidSignatureIsRejected(@TempDir Path dir) throws Exception {
         byte[] sumsBytes = sums(sha(PAYLOAD, dir));
         Path exe = dir.resolve(NAME);
-        Path sumsFile = dir.resolve(NAME + ".sha256");
-        Path sig = dir.resolve(NAME + ".sha256.sig");
+        Path sumsFile = dir.resolve(SUMS_NAME);
+        Path sig = dir.resolve(SIG_NAME);
         Files.write(exe, PAYLOAD);
         Files.write(sumsFile, sumsBytes);
         assertFalse(UpdateManager.verifyOnDisk(exe, key()), "no signature file");
@@ -288,16 +290,16 @@ class UpdateManagerTest {
         byte[] sumsBytes = sums(sha(PAYLOAD, dir));
         Path exe = dir.resolve(NAME);
         Files.write(exe, PAYLOAD);
-        Files.write(dir.resolve(NAME + ".sha256"), sumsBytes);
-        Files.write(dir.resolve(NAME + ".sha256.sig"), UpdateSignatureTest.sign(sumsBytes, keys));
+        Files.write(dir.resolve(SUMS_NAME), sumsBytes);
+        Files.write(dir.resolve(SIG_NAME), UpdateSignatureTest.sign(sumsBytes, keys));
         assertTrue(UpdateManager.verifyOnDisk(exe, key()));
 
         Files.write(exe, "tampered".getBytes(StandardCharsets.UTF_8));
         assertFalse(UpdateManager.verifyOnDisk(exe, key()));
         assertNull(UpdateManager.cleanAndFindPending(dir, new Version(1, 0, 0), key()));
         assertFalse(Files.exists(exe));
-        assertFalse(Files.exists(dir.resolve(NAME + ".sha256")));
-        assertFalse(Files.exists(dir.resolve(NAME + ".sha256.sig")));
+        assertFalse(Files.exists(dir.resolve(SUMS_NAME)));
+        assertFalse(Files.exists(dir.resolve(SIG_NAME)));
     }
 
     @Test

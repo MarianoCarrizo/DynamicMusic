@@ -54,12 +54,12 @@ class UpdateCheckerTest {
     void parsesReleaseAndSelectsInstallerAndChecksumAssets() throws IOException {
         ReleaseInfo r = UpdateChecker.parseRelease(fixture()).orElseThrow();
         assertEquals(new Version(1, 4, 2), r.version());
-        assertEquals("DynamicMusic-Setup-1.4.2.exe", r.installerName());
-        assertEquals("DynamicMusic-Setup-1.4.2.exe.sha256", r.checksumName());
-        assertTrue(r.installerUrl().endsWith("/v1.4.2/DynamicMusic-Setup-1.4.2.exe"));
-        assertTrue(r.checksumUrl().endsWith("/v1.4.2/DynamicMusic-Setup-1.4.2.exe.sha256"));
-        assertEquals("DynamicMusic-Setup-1.4.2.exe.sha256.sig", r.signatureName());
-        assertTrue(r.signatureUrl().endsWith("/v1.4.2/DynamicMusic-Setup-1.4.2.exe.sha256.sig"));
+        assertEquals(UpdateAsset.INSTALLER.fileName("1.4.2"), r.installerName());
+        assertEquals(UpdateAsset.CHECKSUM.fileName("1.4.2"), r.checksumName());
+        assertTrue(r.installerUrl().endsWith("/v1.4.2/" + UpdateAsset.INSTALLER.fileName("1.4.2")));
+        assertTrue(r.checksumUrl().endsWith("/v1.4.2/" + UpdateAsset.CHECKSUM.fileName("1.4.2")));
+        assertEquals(UpdateAsset.SIGNATURE.fileName("1.4.2"), r.signatureName());
+        assertTrue(r.signatureUrl().endsWith("/v1.4.2/" + UpdateAsset.SIGNATURE.fileName("1.4.2")));
     }
 
     @Test

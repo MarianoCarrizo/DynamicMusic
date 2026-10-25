@@ -52,12 +52,8 @@ public final class UpdateChecker {
 
     public record ReleaseInfo(Version version, String installerName, String installerUrl, String checksumUrl,
                               String signatureUrl) {
-        public String checksumName() { return installerName + ".sha256"; }
-        public String signatureName() { return installerName + ".sha256.sig"; }
-    }
-
-    static String installerName(Version version) {
-        return "DynamicMusic-Setup-" + version + ".exe";
+        public String checksumName() { return UpdateAsset.CHECKSUM.fileName(version.toString()); }
+        public String signatureName() { return UpdateAsset.SIGNATURE.fileName(version.toString()); }
     }
 
     public static Optional<ReleaseInfo> parseRelease(String json) {
@@ -69,7 +65,9 @@ public final class UpdateChecker {
             Optional<Version> version = Version.parse(string(o, "tag_name"));
             if (version.isEmpty()) return Optional.empty();
 
-            String installer = installerName(version.get());
+            String installer = UpdateAsset.INSTALLER.fileName(version.get().toString());
+            String checksum = UpdateAsset.CHECKSUM.fileName(version.get().toString());
+            String signature = UpdateAsset.SIGNATURE.fileName(version.get().toString());
             String installerUrl = null;
             String checksumUrl = null;
             String signatureUrl = null;
@@ -83,8 +81,8 @@ public final class UpdateChecker {
                     String url = string(a, "browser_download_url");
                     if (url == null || !url.startsWith(ASSET_URL_PREFIX)) continue;
                     if (installer.equals(name)) installerUrl = url;
-                    else if ((installer + ".sha256").equals(name)) checksumUrl = url;
-                    else if ((installer + ".sha256.sig").equals(name)) signatureUrl = url;
+                    else if (checksum.equals(name)) checksumUrl = url;
+                    else if (signature.equals(name)) signatureUrl = url;
                 }
             }
             if (installerUrl == null || checksumUrl == null) return Optional.empty();

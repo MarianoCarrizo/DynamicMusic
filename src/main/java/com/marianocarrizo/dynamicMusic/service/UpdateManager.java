@@ -187,8 +187,7 @@ public final class UpdateManager {
             if (v.isEmpty()) continue;
             if (!v.get().isNewerThan(running) || !verifyOnDisk(p, key)) {
                 deleteQuietly(p);
-                deleteQuietly(dir.resolve(name + ".sha256"));
-                deleteQuietly(dir.resolve(name + ".sha256.sig"));
+                deleteSidecars(dir.resolve(name), v.get());
                 continue;
             }
             if (best == null || v.get().isNewerThan(best.version())) best = new ReadyUpdate(v.get(), p);
@@ -203,8 +202,10 @@ public final class UpdateManager {
     static boolean verifyOnDisk(Path installer, PublicKey key) {
         try {
             String name = installer.getFileName().toString();
-            byte[] sumsBytes = Files.readAllBytes(installer.resolveSibling(name + ".sha256"));
-            byte[] sigBytes = Files.readAllBytes(installer.resolveSibling(name + ".sha256.sig"));
+            Optional<Version> version = installerVersion(name);
+            if (version.isEmpty()) return false;
+            byte[] sumsBytes = Files.readAllBytes(installer.resolveSibling(UpdateAsset.CHECKSUM.fileName(version.get().toString())));
+            byte[] sigBytes = Files.readAllBytes(installer.resolveSibling(UpdateAsset.SIGNATURE.fileName(version.get().toString())));
             if (!UpdateSignature.verify(sumsBytes, sigBytes, key)) return false;
             return Checksums.matches(installer, new String(sumsBytes, StandardCharsets.UTF_8), name);
         } catch (IOException e) {
@@ -215,8 +216,7 @@ public final class UpdateManager {
     public boolean verify(ReadyUpdate update) {
         if (verifyOnDisk(update.installer())) return true;
         deleteQuietly(update.installer());
-        deleteQuietly(update.installer().resolveSibling(update.installer().getFileName() + ".sha256"));
-        deleteQuietly(update.installer().resolveSibling(update.installer().getFileName() + ".sha256.sig"));
+        deleteSidecars(update.installer(), update.version());
         return false;
     }
 
@@ -246,6 +246,11 @@ public final class UpdateManager {
             launched.set(false);
             return false;
         }
+    }
+
+    private static void deleteSidecars(Path installer, Version version) {
+        deleteQuietly(installer.resolveSibling(UpdateAsset.CHECKSUM.fileName(version.toString())));
+        deleteQuietly(installer.resolveSibling(UpdateAsset.SIGNATURE.fileName(version.toString())));
     }
 
     private static void deleteQuietly(Path p) {
