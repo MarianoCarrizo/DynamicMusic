@@ -7,7 +7,6 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -19,6 +18,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -117,19 +117,25 @@ public final class UpdateManager {
         onReady.accept(new ReadyUpdate(rel.version(), installer));
     }
 
+    record DownloadPolicy(PublicKey key, Predicate<URI> trustedHost, long maxInstallerBytes) {
+        static DownloadPolicy production() {
+            return new DownloadPolicy(UpdateSignature.embeddedKey(), BoundedDownload::isGitHubHost,
+                    BoundedDownload.MAX_INSTALLER_BYTES);
+        }
+    }
+
     static Path downloadAndVerify(HttpClient client, ReleaseInfo rel, Path dir) throws IOException, InterruptedException {
-        return downloadAndVerify(client, rel, dir, UpdateSignature.embeddedKey());
+        return downloadAndVerify(client, rel, dir, DownloadPolicy.production());
     }
 
-    private static byte[] fetchBytes(HttpClient client, String url, String what) throws IOException, InterruptedException {
-        HttpResponse<byte[]> resp = client.send(
+    private static byte[] fetchSmall(HttpClient client, String url, DownloadPolicy policy, String what)
+            throws IOException, InterruptedException {
+        return BoundedDownload.toBytes(client,
                 HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(30)).GET().build(),
-                HttpResponse.BodyHandlers.ofByteArray());
-        if (resp.statusCode() != 200) throw new IOException("HTTP " + resp.statusCode() + " fetching " + what);
-        return resp.body();
+                policy.trustedHost(), BoundedDownload.MAX_TEXT_BYTES, Duration.ofSeconds(30), what);
     }
 
-    static Path downloadAndVerify(HttpClient client, ReleaseInfo rel, Path dir, PublicKey key)
+    static Path downloadAndVerify(HttpClient client, ReleaseInfo rel, Path dir, DownloadPolicy policy)
             throws IOException, InterruptedException {
         Files.createDirectories(dir);
         Path target = dir.resolve(rel.installerName());
@@ -137,17 +143,16 @@ public final class UpdateManager {
         Path sigFile = dir.resolve(rel.signatureName());
         Path part = dir.resolve(rel.installerName() + ".part");
         try {
-            byte[] sumsBytes = fetchBytes(client, rel.checksumUrl(), "checksum");
-            byte[] sigBytes = fetchBytes(client, rel.signatureUrl(), "signature");
-            if (!UpdateSignature.verify(sumsBytes, sigBytes, key)) throw new IOException(SIGNATURE_FAILED);
+            byte[] sumsBytes = fetchSmall(client, rel.checksumUrl(), policy, "checksum");
+            byte[] sigBytes = fetchSmall(client, rel.signatureUrl(), policy, "signature");
+            if (!UpdateSignature.verify(sumsBytes, sigBytes, policy.key())) throw new IOException(SIGNATURE_FAILED);
             String sums = new String(sumsBytes, StandardCharsets.UTF_8);
             if (Checksums.parse(sums, rel.installerName()).isEmpty()) throw new IOException("checksum not listed");
 
-            HttpResponse<Path> resp = client.send(
+            BoundedDownload.toFile(client,
                     HttpRequest.newBuilder(URI.create(rel.installerUrl()))
                             .timeout(Duration.ofMinutes(15)).GET().build(),
-                    HttpResponse.BodyHandlers.ofFile(part));
-            if (resp.statusCode() != 200) throw new IOException("HTTP " + resp.statusCode() + " downloading installer");
+                    part, policy.trustedHost(), policy.maxInstallerBytes(), Duration.ofMinutes(15), "installer");
             if (!Checksums.matches(part, sums, rel.installerName())) throw new IOException(YtDlpManager.VERIFY_FAILED);
 
             Files.write(sumsFile, sumsBytes);

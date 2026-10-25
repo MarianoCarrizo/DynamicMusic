@@ -82,6 +82,10 @@ class UpdateManagerTest {
 
     private PublicKey key() { return keys.getPublic(); }
 
+    private UpdateManager.DownloadPolicy policy() {
+        return new UpdateManager.DownloadPolicy(key(), uri -> true, 1024);
+    }
+
     private static HttpClient client() {
         return HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL)
                 .connectTimeout(Duration.ofSeconds(5)).build();
@@ -118,7 +122,7 @@ class UpdateManagerTest {
         server.start();
 
         Path updates = dir.resolve("updates");
-        Path installer = UpdateManager.downloadAndVerify(client(), release(), updates, key());
+        Path installer = UpdateManager.downloadAndVerify(client(), release(), updates, policy());
 
         assertEquals(updates.resolve(NAME), installer);
         assertArrayEquals(PAYLOAD, Files.readAllBytes(installer));
@@ -143,7 +147,7 @@ class UpdateManagerTest {
         server.start();
 
         Path updates = dir.resolve("updates");
-        IOException e = assertThrows(IOException.class, () -> UpdateManager.downloadAndVerify(client(), release(), updates, key()));
+        IOException e = assertThrows(IOException.class, () -> UpdateManager.downloadAndVerify(client(), release(), updates, policy()));
         assertEquals(YtDlpManager.VERIFY_FAILED, e.getMessage());
         try (var files = Files.list(updates)) {
             assertEquals(0, files.count(), "nothing left behind after a mismatch");
@@ -158,7 +162,7 @@ class UpdateManagerTest {
         server.start();
 
         Path updates = dir.resolve("updates");
-        assertThrows(IOException.class, () -> UpdateManager.downloadAndVerify(client(), release(), updates, key()));
+        assertThrows(IOException.class, () -> UpdateManager.downloadAndVerify(client(), release(), updates, policy()));
         try (var files = Files.list(updates)) {
             assertEquals(0, files.count());
         }
@@ -180,12 +184,70 @@ class UpdateManagerTest {
         server.start();
 
         Path updates = dir.resolve("updates");
-        IOException e = assertThrows(IOException.class, () -> UpdateManager.downloadAndVerify(client(), release(), updates, key()));
+        IOException e = assertThrows(IOException.class, () -> UpdateManager.downloadAndVerify(client(), release(), updates, policy()));
         assertEquals(UpdateManager.SIGNATURE_FAILED, e.getMessage());
         assertFalse(installerRequested.get());
         try (var files = Files.list(updates)) {
             assertEquals(0, files.count());
         }
+    }
+
+    private void assertNothingLeftIn(Path updates) throws IOException {
+        try (var files = Files.list(updates)) {
+            assertEquals(0, files.count(), "nothing left behind");
+        }
+    }
+
+    @Test
+    void installerLargerThanTheDeclaredLimitIsRejectedUpFront(@TempDir Path dir) throws Exception {
+        byte[] big = new byte[2048];
+        serveSigned(sums(sha(big, dir)));
+        serve("/exe", 200, big);
+        server.start();
+
+        Path updates = dir.resolve("updates");
+        IOException e = assertThrows(IOException.class, () -> UpdateManager.downloadAndVerify(client(), release(), updates, policy()));
+        assertTrue(e.getMessage().contains("larger than"), e.getMessage());
+        assertNothingLeftIn(updates);
+    }
+
+    @Test
+    void installerStreamedPastTheLimitIsAbortedAndTheFileDeleted(@TempDir Path dir) throws Exception {
+        byte[] big = new byte[4096];
+        serveSigned(sums(sha(big, dir)));
+        server.createContext("/exe", ex -> {
+            ex.sendResponseHeaders(200, 0);
+            ex.getResponseBody().write(big);
+            ex.close();
+        });
+        server.start();
+
+        Path updates = dir.resolve("updates");
+        IOException e = assertThrows(IOException.class, () -> UpdateManager.downloadAndVerify(client(), release(), updates, policy()));
+        assertTrue(e.getMessage().contains("larger than"), e.getMessage());
+        assertNothingLeftIn(updates);
+    }
+
+    @Test
+    void redirectToAnUntrustedHostIsRejected(@TempDir Path dir) throws Exception {
+        serveSigned(sums(sha(PAYLOAD, dir)));
+        serve("/elsewhere", 200, PAYLOAD);
+        server.createContext("/exe", ex -> {
+            ex.getResponseHeaders().add("Location", "http://localhost:" + server.getAddress().getPort() + "/elsewhere");
+            ex.sendResponseHeaders(302, -1);
+            ex.close();
+        });
+        server.start();
+
+        UpdateManager.DownloadPolicy onlyNumericHost =
+                new UpdateManager.DownloadPolicy(key(), uri -> "127.0.0.1".equals(uri.getHost()), 1024);
+        Path updates = dir.resolve("updates");
+        IOException e = assertThrows(IOException.class, () -> UpdateManager.downloadAndVerify(client(), release(), updates, onlyNumericHost));
+        assertTrue(e.getMessage().contains("unexpected download host"), e.getMessage());
+        assertNothingLeftIn(updates);
+
+        Path ok = UpdateManager.downloadAndVerify(client(), release(), dir.resolve("ok"), policy());
+        assertArrayEquals(PAYLOAD, Files.readAllBytes(ok));
     }
 
     @Test
@@ -196,7 +258,7 @@ class UpdateManagerTest {
         server.start();
 
         Path updates = dir.resolve("updates");
-        assertThrows(IOException.class, () -> UpdateManager.downloadAndVerify(client(), release(), updates, key()));
+        assertThrows(IOException.class, () -> UpdateManager.downloadAndVerify(client(), release(), updates, policy()));
         try (var files = Files.list(updates)) {
             assertEquals(0, files.count());
         }

@@ -6,7 +6,6 @@ import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -263,19 +262,24 @@ public final class YtDlpManager {
                     .connectTimeout(Duration.ofSeconds(15))
                     .build();
 
-            HttpResponse<String> sumsResp = client.send(
-                    HttpRequest.newBuilder(URI.create(RELEASE_BASE + CHECKSUMS_ASSET))
-                            .timeout(Duration.ofSeconds(30)).GET().build(),
-                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-            if (sumsResp.statusCode() != 200) throw new IOException(VERIFY_FAILED);
+            String sums;
+            try {
+                sums = new String(BoundedDownload.toBytes(client,
+                        HttpRequest.newBuilder(URI.create(RELEASE_BASE + CHECKSUMS_ASSET))
+                                .timeout(Duration.ofSeconds(30)).GET().build(),
+                        BoundedDownload::isGitHubHost, BoundedDownload.MAX_TEXT_BYTES,
+                        Duration.ofSeconds(30), "yt-dlp checksums"), StandardCharsets.UTF_8);
+            } catch (IOException e) {
+                throw new IOException(VERIFY_FAILED, e);
+            }
 
-            HttpRequest req = HttpRequest.newBuilder(URI.create(RELEASE_BASE + asset))
-                    .timeout(Duration.ofSeconds(120))
-                    .GET().build();
-            HttpResponse<Path> resp = client.send(req, HttpResponse.BodyHandlers.ofFile(tmp));
-            if (resp.statusCode() != 200) throw new IOException("HTTP " + resp.statusCode() + " downloading yt-dlp");
+            BoundedDownload.toFile(client,
+                    HttpRequest.newBuilder(URI.create(RELEASE_BASE + asset))
+                            .timeout(Duration.ofSeconds(120)).GET().build(),
+                    tmp, BoundedDownload::isGitHubHost, BoundedDownload.MAX_YTDLP_BYTES,
+                    Duration.ofSeconds(120), "yt-dlp");
             if (Files.size(tmp) <= MIN_BINARY_BYTES) throw new IOException("downloaded file is too small");
-            verify(tmp, sumsResp.body(), asset);
+            verify(tmp, sums, asset);
 
             if (!isWindows(osName) && !tmp.toFile().setExecutable(true, false)) {
                 throw new IOException("could not mark yt-dlp as executable");
