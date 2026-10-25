@@ -58,6 +58,8 @@ class UpdateCheckerTest {
         assertEquals("DynamicMusic-Setup-1.4.2.exe.sha256", r.checksumName());
         assertTrue(r.installerUrl().endsWith("/v1.4.2/DynamicMusic-Setup-1.4.2.exe"));
         assertTrue(r.checksumUrl().endsWith("/v1.4.2/DynamicMusic-Setup-1.4.2.exe.sha256"));
+        assertEquals("DynamicMusic-Setup-1.4.2.exe.sha256.sig", r.signatureName());
+        assertTrue(r.signatureUrl().endsWith("/v1.4.2/DynamicMusic-Setup-1.4.2.exe.sha256.sig"));
     }
 
     @Test
@@ -70,6 +72,8 @@ class UpdateCheckerTest {
     void ignoresReleasesWithoutBothAssets() throws IOException {
         String noChecksum = fixture().replace("DynamicMusic-Setup-1.4.2.exe.sha256\",", "other.txt\",");
         assertTrue(UpdateChecker.parseRelease(noChecksum).isEmpty());
+        String noSignature = fixture().replace("DynamicMusic-Setup-1.4.2.exe.sha256.sig\",", "other.sig\",");
+        assertTrue(UpdateChecker.parseRelease(noSignature).isEmpty());
         String wrongInstaller = fixture().replace("\"name\": \"DynamicMusic-Setup-1.4.2.exe\"", "\"name\": \"DynamicMusic-Setup-9.9.9.exe\"");
         assertTrue(UpdateChecker.parseRelease(wrongInstaller).isEmpty());
     }

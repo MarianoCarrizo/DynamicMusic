@@ -50,8 +50,10 @@ public final class UpdateChecker {
         public String toString() { return major + "." + minor + "." + patch; }
     }
 
-    public record ReleaseInfo(Version version, String installerName, String installerUrl, String checksumUrl) {
+    public record ReleaseInfo(Version version, String installerName, String installerUrl, String checksumUrl,
+                              String signatureUrl) {
         public String checksumName() { return installerName + ".sha256"; }
+        public String signatureName() { return installerName + ".sha256.sig"; }
     }
 
     static String installerName(Version version) {
@@ -70,6 +72,7 @@ public final class UpdateChecker {
             String installer = installerName(version.get());
             String installerUrl = null;
             String checksumUrl = null;
+            String signatureUrl = null;
             JsonElement assets = o.get("assets");
             if (assets != null && assets.isJsonArray()) {
                 JsonArray arr = assets.getAsJsonArray();
@@ -81,10 +84,15 @@ public final class UpdateChecker {
                     if (url == null || !url.startsWith(ASSET_URL_PREFIX)) continue;
                     if (installer.equals(name)) installerUrl = url;
                     else if ((installer + ".sha256").equals(name)) checksumUrl = url;
+                    else if ((installer + ".sha256.sig").equals(name)) signatureUrl = url;
                 }
             }
             if (installerUrl == null || checksumUrl == null) return Optional.empty();
-            return Optional.of(new ReleaseInfo(version.get(), installer, installerUrl, checksumUrl));
+            if (signatureUrl == null) {
+                System.err.println("[update] release " + version.get() + " has no signature asset, ignoring it");
+                return Optional.empty();
+            }
+            return Optional.of(new ReleaseInfo(version.get(), installer, installerUrl, checksumUrl, signatureUrl));
         } catch (RuntimeException e) {
             return Optional.empty();
         }

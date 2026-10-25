@@ -10,6 +10,10 @@
       "browser_download_url": "https://github.com/MarianoCarrizo/DynamicMusic/releases/download/v1.4.2/DynamicMusic-Setup-1.4.2.exe.sha256"
     },
     {
+      "name": "DynamicMusic-Setup-1.4.2.exe.sha256.sig",
+      "browser_download_url": "https://github.com/MarianoCarrizo/DynamicMusic/releases/download/v1.4.2/DynamicMusic-Setup-1.4.2.exe.sha256.sig"
+    },
+    {
       "name": "Source.zip",
       "browser_download_url": "https://github.com/MarianoCarrizo/DynamicMusic/releases/download/v1.4.2/Source.zip"
     },
