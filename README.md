@@ -34,6 +34,17 @@ Nada. El instalador trae su propio Java recortado a medida (jlink) y ffmpeg, as�
 
 En Windows, yt-dlp no hace falta instalarlo: la app descarga su propia copia en la primera ejecución. En Linux y macOS hay que tener `yt-dlp` en el PATH.
 
+## Formatos de audio
+
+| Formato | Soportado |
+|---|---|
+| MP3 (`.mp3`) | Sí |
+| WAV (`.wav`) | Sí |
+| FLAC (`.flac`) | Sí (se convierte a WAV internamente al cargarlo) |
+| OGG, Opus, M4A/AAC, WMA, AIFF y otros | No: no aparecen en la biblioteca ni se pueden asignar |
+
+El audio que se baja de YouTube se guarda como MP3.
+
 ## Correr la app
 
 ```bash
@@ -65,6 +76,7 @@ Habilita el HUD de diagnóstico del aura (tecla **F3** en la ventana de ambiance
 | Reproducir on demand | Clic derecho → **Play now**, o **Enter** sobre el track |
 | YouTube | Pegar una URL y **Add** (a la playlist) o **Play** (on demand); **Browse** para buscar |
 | Escenas | Selector arriba; **+** para crear, **Save as** para duplicar, **Edit scene** para configurar auras y fondo |
+| Sacar el fondo de una escena | **Edit scene** → pestaña **Background** → **Remove** (vuelve el fondo por defecto del aura) |
 | Ajustar el aura en vivo | Franja **Live aura**, debajo de las pestañas |
 | Ventana de ambiance | **Show/Hide ambiance**; la flecha del botón elige el monitor |
 

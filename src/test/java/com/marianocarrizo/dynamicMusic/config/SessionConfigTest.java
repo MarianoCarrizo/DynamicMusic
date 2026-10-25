@@ -198,4 +198,23 @@ class SessionConfigTest {
         assertTrue(cfg.getPlaylists().isEmpty());
         assertEquals(AuraPreset.SHADOW, cfg.getActiveScene().getAura(AuraSlot.PAUSED).getPreset());
     }
+
+    @Test
+    void clearBackgroundRemovesMediaAndVideoSettingsButKeepsFitMode() {
+        SessionConfig cfg = new SessionConfig();
+        cfg.setBackgroundImagePath("C:/bg/castle.mp4");
+        cfg.setBackgroundFitMode("FIT");
+        cfg.setVideoSegmentStartMs(1000L);
+        cfg.setVideoSegmentEndMs(5000L);
+        cfg.setVideoPlaybackRate(1.5);
+        cfg.setBoomerangEnabled(true);
+
+        cfg.clearBackground();
+
+        assertNull(cfg.getBackgroundImagePath());
+        assertNull(cfg.getVideoSegmentStartMs());
+        assertNull(cfg.getVideoSegmentEndMs());
+        assertFalse(Boolean.TRUE.equals(cfg.getBoomerangEnabled()));
+        assertEquals("FIT", cfg.getBackgroundFitMode());
+    }
 }

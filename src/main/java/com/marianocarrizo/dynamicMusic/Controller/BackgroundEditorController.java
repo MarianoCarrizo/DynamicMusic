@@ -36,6 +36,7 @@ public class BackgroundEditorController {
     @FXML private Label lblBackgroundFile;
     @FXML private Label lblBackgroundType;
     @FXML private Button btnEditBackground;
+    @FXML private Button btnRemoveBackground;
     @FXML private ComboBox<BackgroundFitMode> cmbFitMode;
 
     @FXML private VBox            bgPreviewPanel;
@@ -557,6 +558,15 @@ public class BackgroundEditorController {
     }
 
     @FXML
+    private void onRemoveBackground() {
+        onCancelBackground();
+        host.session().clearBackground();
+        host.saveSession();
+        host.applyBackground();
+        updateBackgroundLabel(null);
+    }
+
+    @FXML
     private void onEditBackground() {
         SessionConfig session = host.session();
         String applied = session.getBackgroundImagePath();
@@ -593,10 +603,12 @@ public class BackgroundEditorController {
             lblBackgroundFile.setText("No background set");
             lblBackgroundType.setText("");
             btnEditBackground.setDisable(true);
+            btnRemoveBackground.setDisable(true);
         } else {
             lblBackgroundFile.setText(new File(path).getName());
             lblBackgroundType.setText(mediaType(path));
             btnEditBackground.setDisable(false);
+            btnRemoveBackground.setDisable(false);
         }
     }
 
