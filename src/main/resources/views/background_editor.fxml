@@ -20,6 +20,8 @@
                 styleClass="btn-secondary"/>
         <Button fx:id="btnEditBackground" text="Edit" onAction="#onEditBackground"
                 styleClass="btn-secondary" disable="true"/>
+        <Button fx:id="btnRemoveBackground" text="Remove" onAction="#onRemoveBackground"
+                styleClass="btn-secondary" disable="true"/>
     </HBox>
     <HBox spacing="6" alignment="CENTER_LEFT">
         <Label text="Fit:" styleClass="lbl-session-title" minWidth="45"/>

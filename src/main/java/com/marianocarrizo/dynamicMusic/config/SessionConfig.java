@@ -195,6 +195,12 @@ public class SessionConfig {
         getActiveScene().getBackground().setPath(path);
     }
 
+    public void clearBackground() {
+        BackgroundConfig cleared = new BackgroundConfig();
+        cleared.setFitMode(getActiveScene().getBackground().getFitMode());
+        getActiveScene().setBackground(cleared);
+    }
+
     // --- Last image folder ---
 
     public String getLastImageFolderPath() {
