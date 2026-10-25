@@ -39,7 +39,7 @@ public final class YouTubeDownloader {
     public record SearchResult(String id, String title, String channel, long durationSeconds) {
 
         public String url() {
-            return "https://www.youtube.com/watch?v=" + id;
+            return canonicalUrl(id);
         }
 
         public String durationLabel() {
@@ -60,6 +60,16 @@ public final class YouTubeDownloader {
             Pattern.compile("[?&]v=([A-Za-z0-9_-]{11})");
     private static final Pattern PATTERN_PATH =
             Pattern.compile("youtube\\.com/(?:shorts|embed)/([A-Za-z0-9_-]{11})");
+
+    private static final Pattern VIDEO_ID = Pattern.compile("[A-Za-z0-9_-]{11}");
+
+    static boolean isVideoId(String id) {
+        return id != null && VIDEO_ID.matcher(id).matches();
+    }
+
+    static String canonicalUrl(String videoId) {
+        return "https://www.youtube.com/watch?v=" + videoId;
+    }
 
     public static Optional<String> extractVideoId(String url) {
         if (url == null) return Optional.empty();
@@ -295,11 +305,13 @@ public final class YouTubeDownloader {
 
     private PlaylistItem runDownload(String url, String videoId, Path out) throws IOException {
         Path dir = out.getParent();
+        if (!isVideoId(videoId)) throw new IOException("Invalid YouTube video id");
         if (!awaitYtDlp()) throw new IOException(NOT_FOUND_MESSAGE);
 
+        String target = canonicalUrl(videoId);
         YtDlpManager.ProcResult r;
         try {
-            r = runYtDlp(downloadArgs(out, url, FfmpegLocator.directory()), DOWNLOAD_TIMEOUT_SECONDS);
+            r = runYtDlp(downloadArgs(out, target, FfmpegLocator.directory()), DOWNLOAD_TIMEOUT_SECONDS);
         } catch (IOException | InterruptedException e) {
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();
             cleanupLeftovers(dir, videoId, false);
@@ -317,7 +329,7 @@ public final class YouTubeDownloader {
         }
         if (!Files.exists(out)) throw new IOException("Output file not found after download");
 
-        String title = fetchTitle(url);
+        String title = fetchTitle(target);
         evictOldEntries();
         return new PlaylistItem(out.toString(), url, title);
     }
