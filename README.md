@@ -53,6 +53,10 @@ Con JDK 21 y ffmpeg en el PATH:
 ./mvnw javafx:run
 ```
 
+## Estado del proyecto
+
+El código está en un refactor gradual, módulo por módulo, para mejorar su estructura y legibilidad. El plan y el avance están en [#28](https://github.com/MarianoCarrizo/DynamicMusic/issues/28).
+
 ## Aviso sobre YouTube
 
 La descarga de audio de YouTube es para uso personal. Respetar los derechos de autor y los términos de servicio de YouTube es responsabilidad de quien usa la app.
