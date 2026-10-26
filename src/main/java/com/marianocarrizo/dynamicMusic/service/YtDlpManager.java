@@ -3,10 +3,7 @@ package com.marianocarrizo.dynamicMusic.service;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URI;
 import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -35,6 +32,7 @@ public final class YtDlpManager {
     private static final long CHECK_INTERVAL_MS  = TimeUnit.HOURS.toMillis(24);
     private static final long UPDATE_TIMEOUT_SEC = 120;
     private static final long PROBE_TIMEOUT_SEC  = 10;
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(15);
 
     private static final YtDlpManager INSTANCE = new YtDlpManager(YouTubeDownloader::appDir,
             System.getProperty("os.name", ""), System.getProperty("os.arch", ""));
@@ -169,8 +167,9 @@ public final class YtDlpManager {
         }
     }
 
-    public String executable() {
-        return hasManagedBinary() ? managedPath().toString() : "yt-dlp";
+    public Optional<String> executable() {
+        if (hasManagedBinary()) return Optional.of(managedPath().toString());
+        return ExecutableResolver.find("yt-dlp").map(Path::toString);
     }
 
     public void ensureReadyAsync() {
@@ -259,22 +258,21 @@ public final class YtDlpManager {
         try {
             HttpClient client = HttpClient.newBuilder()
                     .followRedirects(HttpClient.Redirect.NORMAL)
-                    .connectTimeout(Duration.ofSeconds(15))
+                    .connectTimeout(CONNECT_TIMEOUT)
                     .build();
 
-            HttpResponse<String> sumsResp = client.send(
-                    HttpRequest.newBuilder(URI.create(RELEASE_BASE + CHECKSUMS_ASSET))
-                            .timeout(Duration.ofSeconds(30)).GET().build(),
-                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-            if (sumsResp.statusCode() != 200) throw new IOException(VERIFY_FAILED);
+            String sums;
+            try {
+                sums = new String(BoundedDownload.toBytes(client, RELEASE_BASE + CHECKSUMS_ASSET,
+                        BoundedDownload::isGitHubHost, DownloadKind.YTDLP_SUMS), StandardCharsets.UTF_8);
+            } catch (IOException e) {
+                throw new IOException(VERIFY_FAILED, e);
+            }
 
-            HttpRequest req = HttpRequest.newBuilder(URI.create(RELEASE_BASE + asset))
-                    .timeout(Duration.ofSeconds(120))
-                    .GET().build();
-            HttpResponse<Path> resp = client.send(req, HttpResponse.BodyHandlers.ofFile(tmp));
-            if (resp.statusCode() != 200) throw new IOException("HTTP " + resp.statusCode() + " downloading yt-dlp");
+            BoundedDownload.toFile(client, RELEASE_BASE + asset, tmp, BoundedDownload::isGitHubHost,
+                    DownloadKind.YTDLP_BINARY);
             if (Files.size(tmp) <= MIN_BINARY_BYTES) throw new IOException("downloaded file is too small");
-            verify(tmp, sumsResp.body(), asset);
+            verify(tmp, sums, asset);
 
             if (!isWindows(osName) && !tmp.toFile().setExecutable(true, false)) {
                 throw new IOException("could not mark yt-dlp as executable");
@@ -313,12 +311,20 @@ public final class YtDlpManager {
         if (cached != null) return cached;
         synchronized (jsLock) {
             if (jsArgs == null) {
-                if (works("deno")) jsArgs = List.of();
-                else if (works("node")) jsArgs = List.of("--js-runtimes", "node");
-                else jsArgs = List.of();
+                jsArgs = detectJsRuntime();
             }
             return jsArgs;
         }
+    }
+
+    private static List<String> detectJsRuntime() {
+        for (String runtime : List.of("deno", "node")) {
+            Optional<Path> exe = ExecutableResolver.find(runtime);
+            if (exe.isPresent() && works(exe.get().toString())) {
+                return List.of("--js-runtimes", runtime + ":" + exe.get());
+            }
+        }
+        return List.of();
     }
 
     private static boolean works(String exe) {

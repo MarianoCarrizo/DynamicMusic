@@ -22,6 +22,8 @@ public final class UpdateChecker {
     static final String LATEST_RELEASE_URL = "https://api.github.com/repos/" + REPO + "/releases/latest";
     static final String ASSET_URL_PREFIX = "https://github.com/" + REPO + "/releases/download/";
 
+    private static final Duration API_TIMEOUT = Duration.ofSeconds(20);
+
     private UpdateChecker() {}
 
     public record Version(int major, int minor, int patch) implements Comparable<Version> {
@@ -50,12 +52,10 @@ public final class UpdateChecker {
         public String toString() { return major + "." + minor + "." + patch; }
     }
 
-    public record ReleaseInfo(Version version, String installerName, String installerUrl, String checksumUrl) {
-        public String checksumName() { return installerName + ".sha256"; }
-    }
-
-    static String installerName(Version version) {
-        return "DynamicMusic-Setup-" + version + ".exe";
+    public record ReleaseInfo(Version version, String installerName, String installerUrl, String checksumUrl,
+                              String signatureUrl) {
+        public String checksumName() { return UpdateAsset.CHECKSUM.fileName(version.toString()); }
+        public String signatureName() { return UpdateAsset.SIGNATURE.fileName(version.toString()); }
     }
 
     public static Optional<ReleaseInfo> parseRelease(String json) {
@@ -67,9 +67,12 @@ public final class UpdateChecker {
             Optional<Version> version = Version.parse(string(o, "tag_name"));
             if (version.isEmpty()) return Optional.empty();
 
-            String installer = installerName(version.get());
+            String installer = UpdateAsset.INSTALLER.fileName(version.get().toString());
+            String checksum = UpdateAsset.CHECKSUM.fileName(version.get().toString());
+            String signature = UpdateAsset.SIGNATURE.fileName(version.get().toString());
             String installerUrl = null;
             String checksumUrl = null;
+            String signatureUrl = null;
             JsonElement assets = o.get("assets");
             if (assets != null && assets.isJsonArray()) {
                 JsonArray arr = assets.getAsJsonArray();
@@ -80,11 +83,16 @@ public final class UpdateChecker {
                     String url = string(a, "browser_download_url");
                     if (url == null || !url.startsWith(ASSET_URL_PREFIX)) continue;
                     if (installer.equals(name)) installerUrl = url;
-                    else if ((installer + ".sha256").equals(name)) checksumUrl = url;
+                    else if (checksum.equals(name)) checksumUrl = url;
+                    else if (signature.equals(name)) signatureUrl = url;
                 }
             }
             if (installerUrl == null || checksumUrl == null) return Optional.empty();
-            return Optional.of(new ReleaseInfo(version.get(), installer, installerUrl, checksumUrl));
+            if (signatureUrl == null) {
+                System.err.println("[update] release " + version.get() + " has no signature asset, ignoring it");
+                return Optional.empty();
+            }
+            return Optional.of(new ReleaseInfo(version.get(), installer, installerUrl, checksumUrl, signatureUrl));
         } catch (RuntimeException e) {
             return Optional.empty();
         }
@@ -104,7 +112,7 @@ public final class UpdateChecker {
 
     static Lookup fetchLatest(HttpClient client, URI api) throws IOException, InterruptedException {
         HttpRequest req = HttpRequest.newBuilder(api)
-                .timeout(Duration.ofSeconds(20))
+                .timeout(API_TIMEOUT)
                 .header("User-Agent", "DynamicMusic-Updater")
                 .header("Accept", "application/vnd.github+json")
                 .GET().build();

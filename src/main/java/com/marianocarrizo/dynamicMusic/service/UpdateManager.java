@@ -6,18 +6,18 @@ import com.marianocarrizo.dynamicMusic.service.UpdateChecker.Version;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.security.PublicKey;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -27,6 +27,9 @@ public final class UpdateManager {
 
     static final String VERSION_PROPERTY = "dynamicmusic.version";
     private static final Pattern INSTALLER_FILE = Pattern.compile("^DynamicMusic-Setup-(\\d+\\.\\d+\\.\\d+)\\.exe$");
+
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(15);
+    static final String SIGNATURE_FAILED = "update signature verification failed";
 
     static final List<String> INSTALLER_ARGS =
             List.of("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CLOSEAPPLICATIONS");
@@ -85,7 +88,7 @@ public final class UpdateManager {
     private static HttpClient newClient() {
         return HttpClient.newBuilder()
                 .followRedirects(HttpClient.Redirect.NORMAL)
-                .connectTimeout(Duration.ofSeconds(15))
+                .connectTimeout(CONNECT_TIMEOUT)
                 .build();
     }
 
@@ -114,32 +117,43 @@ public final class UpdateManager {
         onReady.accept(new ReadyUpdate(rel.version(), installer));
     }
 
+    record DownloadPolicy(PublicKey key, Predicate<URI> trustedHost, long maxInstallerBytes) {
+        static DownloadPolicy production() {
+            return new DownloadPolicy(UpdateSignature.embeddedKey(), BoundedDownload::isGitHubHost,
+                    DownloadKind.INSTALLER.maxBytes());
+        }
+    }
+
     static Path downloadAndVerify(HttpClient client, ReleaseInfo rel, Path dir) throws IOException, InterruptedException {
+        return downloadAndVerify(client, rel, dir, DownloadPolicy.production());
+    }
+
+    static Path downloadAndVerify(HttpClient client, ReleaseInfo rel, Path dir, DownloadPolicy policy)
+            throws IOException, InterruptedException {
         Files.createDirectories(dir);
         Path target = dir.resolve(rel.installerName());
         Path sumsFile = dir.resolve(rel.checksumName());
+        Path sigFile = dir.resolve(rel.signatureName());
         Path part = dir.resolve(rel.installerName() + ".part");
         try {
-            HttpResponse<String> sumsResp = client.send(
-                    HttpRequest.newBuilder(URI.create(rel.checksumUrl()))
-                            .timeout(Duration.ofSeconds(30)).GET().build(),
-                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-            if (sumsResp.statusCode() != 200) throw new IOException("HTTP " + sumsResp.statusCode() + " fetching checksum");
-            String sums = sumsResp.body();
+            byte[] sumsBytes = BoundedDownload.toBytes(client, rel.checksumUrl(), policy.trustedHost(), DownloadKind.CHECKSUM);
+            byte[] sigBytes = BoundedDownload.toBytes(client, rel.signatureUrl(), policy.trustedHost(), DownloadKind.SIGNATURE);
+            if (!UpdateSignature.verify(sumsBytes, sigBytes, policy.key())) throw new IOException(SIGNATURE_FAILED);
+            String sums = new String(sumsBytes, StandardCharsets.UTF_8);
             if (Checksums.parse(sums, rel.installerName()).isEmpty()) throw new IOException("checksum not listed");
 
-            HttpResponse<Path> resp = client.send(
-                    HttpRequest.newBuilder(URI.create(rel.installerUrl()))
-                            .timeout(Duration.ofMinutes(15)).GET().build(),
-                    HttpResponse.BodyHandlers.ofFile(part));
-            if (resp.statusCode() != 200) throw new IOException("HTTP " + resp.statusCode() + " downloading installer");
+            DownloadKind installerKind = DownloadKind.INSTALLER;
+            BoundedDownload.toFile(client, installerKind.request(rel.installerUrl()), part, policy.trustedHost(),
+                    policy.maxInstallerBytes(), installerKind.maxTime(), installerKind.label());
             if (!Checksums.matches(part, sums, rel.installerName())) throw new IOException(YtDlpManager.VERIFY_FAILED);
 
-            Files.writeString(sumsFile, sums, StandardCharsets.UTF_8);
+            Files.write(sumsFile, sumsBytes);
+            Files.write(sigFile, sigBytes);
             Files.move(part, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
             return target;
         } catch (IOException e) {
             Files.deleteIfExists(sumsFile);
+            Files.deleteIfExists(sigFile);
             throw e;
         } finally {
             try { Files.deleteIfExists(part); } catch (IOException ignored) {}
@@ -147,6 +161,10 @@ public final class UpdateManager {
     }
 
     static ReadyUpdate cleanAndFindPending(Path dir, Version running) {
+        return cleanAndFindPending(dir, running, UpdateSignature.embeddedKey());
+    }
+
+    static ReadyUpdate cleanAndFindPending(Path dir, Version running, PublicKey key) {
         List<Path> files = new ArrayList<>();
         try (Stream<Path> s = Files.list(dir)) {
             s.forEach(files::add);
@@ -159,9 +177,9 @@ public final class UpdateManager {
             if (name.endsWith(".part")) { deleteQuietly(p); continue; }
             Optional<Version> v = installerVersion(name);
             if (v.isEmpty()) continue;
-            if (!v.get().isNewerThan(running) || !verifyOnDisk(p)) {
+            if (!v.get().isNewerThan(running) || !verifyOnDisk(p, key)) {
                 deleteQuietly(p);
-                deleteQuietly(dir.resolve(name + ".sha256"));
+                deleteSidecars(dir.resolve(name), v.get());
                 continue;
             }
             if (best == null || v.get().isNewerThan(best.version())) best = new ReadyUpdate(v.get(), p);
@@ -170,10 +188,18 @@ public final class UpdateManager {
     }
 
     static boolean verifyOnDisk(Path installer) {
+        return verifyOnDisk(installer, UpdateSignature.embeddedKey());
+    }
+
+    static boolean verifyOnDisk(Path installer, PublicKey key) {
         try {
             String name = installer.getFileName().toString();
-            String sums = Files.readString(installer.resolveSibling(name + ".sha256"), StandardCharsets.UTF_8);
-            return Checksums.matches(installer, sums, name);
+            Optional<Version> version = installerVersion(name);
+            if (version.isEmpty()) return false;
+            byte[] sumsBytes = Files.readAllBytes(installer.resolveSibling(UpdateAsset.CHECKSUM.fileName(version.get().toString())));
+            byte[] sigBytes = Files.readAllBytes(installer.resolveSibling(UpdateAsset.SIGNATURE.fileName(version.get().toString())));
+            if (!UpdateSignature.verify(sumsBytes, sigBytes, key)) return false;
+            return Checksums.matches(installer, new String(sumsBytes, StandardCharsets.UTF_8), name);
         } catch (IOException e) {
             return false;
         }
@@ -182,7 +208,7 @@ public final class UpdateManager {
     public boolean verify(ReadyUpdate update) {
         if (verifyOnDisk(update.installer())) return true;
         deleteQuietly(update.installer());
-        deleteQuietly(update.installer().resolveSibling(update.installer().getFileName() + ".sha256"));
+        deleteSidecars(update.installer(), update.version());
         return false;
     }
 
@@ -212,6 +238,11 @@ public final class UpdateManager {
             launched.set(false);
             return false;
         }
+    }
+
+    private static void deleteSidecars(Path installer, Version version) {
+        deleteQuietly(installer.resolveSibling(UpdateAsset.CHECKSUM.fileName(version.toString())));
+        deleteQuietly(installer.resolveSibling(UpdateAsset.SIGNATURE.fileName(version.toString())));
     }
 
     private static void deleteQuietly(Path p) {
