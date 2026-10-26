@@ -86,6 +86,28 @@ class YouTubeDownloaderTest {
     }
 
     @Test
+    void canonicalUrlIsRebuiltFromTheExtractedIdOnly() {
+        String hostile = "http://127.0.0.1:8080/steal?x=1&v=" + ID + "&redirect=file:///etc/passwd";
+        String id = YouTubeDownloader.extractVideoId(hostile).orElseThrow();
+        String canonical = YouTubeDownloader.canonicalUrl(id);
+
+        assertEquals("https://www.youtube.com/watch?v=" + ID, canonical);
+        List<String> args = YouTubeDownloader.downloadArgs(Path.of("out", ID + ".mp3"), canonical);
+        assertEquals(canonical, args.get(args.size() - 1));
+        assertFalse(args.stream().anyMatch(a -> a.contains("127.0.0.1")));
+    }
+
+    @Test
+    void onlyElevenCharacterIdsAreAccepted() {
+        assertTrue(YouTubeDownloader.isVideoId(ID));
+        assertFalse(YouTubeDownloader.isVideoId(null));
+        assertFalse(YouTubeDownloader.isVideoId(""));
+        assertFalse(YouTubeDownloader.isVideoId(ID + "x"));
+        assertFalse(YouTubeDownloader.isVideoId("--exec=calc."));
+        assertFalse(YouTubeDownloader.isVideoId("a/b/c/d/e/f/g"));
+    }
+
+    @Test
     void searchResultFormatsUrlAndDuration() {
         var r = new YouTubeDownloader.SearchResult(ID, "t", "c", 3725);
         assertEquals("https://www.youtube.com/watch?v=" + ID, r.url());

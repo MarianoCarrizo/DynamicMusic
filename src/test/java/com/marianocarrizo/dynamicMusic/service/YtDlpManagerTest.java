@@ -100,11 +100,11 @@ class YtDlpManagerTest {
 
         Files.write(bin.resolve("yt-dlp"), new byte[2_000_000]);
         assertTrue(linux.hasManagedBinary());
-        assertEquals(bin.resolve("yt-dlp").toString(), linux.executable());
+        assertEquals(Optional.of(bin.resolve("yt-dlp").toString()), linux.executable());
 
         YtDlpManager win = new YtDlpManager(() -> app, "Windows 11", "amd64");
         assertTrue(win.hasManagedBinary());
-        assertEquals(bin.resolve("yt-dlp.exe").toString(), win.executable());
+        assertEquals(Optional.of(bin.resolve("yt-dlp.exe").toString()), win.executable());
     }
 
     @Test
